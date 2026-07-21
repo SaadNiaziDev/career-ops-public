@@ -71,7 +71,7 @@
 
 ## What Is This
 
-Career-Ops ([career-ops.org](https://career-ops.org), also known as **careerops**) turns any AI coding CLI into a full job search command center. Instead of manually tracking applications in a spreadsheet, you get an AI-powered pipeline that:
+Career-Ops turns **Claude Code**, **Codex**, and the **local web UI** into a job search command center. Instead of manually tracking applications in a spreadsheet, you get an AI-powered pipeline that:
 
 - **Evaluates offers** with a structured A-F evaluation (five weighted dimensions feeding a 1.0-5.0 score)
 - **Generates tailored PDFs** -- ATS-optimized CVs customized per job description
@@ -86,11 +86,7 @@ Career-ops is agentic: whichever AI coding CLI you choose navigates career pages
 
 > **Heads up: the first evaluations won't be great.** The system doesn't know you yet. Feed it context -- your CV, your career story, your proof points, your preferences, what you're good at, what you want to avoid. The more you nurture it, the better it gets. Think of it as onboarding a new recruiter: the first week they need to learn about you, then they become invaluable.
 
-Built by someone who used it to evaluate 740+ job offers, generate 100+ tailored CVs, and land a Head of Applied AI role. [Read the full case study](https://santifer.io/career-ops-system).
-
-## The CareerOps Manifesto
-
-career-ops is the first reference implementation of [the CareerOps Manifesto](https://career-ops.org/manifesto?utm_source=readme). read it. if it says what you believe, sign it. your signature becomes a commit.
+Built on [santifer's open-source career-ops](https://github.com/santifer/career-ops) — 740+ listings evaluated in the original case study. This fork adds a **local web UI** and trims unused CLI adapters.
 
 ## Features
 

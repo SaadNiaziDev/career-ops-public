@@ -70,7 +70,8 @@ export function PortalsView() {
       )}
       {res && res.available && !res.configured && (
         <p className="mt-4 rounded-xl border border-dashed border-border bg-surface/30 p-4 text-sm text-muted">
-          No <code className="text-foreground">portals.yml</code> yet — ask the assistant to set up the companies to scan.
+          No <code className="text-foreground">portals.yml</code> yet — set up scan keywords on the{" "}
+          <a href="/portals" className="text-brand hover:underline">Portals</a> page.
         </p>
       )}
 
@@ -88,8 +89,8 @@ export function PortalsView() {
                 scan
               </span>{" "}
               <span className="text-muted">
-                — their careers link is broken. Fix the <code>careers_url</code> in <code>portals.yml</code> (or ask the
-                assistant to repair them).
+                — their careers link is broken. Fix the <code>careers_url</code> in <code>portals.yml</code> or use{" "}
+                <strong>Fix</strong> below.
               </span>
             </div>
           )}

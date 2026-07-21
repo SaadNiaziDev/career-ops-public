@@ -15,6 +15,9 @@ data/pdf-index.tsv
 data/agent-inbox.md
 data/active-interviews.md
 data/reply-candidates.json
+data/contacts.tsv
+data/drafts/
+data/titles-suggestions.json
 data/parser-output/**/*.json
 !data/parser-output/.gitkeep
 !data/parser-output/**/.gitkeep

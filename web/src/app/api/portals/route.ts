@@ -3,9 +3,15 @@ import path from "node:path";
 import yaml from "js-yaml";
 import { careerOpsRoot } from "@/lib/career-ops";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
+import { readPortalsKeywords } from "@/lib/portals-keywords";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function GET() {
+  const kw = readPortalsKeywords();
+  return Response.json(kw);
+}
 
 // Merge-safe writer for portals.yml's title_filter (a USER-LAYER file). Replaces
 // ONLY title_filter.positive (the role keywords the free scanner matches), seeding

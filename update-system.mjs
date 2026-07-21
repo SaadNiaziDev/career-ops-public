@@ -33,9 +33,9 @@ import { fileURLToPath, pathToFileURL } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
 
-const CANONICAL_REPO = 'https://github.com/santifer/career-ops.git';
-const RAW_VERSION_URL = 'https://raw.githubusercontent.com/santifer/career-ops/main/VERSION';
-const RELEASES_API = 'https://api.github.com/repos/santifer/career-ops/releases/latest';
+const CANONICAL_REPO = process.env.CAREER_OPS_UPSTREAM_REPO || 'https://github.com/SaadNiaziDev/career-ops.git';
+const RAW_VERSION_URL = process.env.CAREER_OPS_VERSION_URL || 'https://raw.githubusercontent.com/SaadNiaziDev/career-ops/main/VERSION';
+const RELEASES_API = process.env.CAREER_OPS_RELEASES_API || 'https://api.github.com/repos/SaadNiaziDev/career-ops/releases/latest';
 
 // Matches a semver, with or without a leading `v` and an optional
 // Release Please component prefix (e.g. `career-ops-v1.9.0` → `1.9.0`).

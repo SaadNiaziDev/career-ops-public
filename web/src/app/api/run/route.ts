@@ -35,6 +35,46 @@ Do not submit anything anywhere.
 
 End with EXACTLY one final line: VERDICT: {5 if the PDF was written, else 1}/5 — {the output/ path, ≤12 words}`;
   }
+  if (kind === "cover") {
+    return `Run career-ops COVER LETTER mode for application #${input}, headless. Follow modes/cover.md EXACTLY.
+1. Read cv.md, config/profile.yml, modes/_profile.md, and reports/${input}-*.md.
+2. Write the full tailored cover letter markdown to data/drafts/${input}-cover.md (create data/drafts/ if needed).
+3. Never submit or send anything.
+
+End with EXACTLY one final line: VERDICT: 5/5 — cover letter saved to data/drafts/${input}-cover.md`;
+  }
+  if (kind === "email") {
+    return `Run career-ops EMAIL mode for application #${input}, headless. Follow modes/email.md EXACTLY — draft-only application email to recruiter/hiring contact.
+1. Read cv.md, config/profile.yml, reports/${input}-*.md; check data/pdf-index.tsv for a CV attachment path.
+2. Write subject + body + attachment checklist to data/drafts/${input}-email.md.
+3. Never send email, never click submit.
+
+End with EXACTLY one final line: VERDICT: 5/5 — email draft saved to data/drafts/${input}-email.md`;
+  }
+  if (kind === "titles") {
+    return `Run career-ops TITLES mode headless. Follow modes/titles.md EXACTLY.
+1. Read cv.md, config/profile.yml, modes/_profile.md, and portals.yml title_filter.positive/negative.
+2. Propose 5–10 adjacent job titles (Lateral first, then Stretch, then Pivot). NEVER suggest without verbatim CV evidence quoted from cv.md.
+3. Write structured JSON to data/titles-suggestions.json (create data/ if needed):
+   { "generatedAt": "${today}", "suggestions": [{ "title": "...", "axis": "Lateral|Stretch|Pivot", "evidence": "...", "gap": "...", "market": "...", "keyword": "..." }] }
+   - keyword = short scanner keyword derived from the title (not the full title string); dedupe against existing title_filter.positive keywords.
+4. Do NOT modify portals.yml — the user confirms keywords in the web UI.
+
+End with EXACTLY one final line: VERDICT: 5/5 — title suggestions saved to data/titles-suggestions.json`;
+  }
+  if (kind === "contacto") {
+    return `Run career-ops CONTACTO mode for application #${input}, headless. Follow modes/contacto.md for outreach + contact discovery.
+1. Read reports/${input}-*.md, cv.md, config/profile.yml. Load company + role from the report header.
+2. Use WebSearch to identify: assigned recruiter, hiring manager, talent/HR contacts, and 1–2 team peers. Prefer LinkedIn profile URLs when found.
+3. For each contact found, APPEND one tab-separated row to data/contacts.tsv (create with header if missing):
+   date\\ttracker#\\tcompany\\trole\\tname\\ttitle\\tchannel\\temail\\tlinkedin\\tverified\\tsource\\tnotes
+   - verified = yes only if email appears on an official careers/recruiting page; else unverified
+   - email = work email if found, else empty; never invent emails
+4. Write LinkedIn messages + any email outreach drafts to data/drafts/${input}-contacto.md (one section per contact type).
+5. Never send messages, never connect on LinkedIn automatically.
+
+End with EXACTLY one final line: VERDICT: 5/5 — contacts logged + outreach drafts saved`;
+  }
   if (kind === "fix-portal") {
     return `A company's job-portal ATS slug is BROKEN — career-ops can no longer scan it, so it silently disappears from every future scan. Repair it (headless, on the user's machine):
 1. Run \`node verify-portals.mjs --add "${input}"\` — it probes Greenhouse/Ashby/Lever for the company's correct ATS slug and prints the suggested ats + slug.
@@ -86,7 +126,15 @@ export async function POST(req: Request) {
 
   // These run the REAL core (modes/scripts), not just data — fail clearly if the
   // root is incomplete instead of faking it.
-  const needsScript: Record<string, string> = { evaluate: "modes/oferta.md", "fix-portal": "verify-portals.mjs", pdf: "generate-pdf.mjs" };
+  const needsScript: Record<string, string> = {
+    evaluate: "modes/oferta.md",
+    "fix-portal": "verify-portals.mjs",
+    pdf: "generate-pdf.mjs",
+    cover: "modes/cover.md",
+    email: "modes/email.md",
+    contacto: "modes/contacto.md",
+    titles: "modes/titles.md",
+  };
   const required = needsScript[kind];
   if (required && !fs.existsSync(path.join(careerOpsRoot(), required))) {
     return new Response(
@@ -99,7 +147,7 @@ export async function POST(req: Request) {
 
   // An A–F score is meaningless without a CV to score against — the CLI would
   // hallucinate a fit narrative and still emit a VERDICT. Require cv.md first.
-  if ((kind === "evaluate" || kind === "pdf") && !fs.existsSync(path.join(careerOpsRoot(), "cv.md"))) {
+  if (["evaluate", "pdf", "cover", "email", "contacto", "titles"].includes(kind) && !fs.existsSync(path.join(careerOpsRoot(), "cv.md"))) {
     return new Response(
       JSON.stringify({ error: "Add your CV first so I can score this against you — drop it on the home page." }),
       { status: 400, headers: { "Content-Type": "application/json" } },
@@ -116,7 +164,7 @@ export async function POST(req: Request) {
   // report). 'research' stays read-only. Task (sub-agents) is always blocked
   // (runaway cost). NEVER auto-submits — that is a prompt-level guarantee.
   const tools =
-    kind === "evaluate" || kind === "fix-portal" || kind === "pdf"
+    kind === "evaluate" || kind === "fix-portal" || kind === "pdf" || kind === "cover" || kind === "email" || kind === "contacto" || kind === "titles"
       ? { allowed: "Read,WebFetch,WebSearch,Write,Edit,Bash,Glob,Grep", disallowed: "Task,NotebookEdit" }
       : { allowed: "Read,WebFetch,WebSearch,Glob,Grep", disallowed: "Bash,Write,Edit,NotebookEdit,Task" };
   const args = isClaude
@@ -158,7 +206,7 @@ export async function POST(req: Request) {
       let lastTokens = 0; // per-run token cost from the Claude result event (#6) — local only
       let lastCostUsd: number | null = null;
       // pdf-mode tailors a full CV + renders it — give it more headroom.
-      const killMs = kind === "pdf" ? 720_000 : 285_000;
+      const killMs = kind === "pdf" ? 720_000 : kind === "contacto" ? 360_000 : kind === "cover" || kind === "email" || kind === "titles" ? 300_000 : 285_000;
       killer = setTimeout(() => {
         try { child.kill("SIGTERM"); } catch { /* ignore */ }
       }, killMs);

@@ -8,8 +8,7 @@ import { scoreTone, scoreNum, legitimacyTone, parseReport } from "@/lib/format";
 import { StatusSelect } from "@/components/status-select";
 import { CompanyLogo } from "@/components/company-logo";
 import { ScoreMethodology } from "@/components/score-methodology";
-import { GeneratePdfButton } from "@/components/generate-pdf-button";
-import { ApplyButton } from "@/components/apply-button";
+import { PipelineActions } from "@/components/pipeline/pipeline-actions";
 import { DeleteFromTracker } from "@/components/delete-from-tracker";
 
 // Progressive disclosure of the report. The core writes prose blocks
@@ -122,8 +121,13 @@ export function ReportView({
           })()}
           {meta?.legitimacy && <Badge tone={legitimacyTone(meta.legitimacy)}>{meta.legitimacy}</Badge>}
           {app && <StatusSelect n={id} current={app.status} />}
-          <GeneratePdfButton n={id} company={app?.company ?? meta?.title ?? id} pdfReady={(app?.pdf ?? "").includes("✅")} />
-          <ApplyButton n={id} url={url && url.startsWith("http") ? url : undefined} company={app?.company ?? meta?.title ?? id} pdfReady={(app?.pdf ?? "").includes("✅")} />
+          <PipelineActions
+            n={id}
+            company={app?.company ?? meta?.title ?? id}
+            role={app?.role}
+            url={url}
+            pdfReady={(app?.pdf ?? "").includes("✅")}
+          />
         </div>
 
         {app && canDelete && (

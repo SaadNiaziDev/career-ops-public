@@ -27,7 +27,9 @@ Background workers (evaluate, PDF, research) run through **Claude Code** or **Co
 
 - **Today** — follow-ups, fresh matches, roles awaiting a decision
 - **Explore** — free reverse-ATS scan; optional AI hunt (requires configured CLI)
-- **Pipeline** — inbox triage, tracker, reports, status updates, PDF generation
+- **Pipeline** — inbox triage, tracker, reports, status updates
+- **Outreach** — contacts ledger + cover/email/contact drafts per role
+- **Apply kit** — tailored CV (PDF), cover letter, recruiter email, find contacts (one-click on each report)
 - **Apply** — assisted form prefill; never auto-submits
 - **Analytics / CV / Portals / Config**
 
