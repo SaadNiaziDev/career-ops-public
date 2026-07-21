@@ -133,6 +133,7 @@ export function MobileNav() {
         aria-label="Navigation menu"
         inert={!open}
         className={cn("co-mdrawer border-l border-border bg-surface md:hidden", open && "open")}
+        data-lenis-prevent
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}

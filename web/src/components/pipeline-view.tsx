@@ -3,15 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Search, ChevronsUpDown, X, Compass, ArrowRight } from "lucide-react";
+import { Card, Input, Table, Tabs, Tag, Typography, Empty, Button } from "antd";
+import type { ColumnsType, TableProps } from "antd/es/table";
+import { CompassOutlined, CloseOutlined } from "@ant-design/icons";
 import type { Application, InboxJob } from "@/lib/career-ops";
-import { Badge } from "@/components/ui/badge";
 import { CompanyLogo } from "@/components/company-logo";
 import { canonStatus, scoreNum, scoreTone, statusDot } from "@/lib/format";
 import { InboxTriage } from "@/components/inbox/inbox-triage";
+import { PipelineRowActions } from "@/components/pipeline/pipeline-row-actions";
+import { DossierHero } from "@/components/dossier/dossier-hero";
+import { PageShell } from "@/components/dossier/page-shell";
 import { cn } from "@/lib/cn";
 
-// INBOX (the triage queue) is the default tab; the rest filter the tracker.
 const TABS = [
   "INBOX",
   "ALL",
@@ -29,6 +32,13 @@ type Tab = (typeof TABS)[number];
 const SORT_KEYS = ["company", "role", "score", "status", "date"] as const;
 type SortKey = (typeof SORT_KEYS)[number];
 
+const SCORE_TONE: Record<string, string> = {
+  good: "success",
+  warn: "warning",
+  bad: "error",
+  muted: "default",
+};
+
 export function PipelineView({
   applications,
   inbox,
@@ -40,19 +50,14 @@ export function PipelineView({
   const router = useRouter();
   const pathname = usePathname();
 
-  // The URL is the SINGLE source of truth for tab/min/sort/dir, so the home stat
-  // tiles' deep links AND the assistant's filterPipeline/navigate actions drive
-  // the table identically (no useState mirror → no desync).
   const pTab = (params.get("tab") ?? "").toUpperCase();
   const tab: Tab = (TABS as readonly string[]).includes(pTab) ? (pTab as Tab) : "INBOX";
   const pMin = parseFloat(params.get("min") ?? "");
   const minFilter: number | null = Number.isFinite(pMin) ? pMin : null;
   const pSort = params.get("sort") ?? "";
   const sortKey: SortKey = (SORT_KEYS as readonly string[]).includes(pSort) ? (pSort as SortKey) : "score";
-  const sort = { key: sortKey, dir: (params.get("dir") === "1" ? 1 : -1) as 1 | -1 };
+  const sortDir = params.get("dir") === "1" ? 1 : -1;
 
-  // Search stays LOCAL for snappy typing; seeded from the URL and re-synced only
-  // when the URL's q changes (i.e. the assistant set it) — never per keystroke.
   const [q, setQ] = useState(params.get("q") ?? "");
   const lastUrlQ = useRef(params.get("q") ?? "");
   useEffect(() => {
@@ -76,8 +81,6 @@ export function PipelineView({
     [params, router, pathname],
   );
 
-  // Pending + deduped by URL (pipeline.md can list the same posting twice) so the
-  // header count, the tab count and the triage list all agree on one number.
   const pendingInbox = useMemo(() => {
     const seen = new Set<string>();
     const out: InboxJob[] = [];
@@ -104,187 +107,217 @@ export function PipelineView({
       rows = rows.filter((r) => `${r.company} ${r.role}`.toLowerCase().includes(needle));
     }
     return [...rows].sort((a, b) => {
-      if (sort.key === "score") {
+      if (sortKey === "score") {
         const an = scoreNum(a.score);
         const bn = scoreNum(b.score);
         const av = Number.isNaN(an) ? -Infinity : an;
         const bv = Number.isNaN(bn) ? -Infinity : bn;
-        return (av - bv) * sort.dir;
+        return (av - bv) * sortDir;
       }
-      return (a[sort.key] || "").localeCompare(b[sort.key] || "") * sort.dir;
+      return (a[sortKey] || "").localeCompare(b[sortKey] || "") * sortDir;
     });
-  }, [applications, tab, q, sort, minFilter]);
+  }, [applications, tab, q, sortKey, sortDir, minFilter]);
+
+  const tabItems = TABS.map((t) => {
+    const count =
+      t === "INBOX"
+        ? pendingInbox.length
+        : t === "ALL"
+          ? applications.length
+          : applications.filter((r) => canonStatus(r.status).includes(t)).length;
+    return {
+      key: t,
+      label: (
+        <span>
+          {t} <Typography.Text type="secondary" className="text-xs tabular-nums">{count}</Typography.Text>
+        </span>
+      ),
+    };
+  });
+
+  const columns: ColumnsType<Application> = [
+    {
+      title: "Company",
+      dataIndex: "company",
+      sorter: true,
+      sortOrder: sortKey === "company" ? (sortDir === 1 ? "ascend" : "descend") : null,
+      render: (company: string, row) => (
+        <Link href={`/pipeline/${row.n}`} className="inline-flex items-center gap-2 font-medium hover:text-brand">
+          <CompanyLogo name={company} size={20} />
+          {company}
+        </Link>
+      ),
+    },
+    {
+      title: "Role",
+      dataIndex: "role",
+      sorter: true,
+      sortOrder: sortKey === "role" ? (sortDir === 1 ? "ascend" : "descend") : null,
+      render: (role: string, row) => (
+        <Link href={`/pipeline/${row.n}`} className="text-muted hover:text-brand">
+          {role}
+        </Link>
+      ),
+    },
+    {
+      title: "Score",
+      dataIndex: "score",
+      width: 96,
+      sorter: true,
+      sortOrder: sortKey === "score" ? (sortDir === 1 ? "ascend" : "descend") : null,
+      render: (score: string) => {
+        const tone = scoreTone(score);
+        return <Tag color={SCORE_TONE[tone]}>{score || "—"}</Tag>;
+      },
+    },
+    {
+      title: "Status",
+      dataIndex: "status",
+      sorter: true,
+      sortOrder: sortKey === "status" ? (sortDir === 1 ? "ascend" : "descend") : null,
+      render: (status: string) => (
+        <span className="inline-flex items-center gap-1.5 text-muted">
+          <span className={cn("size-1.5 shrink-0 rounded-full", statusDot(status))} />
+          {status}
+        </span>
+      ),
+    },
+    {
+      title: "Date",
+      dataIndex: "date",
+      width: 112,
+      sorter: true,
+      sortOrder: sortKey === "date" ? (sortDir === 1 ? "ascend" : "descend") : null,
+      className: "tabular-nums text-faint",
+    },
+    {
+      title: "",
+      key: "actions",
+      width: 48,
+      render: (_, row) => <PipelineRowActions n={row.n} company={row.company} role={row.role} />,
+    },
+  ];
+
+  const onTableChange: TableProps<Application>["onChange"] = (_pag, _filters, sorter) => {
+    const s = Array.isArray(sorter) ? sorter[0] : sorter;
+    const col = (s?.columnKey ?? s?.field) as SortKey | undefined;
+    if (!col || !(SORT_KEYS as readonly string[]).includes(col)) return;
+    const dir = s?.order === "ascend" ? 1 : -1;
+    setParams({ sort: col, dir });
+  };
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8 max-sm:pb-24">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl tracking-tight text-landing">Pipeline</h1>
-          <p className="mt-1 text-sm text-muted">
+    <PageShell width="6xl">
+      <DossierHero
+        className="mb-4"
+        eyebrow="Pipeline"
+        title="Applications & inbox"
+        description={
+          <>
             <span className="tabular-nums">{pendingInbox.length}</span> in inbox ·{" "}
             <span className="tabular-nums">{applications.length}</span> tracked
-          </p>
-        </div>
-        {/* the tracker has its own search; the inbox brings its own facet filters */}
-        {tab !== "INBOX" && (
-          <div className="relative w-64 max-w-[40vw]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint" />
-            <input
+          </>
+        }
+        actions={
+          tab !== "INBOX" ? undefined : (
+            <Link href="/explore?run=1">
+              <Button type="primary" icon={<CompassOutlined />}>
+                Run free scan
+              </Button>
+            </Link>
+          )
+        }
+        footer={
+          tab !== "INBOX" ? (
+            <Input.Search
+              allowClear
+              placeholder="Search company or role…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search company or role…"
-              className="w-full rounded-md border border-border bg-surface/60 py-2 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-faint focus:border-brand/50 focus-visible:ring-2 focus-visible:ring-brand/40"
+              className="max-w-md"
             />
-          </div>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
 
-      {/* tabs */}
-      <div className="mt-6 flex flex-wrap gap-1 border-b border-border">
-        {TABS.map((t) => {
-          const count =
-            t === "INBOX"
-              ? pendingInbox.length
-              : t === "ALL"
-                ? applications.length
-                : applications.filter((r) => canonStatus(r.status).includes(t)).length;
-          return (
-            <button
-              key={t}
-              onClick={() => setParams({ tab: t === "INBOX" ? null : t })}
-              className={cn(
-                "-mb-px inline-flex items-center justify-center border-b-2 px-3 py-2 text-xs font-medium transition-colors max-sm:min-h-[44px]",
-                tab === t
-                  ? "border-brand text-foreground"
-                  : "border-transparent text-muted hover:text-foreground",
-              )}
-            >
-              {t} <span className="text-faint tabular-nums">{count}</span>
-            </button>
-          );
-        })}
-      </div>
+      <Tabs
+        activeKey={tab}
+        onChange={(k) => setParams({ tab: k === "INBOX" ? null : k })}
+        items={tabItems}
+        className="pipeline-tabs"
+      />
 
       {tab !== "INBOX" && minFilter != null && (
-        <div className="mt-3 flex items-center gap-2">
-          <span className="text-xs text-faint">Filtered:</span>
-          <button
-            type="button"
-            onClick={() => setParams({ min: null })}
-            className="inline-flex items-center gap-1.5 rounded-full border border-brand/40 bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand transition-colors hover:bg-brand/15"
-            title="Clear score filter"
+        <div className="mb-3">
+          <Tag
+            closable
+            onClose={() => setParams({ min: null })}
+            closeIcon={<CloseOutlined />}
+            color="processing"
           >
             score ≥ {minFilter.toFixed(1)}
-            <X className="size-3" />
-          </button>
+          </Tag>
         </div>
       )}
 
       {tab === "INBOX" ? (
-        /* ── Inbox: the triage surface (Abundance → Triage → Shortlist → Score) ── */
         pendingInbox.length > 0 ? (
           <InboxTriage inbox={pendingInbox} />
         ) : (
           <InboxEmpty count={0} filtered={false} />
         )
       ) : filtered.length > 0 ? (
-        /* ── Tracker table ── */
-        <div className="mt-4 overflow-hidden rounded-2xl border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-surface/60 text-left text-xs uppercase tracking-wide text-faint">
-              <tr>
-                {SORT_KEYS.map((k) => (
-                  <th
-                    key={k}
-                    className="cursor-pointer select-none px-4 py-2.5 font-medium hover:text-foreground"
-                    onClick={() => setParams({ sort: k, dir: sort.key === k ? sort.dir * -1 : -1 })}
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      {k}
-                      <ChevronsUpDown className="size-3" />
-                    </span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filtered.map((r, i) => (
-                <tr key={`${r.n}-${i}`} className="group transition-colors hover:bg-surface/40">
-                  <td className="px-4 py-3 font-medium">
-                    <Link href={`/pipeline/${r.n}`} className="flex items-center gap-2.5 transition-colors group-hover:text-brand">
-                      <CompanyLogo name={r.company} size={20} />
-                      {r.company}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-muted">
-                    <Link href={`/pipeline/${r.n}`}>{r.role}</Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={scoreTone(r.score)}>{r.score || "—"}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-muted">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className={cn("size-1.5 shrink-0 rounded-full", statusDot(r.status))} />
-                      {r.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-faint tabular-nums">{r.date}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Card className="mt-2" bodyStyle={{ padding: 0 }}>
+          <Table
+            rowKey={(r) => r.n}
+            columns={columns}
+            dataSource={filtered}
+            pagination={{ pageSize: 25, showSizeChanger: false }}
+            onChange={onTableChange}
+            size="middle"
+          />
+        </Card>
       ) : (
-        <div className="mt-4 rounded-2xl border border-dashed border-border bg-surface/30 px-6 py-12 text-center">
-          <p className="font-display text-lg">No matches</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-muted">Try a different tab or clear the search.</p>
-        </div>
+        <Card className="mt-4">
+          <Empty description="No matches — try another tab or clear the search." />
+        </Card>
       )}
-    </div>
+    </PageShell>
   );
 }
 
-// Empty inbox. Self-sufficient for the mainstream user (a primary in-web action),
-// honest for devs (the CLI/file path stays, demoted to progressive transparency).
 function InboxEmpty({ count, filtered }: { count: number; filtered: boolean }) {
   if (filtered) {
     return (
-      <div className="mt-4 rounded-2xl border border-dashed border-border bg-surface/30 px-6 py-12 text-center">
-        <p className="font-display text-lg">No matches</p>
-        <p className="mx-auto mt-1 max-w-sm text-sm text-muted">Clear the search to see the full inbox.</p>
-      </div>
+      <Card className="mt-4">
+        <Empty description="Clear the search to see the full inbox." />
+      </Card>
     );
   }
   return (
-    <div className="dot-bg mt-4 overflow-hidden rounded-2xl border border-border bg-surface/50 bg-origin-border bg-gradient-to-tr from-brand/10 via-transparent to-transparent shadow-lg">
-      <div className="flex items-center gap-2 border-b border-foreground/10 px-5 py-3">
-        <span className="size-2.5 rounded-full bg-foreground/15" aria-hidden="true" />
-        <span className="size-2.5 rounded-full bg-foreground/15" aria-hidden="true" />
-        <span className="size-2.5 rounded-full bg-foreground/15" aria-hidden="true" />
-        <span className="ml-3 font-mono text-xs tracking-wide text-muted">career-ops · inbox</span>
-      </div>
+    <Card className="dot-bg mt-4 overflow-hidden border-brand/20 bg-linear-to-tr from-brand/10 via-transparent to-transparent">
       <div className="px-6 py-10 text-center">
-        <p className="font-display text-lg">
-          Your <span className="text-brand">inbox</span> is empty.
-        </p>
+        <Typography.Title level={4}>
+          Your <span className="text-brand">inbox</span> is empty
+        </Typography.Title>
         {count > 0 ? (
-          <p className="mx-auto mt-2 max-w-sm text-sm text-muted">Nothing pending right now.</p>
+          <Typography.Paragraph type="secondary">Nothing pending right now.</Typography.Paragraph>
         ) : (
           <>
-            <p className="mx-auto mt-2 max-w-sm text-sm text-muted">Find roles that match your CV — free, no tokens spent.</p>
-            <Link
-              href="/explore?run=1"
-              className="mt-5 inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-brand-foreground shadow-sm transition-all duration-200 hover:bg-brand-200 hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <Compass className="size-4" /> Run your first free scan <ArrowRight className="size-4" />
+            <Typography.Paragraph type="secondary" className="mx-auto max-w-sm">
+              Find roles that match your CV — free, no tokens spent.
+            </Typography.Paragraph>
+            <Link href="/explore?run=1">
+              <Button type="primary" icon={<CompassOutlined />} className="mt-2">
+                Run your first free scan
+              </Button>
             </Link>
-            <p className="mx-auto mt-4 max-w-sm text-xs text-muted">
-              Prefer the terminal? Run <code className="rounded bg-surface-hover px-1 py-0.5 font-mono">career-ops scan</code>, or add job URLs to{" "}
-              <code className="rounded bg-surface-hover px-1 py-0.5 font-mono">data/pipeline.md</code>.
-            </p>
+            <Typography.Paragraph type="secondary" className="mx-auto mt-4 max-w-sm text-xs">
+              Or add job URLs to <code>data/pipeline.md</code>
+            </Typography.Paragraph>
           </>
         )}
       </div>
-    </div>
+    </Card>
   );
 }

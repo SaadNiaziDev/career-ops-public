@@ -136,7 +136,6 @@ export function ApplyView() {
               {prefilling ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               {prefilling ? "Drafting from your CV…" : "Pre-fill from my CV"}
             </button>
-            <span className="text-xs text-muted">…or ask the corner assistant to write/revise any answer.</span>
           </div>
 
           {(prefilling || a.prefillLog.length > 0) && (

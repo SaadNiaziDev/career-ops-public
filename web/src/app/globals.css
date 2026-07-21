@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "lenis/dist/lenis.css";
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -50,7 +51,31 @@
   --brand-text: hsl(26 80% 36%); /* darkened brand for small text: 5.5 white / 5.1 cream / 4.7 surface-hover */
   --dot: 40 8% 42% / 0.09;
   --pre-bg: #f2f1ed;
+  /* Page rhythm — one source for dashboard padding/margins */
+  --page-px: 1.125rem;
+  --page-py: 1.5rem;
+  --page-pb: 1.5rem;
+  --section-gap: 1rem;
+  --hero-pad-x: 1.25rem;
+  --hero-pad-y: 1.75rem;
   color-scheme: light;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --page-px: 1.5rem;
+    --page-py: 2rem;
+    --page-pb: 2rem;
+    --section-gap: 1.25rem;
+    --hero-pad-x: 1.75rem;
+    --hero-pad-y: 2.25rem;
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --page-pb: calc(5.25rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 .dark {
@@ -209,3 +234,103 @@ html.dark .co-cost[data-tone="free"]{color:hsl(158 64% 60%);background:hsl(158 6
 .co-cost[data-tone="spend"]{color:hsl(35 9% 34%);background:hsl(35 8% 46% / .12);border-color:hsl(35 8% 46% / .26)}
 html.dark .co-cost[data-tone="spend"]{color:hsl(35 8% 70%);background:hsl(35 6% 60% / .12);border-color:hsl(35 6% 60% / .24)}
 .co-cost svg{width:.85em;height:.85em}
+
+/* Ant Design sidebar — keep links full-width inside menu items */
+aside .ant-menu-item a {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  color: inherit;
+}
+aside .ant-menu-item-selected a {
+  color: inherit;
+}
+.pipeline-actions .ant-btn {
+  border-radius: 999px;
+}
+
+/* ── Dossier layout template (Today, Pipeline, Portals) ─────────────────── */
+.dossier-page .ant-card {
+  border-color: var(--border);
+  box-shadow: none;
+}
+.dossier-hero-scrim {
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  backdrop-filter: blur(2px);
+}
+html.dark .dossier-hero-scrim {
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+.dossier-stat .ant-statistic-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.dossier-stat-link {
+  color: inherit;
+}
+.dossier-stat-link:hover .dossier-stat {
+  border-color: color-mix(in srgb, var(--color-brand) 45%, var(--border));
+}
+.dossier-decision-card,
+.dossier-followup {
+  transition: border-color 0.15s ease;
+}
+.dossier-decision-card:hover,
+.dossier-followup:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 35%, var(--border));
+}
+.pipeline-tabs .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+.pipeline-tabs .ant-tabs-tab {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── Lenis + page shell ───────────────────────────────────────────────────── */
+.lenis-scroll-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 45;
+  height: 2px;
+  width: 100%;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--color-brand), var(--color-brand-secondary));
+  pointer-events: none;
+  opacity: 0.85;
+}
+@media (max-width: 767px) {
+  .lenis-scroll-progress {
+    top: env(safe-area-inset-top, 0px);
+  }
+}
+.page-shell {
+  margin-inline: auto;
+  width: 100%;
+  padding: var(--page-py) var(--page-px) var(--page-pb);
+}
+.page-shell > .ant-row {
+  row-gap: var(--section-gap) !important;
+}
+.dossier-hero-inner {
+  padding: var(--hero-pad-y) var(--hero-pad-x);
+}
+@media (min-width: 768px) {
+  .dossier-hero-inner {
+    padding: calc(var(--hero-pad-y) + 0.25rem) calc(var(--hero-pad-x) + 0.35rem);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dossier-hero-inner {
+    transform: none !important;
+  }
+}
+.lenis-drawer-root .ant-drawer-body,
+.lenis-drawer-root .report-prose {
+  overscroll-behavior: contain;
+}
