@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { instrumentSerif } from "@/lib/fonts";
 import type { Application, InboxJob } from "@/lib/career-ops";
 import { paramsToFilters, paramsToAi, type ExploreFilters } from "@/lib/explore";
+import { useCliConfig, resolveCliIdForRun } from "@/lib/cli-config";
 import { FilterBuilder } from "./filter-builder";
 import { DiscoveringState } from "./discovering-state";
 import { AiHuntView } from "./ai-hunt-view";
@@ -16,15 +17,6 @@ import { ResultsList, type EnrichedOffer } from "./results-list";
 import { useExplore } from "./explore-provider";
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-const CLI_NAMES: Record<string, string> = {
-  claude: "Claude Code",
-  codex: "Codex",
-  gemini: "Gemini CLI",
-  opencode: "OpenCode",
-  copilot: "Copilot CLI",
-  qwen: "Qwen CLI",
-  antigravity: "Antigravity CLI",
-};
 
 export function ExplorerView({
   seed,
@@ -44,20 +36,9 @@ export function ExplorerView({
       : undefined;
   const inited = useRef(false);
   const [refineOpen, setRefineOpen] = useState(false);
-  const [cli, setCli] = useState<{ id: string | null; name?: string }>({ id: null });
+  const { cliName, cliConfigured } = useCliConfig();
   const [firstRun, setFirstRun] = useState(false);
 
-  useEffect(() => {
-    try {
-      const id = JSON.parse(localStorage.getItem("career-ops:config") || "{}").cliId || null;
-      setCli({ id, name: id ? CLI_NAMES[id] || id : undefined });
-    } catch {
-      setCli({ id: null });
-    }
-  }, []);
-
-  // Initialize once from the URL (shareable search) or the server seed — without
-  // clobbering anything the assistant set before this mount.
   useEffect(() => {
     if (inited.current) return;
     inited.current = true;
@@ -95,7 +76,7 @@ export function ExplorerView({
   );
 
   const isAi = mode === "ai";
-  if (running) return isAi ? <AiHuntView cliName={cli.name} /> : <DiscoveringState />;
+  if (running) return isAi ? <AiHuntView cliName={cliName} /> : <DiscoveringState />;
 
   const canDiscover = filters.ats.length > 0;
   const isResults = phase === "results";
@@ -110,7 +91,7 @@ export function ExplorerView({
             <span className="rounded-full border border-brand/30 bg-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-text">New</span>
           </div>
           <div className="w-full sm:ml-auto sm:w-auto">
-            <ExploreModeToggle mode={mode} onChange={setMode} cliConfigured={!!cli.id} />
+            <ExploreModeToggle mode={mode} onChange={setMode} cliConfigured={cliConfigured} />
           </div>
         </div>
         {!isResults && (
@@ -129,16 +110,22 @@ export function ExplorerView({
       )}
 
       {isAi ? (
-        phase === "blocked" ? (
-          <BlockedCard />
+        phase === "blocked" && !cliConfigured ? (
+          <BlockedCard
+            onRetry={() => {
+              void resolveCliIdForRun().then((id) => {
+                if (id) void discoverAI();
+              });
+            }}
+          />
         ) : (
           <div className="space-y-6">
             <AiSearchBox
               intent={aiIntent}
               onIntent={setAiIntent}
               onSubmit={() => void discoverAI()}
-              cliConfigured={!!cli.id}
-              cliName={cli.name}
+              cliConfigured={cliConfigured}
+              cliName={cliName}
               onRunScan={() => setMode("scan")}
             />
             {phase === "results" && <ResultsList offers={enriched} />}
@@ -367,7 +354,7 @@ function FailedCard({ msg, onRetry }: { msg: string; onRetry: () => void }) {
   );
 }
 
-function BlockedCard() {
+function BlockedCard({ onRetry }: { onRetry?: () => void }) {
   return (
     <div className="rounded-2xl border border-border bg-surface/30 px-6 py-12 text-center">
       <div className="mx-auto grid size-12 place-items-center rounded-full bg-brand-soft text-brand">
@@ -375,11 +362,22 @@ function BlockedCard() {
       </div>
       <h2 className={`${instrumentSerif.className} mt-4 text-2xl text-foreground`}>AI search needs a CLI</h2>
       <p className="mx-auto mt-1.5 max-w-md text-sm text-muted">
-        Connect Claude Code, Gemini, or any agent CLI — your key, your tokens, your machine. The free Scan stays available without one.
+        Install and select Claude Code or Codex in Config — your key, your tokens, your machine. The free Scan works without one.
       </p>
-      <Link href="/config" className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-brand-foreground transition hover:brightness-110">
-        <Settings className="size-4" /> Open Config
-      </Link>
+      <div className="mt-4 flex flex-wrap justify-center gap-2">
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-sm font-medium text-foreground transition hover:border-brand/40 hover:text-brand"
+          >
+            <RotateCcw className="size-4" /> Check again
+          </button>
+        )}
+        <Link href="/config" className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-brand-foreground transition hover:brightness-110">
+          <Settings className="size-4" /> Open Config
+        </Link>
+      </div>
     </div>
   );
 }

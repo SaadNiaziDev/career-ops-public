@@ -92,6 +92,23 @@ export function PipelineView({
     return out;
   }, [inbox]);
 
+  const stats = useMemo(() => {
+    const has = (r: Application, s: string) => canonStatus(r.status).includes(s);
+    const scores = applications.map((r) => scoreNum(r.score)).filter((n) => !Number.isNaN(n));
+    const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+    const applyReady = applications.filter(
+      (r) => has(r, "EVALUATED") && !Number.isNaN(scoreNum(r.score)) && scoreNum(r.score) >= 4.0,
+    ).length;
+    const applied = applications.filter((r) => has(r, "APPLIED")).length;
+    const responded = applications.filter(
+      (r) => has(r, "RESPONDED") || has(r, "INTERVIEW") || has(r, "OFFER"),
+    ).length;
+    const interviews = applications.filter((r) => has(r, "INTERVIEW")).length;
+    const offers = applications.filter((r) => has(r, "OFFER")).length;
+    const responseRate = applied > 0 ? Math.round((responded / applied) * 100) : null;
+    return { avg, applyReady, applied, responseRate, interviews, offers };
+  }, [applications]);
+
   const filtered = useMemo(() => {
     if (tab === "INBOX") return [];
     let rows = applications;
@@ -240,6 +257,26 @@ export function PipelineView({
         }
       />
 
+      {tab !== "INBOX" && applications.length > 0 && (
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <StatTile label="Avg score" value={stats.avg != null ? stats.avg.toFixed(1) : "—"} />
+          <StatTile
+            label="Apply-ready"
+            value={stats.applyReady}
+            tone="brand"
+            onClick={() => setParams({ tab: "EVALUATED", min: 4 })}
+          />
+          <StatTile label="Applied" value={stats.applied} onClick={() => setParams({ tab: "APPLIED", min: null })} />
+          <StatTile label="Response rate" value={stats.responseRate != null ? `${stats.responseRate}%` : "—"} />
+          <StatTile
+            label="Interviews"
+            value={stats.interviews}
+            onClick={() => setParams({ tab: "INTERVIEW", min: null })}
+          />
+          <StatTile label="Offers" value={stats.offers} onClick={() => setParams({ tab: "OFFER", min: null })} />
+        </div>
+      )}
+
       <Tabs
         activeKey={tab}
         onChange={(k) => setParams({ tab: k === "INBOX" ? null : k })}
@@ -284,6 +321,38 @@ export function PipelineView({
       )}
     </PageShell>
   );
+}
+
+function StatTile({
+  label,
+  value,
+  tone = "default",
+  onClick,
+}: {
+  label: string;
+  value: number | string;
+  tone?: "default" | "brand";
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
+      <div className={cn("text-2xl font-semibold tabular-nums", tone === "brand" && "text-brand")}>{value}</div>
+      <div className="mt-1 text-xs uppercase tracking-wide text-faint">{label}</div>
+    </>
+  );
+  const base = "rounded-2xl border border-border bg-surface/50 p-4 text-left";
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(base, "cursor-pointer transition-colors hover:border-brand/40 hover:bg-surface-hover")}
+      >
+        {body}
+      </button>
+    );
+  }
+  return <div className={base}>{body}</div>;
 }
 
 function InboxEmpty({ count, filtered }: { count: number; filtered: boolean }) {

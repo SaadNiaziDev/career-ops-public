@@ -166,7 +166,8 @@ Market vocabulary (`language.modes_dir`) is a separate choice — change it only
 | Preps for interview | `interview-prep` |
 | Wants generate CV/PDF | `pdf` |
 | Fills out application form | `apply` |
-| Searches for new offers | `scan` |
+| Searches for new offers (free ATS scan) | `scan` |
+| AI web search from natural language (Explore → AI search) | `discover` |
 | Processes pending URLs | `pipeline` |
 | Batch processes offers | `batch` |
 | Rejection patterns / targeting | `patterns` |

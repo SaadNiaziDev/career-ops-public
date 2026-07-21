@@ -205,8 +205,13 @@ export async function POST(req: Request) {
       let sawError = false;
       let lastTokens = 0; // per-run token cost from the Claude result event (#6) — local only
       let lastCostUsd: number | null = null;
-      // pdf-mode tailors a full CV + renders it — give it more headroom.
-      const killMs = kind === "pdf" ? 720_000 : kind === "contacto" ? 360_000 : kind === "cover" || kind === "email" || kind === "titles" ? 300_000 : 285_000;
+      // pdf-mode tailors a full CV + renders it — give it more headroom. `evaluate`
+      // needs the same: a real oferta run is Playwright liveness + up to 5 WebSearch
+      // + reading the mode/profile/CV files + writing the A–G report + reserve-report-num
+      // and merge-tracker. That does not fit in the 285s default, and the SIGTERM landed
+      // as a null exit code → the honesty gate reported it as "hit an error before
+      // finishing" (a timeout wearing an error's clothes). Both stay under maxDuration.
+      const killMs = kind === "pdf" || kind === "evaluate" ? 720_000 : kind === "contacto" ? 360_000 : kind === "cover" || kind === "email" || kind === "titles" ? 300_000 : 285_000;
       killer = setTimeout(() => {
         try { child.kill("SIGTERM"); } catch { /* ignore */ }
       }, killMs);

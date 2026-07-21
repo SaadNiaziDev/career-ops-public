@@ -104,22 +104,60 @@ export function ReportView({
         <p className="font-mono text-xs uppercase tracking-[0.18em] text-faint">#{id}</p>
         <div className="mt-2 flex items-center gap-3">
           <CompanyLogo name={app?.company ?? meta?.title ?? `Report #${id}`} size={40} />
-          <h1 className="font-display text-3xl tracking-tight text-landing">
-            {app?.company ?? meta?.title ?? `Report #${id}`}
-          </h1>
+          <div className="flex-1">
+            <h1 className="font-display text-3xl tracking-tight text-landing">
+              {app?.company ?? meta?.title ?? `Report #${id}`}
+            </h1>
+            {app?.role && <p className="mt-0.5 text-sm text-muted">{app.role}</p>}
+          </div>
         </div>
-        {app?.role && <p className="mt-1 text-muted">{app.role}</p>}
 
-        <div className="mt-4 flex flex-wrap items-center gap-2.5">
-          {score && <Badge tone={scoreTone(score)}>{score}</Badge>}
-          {/* Verdict-first: the score's apply/don't-apply call (4.0 is the line,
-              per the public methodology) as a <2s-scannable chip. */}
+        {/* Summary stats grid */}
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          {score && (
+            <div className="rounded-lg border border-border bg-surface/50 px-3 py-2.5">
+              <p className="text-xs font-medium uppercase tracking-widest text-faint">Score</p>
+              <p className="mt-1 font-display text-lg font-semibold">
+                <span className={`text-${scoreTone(score) === "good" ? "emerald" : scoreTone(score) === "warn" ? "amber" : "red"}-600`}>
+                  {score}
+                </span>
+              </p>
+            </div>
+          )}
           {(() => {
             const n = scoreNum(score ?? "");
             if (Number.isNaN(n)) return null;
-            return n >= 4.0 ? <Badge tone="good">Recommended</Badge> : <Badge tone="muted">Below the apply line</Badge>;
+            const recommendation = n >= 4.0 ? "Apply" : "Skip";
+            const color = n >= 4.0 ? "emerald" : "slate";
+            return (
+              <div className="rounded-lg border border-border bg-surface/50 px-3 py-2.5">
+                <p className="text-xs font-medium uppercase tracking-widest text-faint">Verdict</p>
+                <p className={`mt-1 font-semibold text-${color}-600`}>{recommendation}</p>
+              </div>
+            );
           })()}
-          {meta?.legitimacy && <Badge tone={legitimacyTone(meta.legitimacy)}>{meta.legitimacy}</Badge>}
+          {meta?.legitimacy && (
+            <div className="rounded-lg border border-border bg-surface/50 px-3 py-2.5">
+              <p className="text-xs font-medium uppercase tracking-widest text-faint">Legitimacy</p>
+              <p className="mt-1 text-sm font-semibold">{meta.legitimacy}</p>
+            </div>
+          )}
+          {date && (
+            <div className="rounded-lg border border-border bg-surface/50 px-3 py-2.5">
+              <p className="text-xs font-medium uppercase tracking-widest text-faint">Date</p>
+              <p className="mt-1 font-mono text-sm text-foreground">{date}</p>
+            </div>
+          )}
+          {archetype && (
+            <div className="rounded-lg border border-border bg-surface/50 px-3 py-2.5">
+              <p className="text-xs font-medium uppercase tracking-widest text-faint">Role Type</p>
+              <p className="mt-1 truncate text-sm font-medium">{archetype}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Actions row */}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           {app && <StatusSelect n={id} current={app.status} />}
           <PipelineActions
             n={id}
@@ -128,28 +166,21 @@ export function ReportView({
             url={url}
             pdfReady={(app?.pdf ?? "").includes("✅")}
           />
+          {url && url.startsWith("http") && (
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface/50 px-3 py-1.5 text-xs font-medium text-brand hover:bg-surface-hover"
+            >
+              View posting <ExternalLink className="size-3.5" />
+            </a>
+          )}
         </div>
 
         {app && canDelete && (
           <div className="mt-3">
             <DeleteFromTracker n={id} />
-          </div>
-        )}
-
-        {(archetype || date || (url && url.startsWith("http"))) && (
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-            {archetype && <span className="max-w-full truncate">{archetype}</span>}
-            {date && <span className="tabular-nums text-faint">{date}</span>}
-            {url && url.startsWith("http") && (
-              <a
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center gap-1 text-brand hover:underline max-sm:min-h-[44px]"
-              >
-                posting <ExternalLink className="size-3" />
-              </a>
-            )}
           </div>
         )}
       </header>

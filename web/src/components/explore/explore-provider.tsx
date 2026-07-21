@@ -16,6 +16,7 @@ import {
   type ScanEvent,
 } from "@/lib/explore";
 import { makeAiStreamParser, type AiTraceChunk } from "@/lib/explore-ai";
+import { readCliConfig, resolveCliIdForRun } from "@/lib/cli-config";
 
 export type Phase =
   | "idle"
@@ -343,12 +344,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     if (runningRef.current) return;
     const intent = aiIntentRef.current.trim();
     if (!intent) return;
-    let cliId: string | null = null;
-    try {
-      cliId = JSON.parse(localStorage.getItem("career-ops:config") || "{}").cliId || null;
-    } catch {
-      cliId = null;
-    }
+    const cliId = await resolveCliIdForRun();
     if (!cliId) {
       setPhase("blocked");
       return;
@@ -475,12 +471,38 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     if (typeof snap.aiIntent === "string") setAiIntent(snap.aiIntent);
     // Never rehydrate INTO a running phase — no live stream backs it.
     const RUNNING = new Set<Phase>(["casting", "scanning", "revealing", "hunting"]);
-    setPhase(RUNNING.has(snap.phase) ? (snap.offers.length ? "results" : "idle") : snap.phase);
+    let nextPhase = RUNNING.has(snap.phase) ? (snap.offers.length ? "results" : "idle") : snap.phase;
+    if (nextPhase === "blocked" && readCliConfig().cliId) {
+      nextPhase = snap.offers.length ? "results" : "idle";
+    }
+    setPhase(nextPhase);
   }, []);
 
-  // Persist only SETTLED states (never mid-stream) so a reload restores a complete set.
   useEffect(() => {
-    const SETTLED = new Set<Phase>(["results", "empty-current", "empty-loose", "failed", "degraded", "blocked"]);
+    const onConfig = () => {
+      if (phase === "blocked" && readCliConfig().cliId) {
+        setPhase("idle");
+        setError("");
+      }
+    };
+    window.addEventListener("co-config-changed", onConfig);
+    return () => window.removeEventListener("co-config-changed", onConfig);
+  }, [phase]);
+
+  // Recover from stale "blocked" when a CLI is installed but was never saved.
+  useEffect(() => {
+    if (phase !== "blocked") return;
+    void resolveCliIdForRun().then((id) => {
+      if (id) {
+        setPhase("idle");
+        setError("");
+      }
+    });
+  }, [phase]);
+
+  // Persist only SETTLED states (never mid-stream or blocked — blocked is recoverable).
+  useEffect(() => {
+    const SETTLED = new Set<Phase>(["results", "empty-current", "empty-loose", "failed", "degraded"]);
     if (!SETTLED.has(phase)) return;
     try {
       const snap: ResultSnapshot = {
