@@ -11,6 +11,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { readCliConfig, writeCliConfig, CONFIG_KEY } from "@/lib/cli-config";
 
 type Cli = {
   id: string;
@@ -30,7 +31,7 @@ const PROVIDERS = [
   { id: "openrouter", label: "OpenRouter" },
 ] as const;
 
-const STORAGE_KEY = "career-ops:config";
+const STORAGE_KEY = CONFIG_KEY;
 
 export function ConfigForm() {
   const [mode, setMode] = useState<Mode>("cli");
@@ -59,24 +60,28 @@ export function ConfigForm() {
     }
   }, []);
 
-  // Detect installed CLIs
+  // Detect installed CLIs — auto-select and persist the first installed worker.
   useEffect(() => {
     fetch("/api/clis")
       .then((r) => r.json())
       .then((d) => {
         const list: Cli[] = d.clis ?? [];
         setClis(list);
-        // auto-select first installed if nothing chosen yet
-        setCliId((prev) => prev || list.find((c) => c.installed)?.id || "");
+        const saved = readCliConfig().cliId;
+        const savedOk = saved && list.some((c) => c.id === saved && c.installed);
+        if (savedOk) {
+          setCliId(saved);
+          return;
+        }
+        const first = list.find((c) => c.installed)?.id || "";
+        setCliId(first);
+        if (first) writeCliConfig({ cliId: first, mode: "cli" });
       })
       .catch(() => setClis([]));
   }, []);
 
   function save() {
-    // The API key is deliberately NOT persisted: nothing reads it yet (the
-    // key/manual panel is unwired) and a secret must never sit in clear-text
-    // localStorage. Keys belong in the user's own CLI/provider config.
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode, cliId, provider, logos }));
+    writeCliConfig({ mode, cliId, provider, logos });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -162,7 +167,10 @@ export function ConfigForm() {
                       <button
                         type="button"
                         disabled={!c.installed}
-                        onClick={() => setCliId(c.id)}
+                        onClick={() => {
+                          setCliId(c.id);
+                          writeCliConfig({ cliId: c.id, mode: "cli" });
+                        }}
                         className={cn(
                           "flex flex-1 items-center gap-2 text-left max-sm:min-h-[44px]",
                           c.installed ? "" : "cursor-default",

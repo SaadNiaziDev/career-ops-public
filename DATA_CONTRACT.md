@@ -49,6 +49,7 @@ This fork is UI-first: the web app (`web/`) and Node scripts share the same file
 | `modes/*.md` | Mode instructions (English) |
 | `modes/offer-prep.md` | Offer/contract reading companion |
 | `modes/titles.md` | Adjacent job-title suggestions |
+| `modes/discover.md` | AI web search job discovery (Explore) |
 | `modes/interview/*` | Interview sub-skills |
 | `modes/heuristics/*` | Shared heuristics |
 | `CLAUDE.md` / `CODEX.md` | Thin wrappers → `AGENTS.md` |
