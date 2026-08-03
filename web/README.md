@@ -26,6 +26,7 @@ Background workers (evaluate, PDF, research) run through **Claude Code** or **Co
 ## Features
 
 - **Today** — follow-ups, fresh matches, roles awaiting a decision
+- **Add job** — paste a URL; evaluate, add to inbox, or AI-search similar roles
 - **Explore** — free reverse-ATS scan; optional AI hunt (requires configured CLI)
 - **Pipeline** — inbox triage, tracker, reports, status updates
 - **Outreach** — contacts ledger + cover/email/contact drafts per role

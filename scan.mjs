@@ -145,6 +145,20 @@ export function matchedTitleKeywords(title, titleFilter) {
 //   - `block` matches → reject
 //   - `allow` empty → pass (already cleared block)
 //   - `allow` non-empty → must match at least one keyword
+//   - `allow` matched nothing BUT the description advertises relocation or visa
+//     sponsorship → pass (see `relocation_override` below)
+//
+// `relocation_override` (optional): a rescue tier for offers whose location is
+// out of range on paper but whose JD says the company will move you there.
+// Only consulted after `allow` has already rejected the location, and only
+// when the provider shipped a description (Ashby always does; Greenhouse needs
+// `fetch_content: true` on the portals.yml entry). `block` still wins — an
+// explicitly blocked location is never rescued.
+//
+//   location_filter:
+//     relocation_override:
+//       enabled: true
+//       keywords: ["visa sponsorship", "relocation package"]
 
 // Normalize a keyword list from portals.yml: tolerates a bare string
 // (wrapped to a 1-item array), null/undefined (→ []), and non-string
@@ -167,13 +181,23 @@ export function buildLocationFilter(locationFilter) {
   const allow = normalizeKeywordList(locationFilter.allow);
   const block = normalizeKeywordList(locationFilter.block);
 
-  return (location) => {
+  const override = locationFilter.relocation_override;
+  const overrideKeywords = override && override.enabled !== false
+    ? normalizeKeywordList(override.keywords)
+    : [];
+
+  return (location, description) => {
     if (typeof location !== 'string' || location.trim() === '') return true;
     const lower = location.toLowerCase();
     if (alwaysAllow.length > 0 && alwaysAllow.some(k => lower.includes(k))) return true;
     if (block.length > 0 && block.some(k => lower.includes(k))) return false;
     if (allow.length === 0) return true;
-    return allow.some(k => lower.includes(k));
+    if (allow.some(k => lower.includes(k))) return true;
+    // Rescue tier — the location is out of range, but the JD may offer to move you.
+    if (overrideKeywords.length === 0) return false;
+    if (typeof description !== 'string' || description.trim() === '') return false;
+    const desc = description.toLowerCase();
+    return overrideKeywords.some(k => desc.includes(k));
   };
 }
 
@@ -1578,7 +1602,7 @@ async function main() {
           totalFilteredTier++;
           continue;
         }
-        if (!locationFilter(job.location)) {
+        if (!locationFilter(job.location, job.description)) {
           totalFilteredLocation++;
           continue;
         }

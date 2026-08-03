@@ -20,6 +20,10 @@
 #   3. Add/remove companies in tracked_companies
 #   4. Adjust search_queries for your preferred job boards
 #   5. Set enabled: false on companies you don't care about
+#
+# Greenhouse opt-in: set `fetch_content: true` on a tracked company to pull full
+# JD bodies from the Greenhouse API (~extra bandwidth). Useful when
+# `location_filter.relocation_override` or `content_filter` needs posting text.
 
 # -- Scan history recheck policy (optional) --
 # By default, URLs recorded in data/scan-history.tsv are deduped forever.
@@ -72,6 +76,41 @@
 #     - "Japan"
 #     - "Brazil"
 #     - "Australia"
+#
+# `relocation_override` (optional): rescues postings whose location would be
+# rejected when the JD mentions relocation or visa sponsorship. Requires JD
+# text — enable `fetch_content: true` on Greenhouse entries when you use this.
+# `block` still wins over relocation_override.
+#
+#   relocation_override:
+#     enabled: true
+#     keywords:
+#       - "visa sponsorship"
+#       - "relocation"
+#       - "relocation package"
+#
+# Example for Pakistan-based targeting (remote + major cities):
+#
+# location_filter:
+#   always_allow:
+#     - "Pakistan"
+#     - "Karachi"
+#     - "Lahore"
+#     - "Islamabad"
+#   allow:
+#     - "Remote"
+#     - "Pakistan"
+#     - "Karachi"
+#     - "Lahore"
+#     - "Islamabad"
+#   block:
+#     - "India"
+#     - "Bengaluru"
+#   relocation_override:
+#     enabled: true
+#     keywords:
+#       - "visa sponsorship"
+#       - "relocation package"
 
 # -- Salary filter (optional) --
 # Filter scanned jobs by annual compensation range. Applied AFTER location
@@ -290,6 +329,11 @@ search_queries:
   # -- Workable --
   - name: Workable — AI Roles
     query: 'site:apply.workable.com "AI" "Product Manager" OR "Solutions Architect" OR "AI Engineer" remote'
+    enabled: true
+
+  # -- Pakistan market --
+  - name: Pakistan — Software Engineering
+    query: 'Pakistan ("Software Engineer" OR "Frontend" OR "Full Stack" OR TypeScript OR React) (Karachi OR Lahore OR Islamabad OR Remote)'
     enabled: true
 
   # -- No-Code / Low-Code / Automation --
@@ -851,6 +895,7 @@ tracked_companies:
   - name: Anthropic
     careers_url: https://job-boards.greenhouse.io/anthropic
     api: https://boards-api.greenhouse.io/v1/boards/anthropic/jobs
+    # fetch_content: true  # opt-in: pull full JD text for content_filter / relocation_override
     enabled: true
 
   - name: OpenAI
@@ -1530,6 +1575,205 @@ tracked_companies:
     scan_method: websearch
     scan_query: '"Maxim AI" OR "getmaxim" careers "engineer" OR "product"'
     notes: "AI evaluation and observability platform. Bangalore-based, mostly on-site."
+    enabled: true
+
+  # ============================================================
+  # -- Pakistan market
+  # ============================================================
+  # Major Pakistan software employers. Pair with the Pakistan search query
+  # in `search_queries:` and a `location_filter` tuned to your cities.
+  # Most entries use websearch or public ATS APIs; Workday/Workable/Pinpoint
+  # boards are scanned when `api:` or `provider:` is set.
+  # ============================================================
+
+  - name: Systems Limited
+    careers_url: https://www.systemsltd.com/careers
+    scan_method: websearch
+    scan_query: 'site:systemsltd.com/careers React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Pakistan-headquartered enterprise software and technology services company."
+    enabled: true
+
+  - name: NETSOL Technologies
+    careers_url: https://careers.netsoltech.com/openings/
+    scan_method: websearch
+    scan_query: 'site:careers.netsoltech.com/openings React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-founded enterprise software company with a dedicated careers portal."
+    enabled: true
+
+  - name: 10Pearls
+    careers_url: https://10pearls.applytojob.com/apply
+    scan_method: websearch
+    scan_query: 'site:10pearls.applytojob.com/apply React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Large digital development and product engineering employer across Pakistan."
+    enabled: true
+
+  - name: VentureDive
+    careers_url: https://venturedive.applytojob.com/apply
+    scan_method: websearch
+    scan_query: 'site:venturedive.applytojob.com/apply React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Pakistan-founded software product design and development company."
+    enabled: true
+
+  - name: Arbisoft
+    careers_url: https://arbisoft.com/careers
+    scan_method: websearch
+    scan_query: 'site:arbisoft.hirestream.io/careers/jobs OR site:arbisoft.com/careers React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-founded software and product development company."
+    enabled: true
+
+  - name: Contour Software
+    careers_url: https://contour-software.com/jobs/
+    api: https://talentmanagementsolution.wd3.myworkdayjobs.com/ContourSoftware-Careers
+    notes: "Major Constellation Software engineering center in Karachi, Lahore, and Islamabad; scanned via Workday."
+    enabled: true
+
+  - name: Folio3
+    careers_url: https://folio3.com/careers/
+    scan_method: websearch
+    scan_query: 'site:folio3.com/jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Established digital transformation and software development employer."
+    enabled: true
+
+  - name: Tkxel
+    careers_url: https://www.careers.tkxel.com/
+    scan_method: websearch
+    scan_query: 'site:tkxel.zohorecruit.com/jobs/Careers OR site:careers.tkxel.com React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based software engineering and technology consulting company."
+    enabled: true
+
+  - name: Devsinc
+    careers_url: https://apply.workable.com/devsinc-17/
+    provider: workable
+    notes: "Large Pakistan-founded software and product development company; scanned via Workable."
+    enabled: true
+
+  - name: Confiz
+    careers_url: https://confiz.simplicant.com/?country=PK
+    scan_method: websearch
+    scan_query: 'site:confiz.simplicant.com/jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Digital transformation and software engineering employer with multiple Pakistan offices. PK-filtered board."
+    enabled: true
+
+  - name: CureMD
+    careers_url: https://curemd.com/career.asp
+    api: https://curemd.wd1.myworkdayjobs.com/CureMD
+    notes: "Healthcare software product company with a major Lahore engineering presence; scanned via Workday."
+    enabled: true
+
+  - name: i2c
+    careers_url: https://careers.i2cinc.com/
+    scan_method: websearch
+    scan_query: 'site:careers.i2cinc.com/careers/index.php/showjob React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Payments technology company with a large Lahore technology campus."
+    enabled: true
+
+  - name: Afiniti
+    careers_url: https://www.afiniti.com/jobs/
+    scan_method: websearch
+    scan_query: 'site:afiniti.com/job Pakistan React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "AI technology employer with engineering offices in Islamabad, Karachi, and Lahore."
+    enabled: true
+
+  - name: LMKR
+    careers_url: https://lmkr.com/careers
+    scan_method: websearch
+    scan_query: 'site:lmkr.com/careers React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Pakistan-founded technology company serving energy, transport, and digital government."
+    enabled: true
+
+  - name: Emumba
+    careers_url: https://emumba.pinpointhq.com/
+    provider: pinpoint
+    notes: "Islamabad software engineering and cloud consulting employer; scanned via Pinpoint."
+    enabled: true
+
+  - name: CodeNinja
+    careers_url: https://codeninjaconsulting.com/about/careers
+    scan_method: websearch
+    scan_query: 'site:codeninjaconsulting.com/about/careers React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Pakistan technology consulting and software product engineering company."
+    enabled: true
+
+  - name: Techlogix
+    careers_url: https://www.techlogix.com/careers/
+    scan_method: websearch
+    scan_query: 'site:techlogix.com/careers React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Long-established software services and enterprise technology employer."
+    enabled: true
+
+  - name: Nisum Pakistan
+    careers_url: https://www.nisum.com/careers/careers-pakistan
+    scan_method: websearch
+    scan_query: 'site:nisum.com/careers/careers-pakistan React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Global digital engineering company with offices in Karachi, Lahore, and Islamabad."
+    enabled: true
+
+  - name: NorthBay Solutions
+    careers_url: https://northbay.applytojob.com/apply
+    scan_method: websearch
+    scan_query: 'site:northbay.applytojob.com/apply React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "AWS-focused cloud and software engineering company with multiple Pakistan offices."
+    enabled: true
+
+  - name: Nextbridge
+    careers_url: https://nextbridge.com/careers/
+    scan_method: websearch
+    scan_query: 'site:nextbridge.com/job-detail React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based software development and digital solutions company."
+    enabled: true
+
+  - name: PureLogics
+    careers_url: https://purelogics.com/careers/
+    scan_method: websearch
+    scan_query: 'site:purelogics.com/careers React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Software product development company with a major Lahore engineering office."
+    enabled: true
+
+  - name: Avanza Solutions
+    careers_url: https://avanzasolutions.com/joinus/
+    scan_method: websearch
+    scan_query: 'site:avanzasolutions.com/joinus React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Karachi-founded enterprise software and digital payments company."
+    enabled: true
+
+  - name: Creative Chaos
+    careers_url: https://apply.workable.com/creativechaos/
+    provider: workable
+    notes: "Pakistan-founded digital product engineering company; scanned via Workable."
+    enabled: true
+
+  - name: Rolustech
+    careers_url: https://www.rolustech.com/jobs
+    scan_method: websearch
+    scan_query: 'site:rolustech.com/blog/jobs OR site:rolustech.com/jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based CRM, AI, and custom software development company."
+    enabled: true
+
+  - name: KalSoft
+    careers_url: https://kalsoft.applytojob.com/apply
+    scan_method: websearch
+    scan_query: 'site:kalsoft.applytojob.com/apply Pakistan React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Established Karachi-founded enterprise technology company; the board may also list Gulf roles."
+    enabled: true
+
+  - name: Dubizzle Labs
+    careers_url: https://jobs.dubizzlelabs.com/
+    scan_method: websearch
+    scan_query: 'site:jobs.dubizzlelabs.com React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Large Lahore and Karachi product engineering employer using a branded Breezy careers site."
+    enabled: true
+
+  - name: Motive Pakistan
+    careers_url: https://gomotive.com/company/careers/pk/
+    api: https://boards-api.greenhouse.io/v1/boards/gomotive/jobs
+    notes: "Major Pakistan engineering hub for a global fleet technology company; scanned via Greenhouse."
+    enabled: true
+
+  - name: S&P Global Pakistan
+    careers_url: https://careers.spglobal.com/jobs
+    scan_method: websearch
+    scan_query: 'site:careers.spglobal.com/jobs Pakistan React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Major Islamabad software, data, AI, and SDET employer."
     enabled: true
 
   # ============================================================

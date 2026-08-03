@@ -63,12 +63,15 @@ writing-samples/*
 !writing-samples/README.md
 
 # User config and customization (never auto-updated)
+article-digest.md
+voice-dna.md
 config/profile.yml
 config/cv-facts.json
 config/benchmarks.yml
 portals.yml
 modes/_profile.md
 modes/_custom.md
+data/discard.log
 .update-dismissed
 .update-lock
 .manifesto-noted
@@ -120,5 +123,12 @@ package-lock.json
 # Planning (local scratchpad)
 plan/
 
-# Web
-.career-ops-web/logo-cache/
+# Web runtime artifacts (machine-local)
+.career-ops-web/
+!.career-ops-web/logo-cache/.gitkeep
+
+# Personal CV templates (user layer)
+templates/cv-template.*.html
+!templates/cv-template.html
+!templates/cv-template.tex
+!templates/resume-template.html

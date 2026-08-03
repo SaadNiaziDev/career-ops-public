@@ -222,6 +222,10 @@ html {
   border-top: 1px solid var(--border);
   word-break: break-word;
 }
+.report-prose th:first-child,
+.report-prose td:first-child {
+  word-break: normal;
+}
 .report-prose tbody tr:hover { background: color-mix(in srgb, var(--fg) 3%, transparent); }
 .report-prose img { border-radius: 0.5rem; }
 
@@ -281,14 +285,89 @@ html.dark .dossier-hero-scrim {
 .dossier-followup:hover {
   border-color: color-mix(in srgb, var(--color-brand) 35%, var(--border));
 }
-.pipeline-tabs .ant-tabs-nav {
-  margin-bottom: 12px;
+/* ── Pipeline funnel — the tracker drawn as an actual pipeline ──────────── */
+.funnel {
+  display: flex;
+  min-width: 780px;
+  padding: 1px; /* room for the segment's inset focus ring */
 }
-.pipeline-tabs .ant-tabs-tab {
+.funnel-seg {
+  --notch: 16px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.8rem 1rem 0.8rem calc(var(--notch) + 0.9rem);
+  margin-left: calc(-1 * var(--notch) + 5px);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--notch)) 0,
+    100% 50%,
+    calc(100% - var(--notch)) 100%,
+    0 100%,
+    var(--notch) 50%
+  );
+}
+.funnel-seg-first {
+  margin-left: 0;
+  padding-left: 1.1rem;
+  border-radius: 14px 0 0 14px;
+  clip-path: polygon(0 0, calc(100% - var(--notch)) 0, 100% 50%, calc(100% - var(--notch)) 100%, 0 100%);
+}
+.funnel-seg:focus-visible {
+  background: var(--color-brand-soft);
+  color: var(--brand-text);
+}
+.funnel-scroll {
+  scrollbar-width: thin;
+}
+
+/* Pipeline table — roomier cells, quiet header */
+.pipeline-table .ant-table {
+  background: transparent;
+}
+.pipeline-table .ant-table-thead > tr > th {
+  background: color-mix(in srgb, var(--surface) 85%, transparent) !important;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: var(--muted);
+  padding: 13px 20px !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+.pipeline-table .ant-table-tbody > tr > td {
+  padding: 15px 20px !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent) !important;
+}
+.pipeline-table .ant-table-tbody > tr:hover > td {
+  background: var(--surface-hover) !important;
+}
+.pipeline-table .ant-table-tbody a {
+  color: var(--fg);
+}
+.pipeline-table .ant-table-tbody a.text-muted {
+  color: var(--muted);
+}
+.pipeline-table .ant-table-tbody a:hover {
+  color: var(--color-brand);
+}
+
+/* Report decision rail — antd action pills become a stacked action list */
+.report-rail-actions .ant-space {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px !important;
+}
+.report-rail-actions .ant-space-item {
+  width: 100%;
+}
+.report-rail-actions .ant-btn {
+  width: 100%;
+  justify-content: flex-start;
+}
+.report-rail-actions .co-cost {
+  align-self: flex-start;
 }
 
 /* ── Lenis + page shell ───────────────────────────────────────────────────── */

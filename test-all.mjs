@@ -3484,6 +3484,38 @@ try {
   if (filter(42) === true) pass('non-string locations are passed through to downstream evaluation, not silently dropped');
   else fail('non-string locations should pass through');
 
+  // Case 16: relocation_override — a location the `allow` tier rejected is rescued when
+  // the JD advertises relocation/sponsorship. `block` still wins, and the tier stays
+  // inert unless it is configured AND the provider shipped a description.
+  const relocFilter = buildLocationFilter({
+    allow: ['remote', 'europe'],
+    block: ['iran'],
+    relocation_override: { enabled: true, keywords: ['visa sponsorship', 'relocation package'] },
+  });
+  if (
+    relocFilter('San Francisco, CA', 'We offer visa sponsorship and moving help') === true &&
+    relocFilter('San Francisco, CA', 'VISA SPONSORSHIP available') === true &&
+    relocFilter('San Francisco, CA', 'Great team, free lunch') === false &&
+    relocFilter('San Francisco, CA', '') === false &&
+    relocFilter('San Francisco, CA') === false &&
+    relocFilter('San Francisco, CA', 42) === false &&
+    relocFilter('Tehran, Iran', 'visa sponsorship offered') === false &&
+    relocFilter('Remote', 'no perks mentioned') === true
+  ) {
+    pass('relocation_override rescues out-of-range locations whose JD offers relocation/sponsorship');
+  } else {
+    fail('relocation_override semantics broken (rescue / block-wins / missing-description handling)');
+  }
+
+  if (
+    buildLocationFilter({ allow: ['remote'], relocation_override: { enabled: false, keywords: ['visa sponsorship'] } })('SF', 'visa sponsorship') === false &&
+    buildLocationFilter({ allow: ['remote'] })('SF', 'visa sponsorship') === false
+  ) {
+    pass('relocation_override stays inert when disabled or absent (description is ignored)');
+  } else {
+    fail('relocation_override must not rescue when disabled or unconfigured');
+  }
+
   if (
     shouldDedupScanHistoryRow({ firstSeen: '2026-06-01', status: 'added' }, { recheckAfterDays: 30, today: '2026-06-10' }) === true &&
     shouldDedupScanHistoryRow({ firstSeen: '2026-05-01', status: 'added' }, { recheckAfterDays: 30, today: '2026-06-10' }) === false &&

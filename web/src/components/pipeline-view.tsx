@@ -3,30 +3,39 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Card, Input, Table, Tabs, Tag, Typography, Empty, Button } from "antd";
+import { Input, Table, Tag, Empty, Button } from "antd";
 import type { ColumnsType, TableProps } from "antd/es/table";
-import { CompassOutlined, CloseOutlined } from "@ant-design/icons";
+import {
+  CompassOutlined,
+  CloseOutlined,
+  LinkOutlined,
+  ProjectOutlined,
+  TableOutlined,
+} from "@ant-design/icons";
 import type { Application, InboxJob } from "@/lib/career-ops";
 import { CompanyLogo } from "@/components/company-logo";
 import { canonStatus, scoreNum, scoreTone, statusDot } from "@/lib/format";
+import { Badge } from "@/components/ui/badge";
 import { InboxTriage } from "@/components/inbox/inbox-triage";
 import { PipelineRowActions } from "@/components/pipeline/pipeline-row-actions";
-import { DossierHero } from "@/components/dossier/dossier-hero";
 import { PageShell } from "@/components/dossier/page-shell";
+import { JobLinkHub } from "@/components/job-link-hub";
+import { instrumentSerif } from "@/lib/fonts";
 import { cn } from "@/lib/cn";
 
-const TABS = [
-  "INBOX",
-  "ALL",
-  "EVALUATED",
-  "APPLIED",
-  "RESPONDED",
-  "INTERVIEW",
-  "OFFER",
-  "REJECTED",
-  "DISCARDED",
-  "SKIP",
+/* Active stages, in flow order — the funnel and the board share this. */
+const STAGES = [
+  { key: "EVALUATED", label: "Evaluated", dot: "bg-zinc-400", accent: "border-t-zinc-400" },
+  { key: "APPLIED", label: "Applied", dot: "bg-sky-400", accent: "border-t-sky-400" },
+  { key: "RESPONDED", label: "Responded", dot: "bg-sky-500", accent: "border-t-sky-500" },
+  { key: "INTERVIEW", label: "Interview", dot: "bg-emerald-400", accent: "border-t-emerald-400" },
+  { key: "OFFER", label: "Offer", dot: "bg-emerald-500", accent: "border-t-emerald-500" },
 ] as const;
+type StageKey = (typeof STAGES)[number]["key"];
+
+const CLOSED = ["REJECTED", "DISCARDED", "SKIP"] as const;
+
+const TABS = ["INBOX", "ALL", ...STAGES.map((s) => s.key), ...CLOSED] as const;
 type Tab = (typeof TABS)[number];
 
 const SORT_KEYS = ["company", "role", "score", "status", "date"] as const;
@@ -38,6 +47,8 @@ const SCORE_TONE: Record<string, string> = {
   bad: "error",
   muted: "default",
 };
+
+const BOARD_CAP = 10;
 
 export function PipelineView({
   applications,
@@ -52,6 +63,10 @@ export function PipelineView({
 
   const pTab = (params.get("tab") ?? "").toUpperCase();
   const tab: Tab = (TABS as readonly string[]).includes(pTab) ? (pTab as Tab) : "INBOX";
+  const view = params.get("view") === "table" ? "table" : "board";
+  const mode: "inbox" | "board" | "table" =
+    tab === "INBOX" ? "inbox" : tab !== "ALL" || view === "table" ? "table" : "board";
+
   const pMin = parseFloat(params.get("min") ?? "");
   const minFilter: number | null = Number.isFinite(pMin) ? pMin : null;
   const pSort = params.get("sort") ?? "";
@@ -81,6 +96,15 @@ export function PipelineView({
     [params, router, pathname],
   );
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const trimmed = q.trim();
+      if (trimmed === (params.get("q") ?? "")) return;
+      setParams({ q: trimmed || null });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, params, setParams]);
+
   const pendingInbox = useMemo(() => {
     const seen = new Set<string>();
     const out: InboxJob[] = [];
@@ -92,25 +116,41 @@ export function PipelineView({
     return out;
   }, [inbox]);
 
-  const stats = useMemo(() => {
-    const has = (r: Application, s: string) => canonStatus(r.status).includes(s);
-    const scores = applications.map((r) => scoreNum(r.score)).filter((n) => !Number.isNaN(n));
-    const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
-    const applyReady = applications.filter(
-      (r) => has(r, "EVALUATED") && !Number.isNaN(scoreNum(r.score)) && scoreNum(r.score) >= 4.0,
-    ).length;
-    const applied = applications.filter((r) => has(r, "APPLIED")).length;
-    const responded = applications.filter(
-      (r) => has(r, "RESPONDED") || has(r, "INTERVIEW") || has(r, "OFFER"),
-    ).length;
-    const interviews = applications.filter((r) => has(r, "INTERVIEW")).length;
-    const offers = applications.filter((r) => has(r, "OFFER")).length;
-    const responseRate = applied > 0 ? Math.round((responded / applied) * 100) : null;
-    return { avg, applyReady, applied, responseRate, interviews, offers };
+  /* Rows bucketed by canonical stage — feeds the funnel counts AND the board. */
+  const byStage = useMemo(() => {
+    const buckets = new Map<StageKey, Application[]>(STAGES.map((s) => [s.key, []]));
+    const closed: Application[] = [];
+    for (const r of applications) {
+      const c = canonStatus(r.status);
+      const stage = STAGES.find((s) => c.includes(s.key));
+      if (stage) buckets.get(stage.key)!.push(r);
+      else closed.push(r);
+    }
+    const byScore = (a: Application, b: Application) => {
+      const an = scoreNum(a.score);
+      const bn = scoreNum(b.score);
+      return (Number.isNaN(bn) ? -Infinity : bn) - (Number.isNaN(an) ? -Infinity : an);
+    };
+    for (const rows of buckets.values()) rows.sort(byScore);
+    closed.sort(byScore);
+    return { buckets, closed };
   }, [applications]);
 
+  const stats = useMemo(() => {
+    const scores = applications.map((r) => scoreNum(r.score)).filter((n) => !Number.isNaN(n));
+    const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+    const applyReady = (byStage.buckets.get("EVALUATED") ?? []).filter((r) => scoreNum(r.score) >= 4.0).length;
+    const applied = (byStage.buckets.get("APPLIED") ?? []).length;
+    const heard =
+      (byStage.buckets.get("RESPONDED") ?? []).length +
+      (byStage.buckets.get("INTERVIEW") ?? []).length +
+      (byStage.buckets.get("OFFER") ?? []).length;
+    const responseRate = applied > 0 ? Math.round((heard / applied) * 100) : null;
+    return { avg, applyReady, responseRate };
+  }, [applications, byStage]);
+
   const filtered = useMemo(() => {
-    if (tab === "INBOX") return [];
+    if (mode !== "table") return [];
     let rows = applications;
     if (tab !== "ALL") rows = rows.filter((r) => canonStatus(r.status).includes(tab));
     if (minFilter != null) {
@@ -133,24 +173,7 @@ export function PipelineView({
       }
       return (a[sortKey] || "").localeCompare(b[sortKey] || "") * sortDir;
     });
-  }, [applications, tab, q, sortKey, sortDir, minFilter]);
-
-  const tabItems = TABS.map((t) => {
-    const count =
-      t === "INBOX"
-        ? pendingInbox.length
-        : t === "ALL"
-          ? applications.length
-          : applications.filter((r) => canonStatus(r.status).includes(t)).length;
-    return {
-      key: t,
-      label: (
-        <span>
-          {t} <Typography.Text type="secondary" className="text-xs tabular-nums">{count}</Typography.Text>
-        </span>
-      ),
-    };
-  });
+  }, [applications, mode, tab, q, sortKey, sortDir, minFilter]);
 
   const columns: ColumnsType<Application> = [
     {
@@ -159,8 +182,8 @@ export function PipelineView({
       sorter: true,
       sortOrder: sortKey === "company" ? (sortDir === 1 ? "ascend" : "descend") : null,
       render: (company: string, row) => (
-        <Link href={`/pipeline/${row.n}`} className="inline-flex items-center gap-2 font-medium hover:text-brand">
-          <CompanyLogo name={company} size={20} />
+        <Link href={`/pipeline/${row.n}`} className="inline-flex items-center gap-2.5 font-medium hover:text-brand">
+          <CompanyLogo name={company} size={24} />
           {company}
         </Link>
       ),
@@ -182,10 +205,7 @@ export function PipelineView({
       width: 96,
       sorter: true,
       sortOrder: sortKey === "score" ? (sortDir === 1 ? "ascend" : "descend") : null,
-      render: (score: string) => {
-        const tone = scoreTone(score);
-        return <Tag color={SCORE_TONE[tone]}>{score || "—"}</Tag>;
-      },
+      render: (score: string) => <Tag color={SCORE_TONE[scoreTone(score)]}>{score || "—"}</Tag>,
     },
     {
       title: "Status",
@@ -193,8 +213,8 @@ export function PipelineView({
       sorter: true,
       sortOrder: sortKey === "status" ? (sortDir === 1 ? "ascend" : "descend") : null,
       render: (status: string) => (
-        <span className="inline-flex items-center gap-1.5 text-muted">
-          <span className={cn("size-1.5 shrink-0 rounded-full", statusDot(status))} />
+        <span className="inline-flex items-center gap-2 text-muted">
+          <span className={cn("size-2 shrink-0 rounded-full", statusDot(status))} />
           {status}
         </span>
       ),
@@ -210,7 +230,7 @@ export function PipelineView({
     {
       title: "",
       key: "actions",
-      width: 48,
+      width: 56,
       render: (_, row) => <PipelineRowActions n={row.n} company={row.company} role={row.role} />,
     },
   ];
@@ -223,170 +243,375 @@ export function PipelineView({
     setParams({ sort: col, dir });
   };
 
+  const goInbox = () => setParams({ tab: null, view: null, min: null });
+  const goBoard = () => setParams({ tab: "ALL", view: null, min: null });
+  const goTable = (t: Tab = "ALL") => setParams({ tab: t, view: t === "ALL" ? "table" : null });
+
   return (
-    <PageShell width="6xl">
-      <DossierHero
-        className="mb-4"
-        eyebrow="Pipeline"
-        title="Applications & inbox"
-        description={
-          <>
-            <span className="tabular-nums">{pendingInbox.length}</span> in inbox ·{" "}
-            <span className="tabular-nums">{applications.length}</span> tracked
-          </>
-        }
-        actions={
-          tab !== "INBOX" ? undefined : (
-            <Link href="/explore?run=1">
-              <Button type="primary" icon={<CompassOutlined />}>
-                Run free scan
-              </Button>
-            </Link>
-          )
-        }
-        footer={
-          tab !== "INBOX" ? (
-            <Input.Search
-              allowClear
-              placeholder="Search company or role…"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="max-w-md"
+    <PageShell width="full" className="pipeline-page">
+      {/* ── Command header — compact, no hero ─────────────────────────── */}
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-faint">Job search dossier</p>
+          <h1 className={cn(instrumentSerif.className, "mt-1.5 text-3xl tracking-tight text-landing sm:text-4xl")}>
+            Pipeline
+          </h1>
+          <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+            <span>
+              <span className="font-medium tabular-nums text-foreground">{applications.length}</span> tracked
+            </span>
+            {stats.avg != null && (
+              <span>
+                <span className="font-medium tabular-nums text-foreground">{stats.avg.toFixed(1)}</span> avg score
+              </span>
+            )}
+            {stats.responseRate != null && (
+              <span>
+                <span className="font-medium tabular-nums text-foreground">{stats.responseRate}%</span> response rate
+              </span>
+            )}
+            {stats.applyReady > 0 && (
+              <button
+                type="button"
+                onClick={() => setParams({ tab: "EVALUATED", min: 4, view: null })}
+                className="font-medium text-brand-text transition-colors hover:underline"
+              >
+                {stats.applyReady} apply-ready →
+              </button>
+            )}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/explore?run=1">
+            <Button type="primary" icon={<CompassOutlined />}>
+              Run free scan
+            </Button>
+          </Link>
+          <Link href="/add">
+            <Button icon={<LinkOutlined />}>Add job link</Button>
+          </Link>
+        </div>
+      </header>
+
+      {/* ── The funnel — the pipeline drawn as a pipeline ─────────────── */}
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <div className="funnel-scroll min-w-0 flex-1 overflow-x-auto">
+          <div className="funnel">
+            <FunnelSeg
+              first
+              active={mode === "inbox"}
+              count={pendingInbox.length}
+              label="Inbox"
+              dot="bg-brand"
+              onClick={goInbox}
             />
-          ) : undefined
-        }
-      />
-
-      {tab !== "INBOX" && applications.length > 0 && (
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <StatTile label="Avg score" value={stats.avg != null ? stats.avg.toFixed(1) : "—"} />
-          <StatTile
-            label="Apply-ready"
-            value={stats.applyReady}
-            tone="brand"
-            onClick={() => setParams({ tab: "EVALUATED", min: 4 })}
-          />
-          <StatTile label="Applied" value={stats.applied} onClick={() => setParams({ tab: "APPLIED", min: null })} />
-          <StatTile label="Response rate" value={stats.responseRate != null ? `${stats.responseRate}%` : "—"} />
-          <StatTile
-            label="Interviews"
-            value={stats.interviews}
-            onClick={() => setParams({ tab: "INTERVIEW", min: null })}
-          />
-          <StatTile label="Offers" value={stats.offers} onClick={() => setParams({ tab: "OFFER", min: null })} />
+            {STAGES.map((s) => (
+              <FunnelSeg
+                key={s.key}
+                active={mode === "table" && tab === s.key}
+                count={(byStage.buckets.get(s.key) ?? []).length}
+                label={s.label}
+                dot={s.dot}
+                onClick={() => goTable(s.key)}
+              />
+            ))}
+          </div>
         </div>
+        {mode !== "inbox" && (
+          <div className="inline-flex shrink-0 rounded-xl border border-border bg-surface p-1" role="group" aria-label="Tracker view">
+            <ViewToggle active={mode === "board"} onClick={goBoard} icon={<ProjectOutlined />} label="Board" />
+            <ViewToggle active={mode === "table"} onClick={() => goTable("ALL")} icon={<TableOutlined />} label="Table" />
+          </div>
+        )}
+      </div>
+
+      {/* ── Content ───────────────────────────────────────────────────── */}
+      {mode === "inbox" && (
+        <>
+          <div className="mt-6">
+            <JobLinkHub compact origin="/pipeline" />
+          </div>
+          {pendingInbox.length > 0 ? (
+            <InboxTriage inbox={pendingInbox} />
+          ) : (
+            <EmptyPanel
+              title={
+                <>
+                  Your <span className="text-brand">inbox</span> is empty
+                </>
+              }
+              body="Find roles that match your CV — free, no tokens spent."
+              cta
+            />
+          )}
+        </>
       )}
 
-      <Tabs
-        activeKey={tab}
-        onChange={(k) => setParams({ tab: k === "INBOX" ? null : k })}
-        items={tabItems}
-        className="pipeline-tabs"
-      />
-
-      {tab !== "INBOX" && minFilter != null && (
-        <div className="mb-3">
-          <Tag
-            closable
-            onClose={() => setParams({ min: null })}
-            closeIcon={<CloseOutlined />}
-            color="processing"
-          >
-            score ≥ {minFilter.toFixed(1)}
-          </Tag>
-        </div>
-      )}
-
-      {tab === "INBOX" ? (
-        pendingInbox.length > 0 ? (
-          <InboxTriage inbox={pendingInbox} />
+      {mode === "board" &&
+        (applications.length === 0 ? (
+          <EmptyPanel
+            title="Nothing tracked yet"
+            body="Evaluate a job URL or run a free scan — evaluated roles land here and flow left to right."
+            cta
+          />
         ) : (
-          <InboxEmpty count={0} filtered={false} />
-        )
-      ) : filtered.length > 0 ? (
-        <Card className="mt-2" bodyStyle={{ padding: 0 }}>
-          <Table
-            rowKey={(r) => r.n}
-            columns={columns}
-            dataSource={filtered}
-            pagination={{ pageSize: 25, showSizeChanger: false }}
-            onChange={onTableChange}
-            size="middle"
-          />
-        </Card>
-      ) : (
-        <Card className="mt-4">
-          <Empty description="No matches — try another tab or clear the search." />
-        </Card>
+          <div className="mt-5 flex gap-3.5 overflow-x-auto pb-3 2xl:grid 2xl:grid-cols-6 2xl:overflow-visible">
+            {STAGES.map((s) => (
+              <BoardColumn
+                key={s.key}
+                label={s.label}
+                dot={s.dot}
+                accent={s.accent}
+                rows={byStage.buckets.get(s.key) ?? []}
+                onSeeAll={() => goTable(s.key)}
+              />
+            ))}
+            <BoardColumn
+              label="Closed"
+              dot="bg-zinc-600"
+              accent="border-t-zinc-600"
+              rows={byStage.closed}
+              showStatus
+              muted
+              onSeeAll={() => goTable("ALL")}
+            />
+          </div>
+        ))}
+
+      {mode === "table" && (
+        <div className="mt-5 overflow-hidden rounded-2xl border border-border bg-surface/50">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-border px-4 py-3.5 sm:px-5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(["ALL", ...CLOSED] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setParams({ tab: t, view: t === "ALL" ? "table" : null, min: null })}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                    tab === t
+                      ? "border-brand/40 bg-brand-soft text-brand-text"
+                      : "border-border text-muted hover:border-brand/30 hover:text-foreground",
+                  )}
+                >
+                  {t === "ALL" ? "All" : t.charAt(0) + t.slice(1).toLowerCase()}
+                </button>
+              ))}
+              {minFilter != null && (
+                <Tag closable onClose={() => setParams({ min: null })} closeIcon={<CloseOutlined />} color="processing" className="ml-1">
+                  score ≥ {minFilter.toFixed(1)}
+                </Tag>
+              )}
+            </div>
+            <div className="ml-auto flex items-center gap-3">
+              <span className="text-xs tabular-nums text-faint">
+                {filtered.length} role{filtered.length === 1 ? "" : "s"}
+              </span>
+              <Input.Search
+                allowClear
+                placeholder="Search company or role…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                className="w-56 sm:w-64"
+              />
+            </div>
+          </div>
+          {filtered.length > 0 ? (
+            <Table
+              rowKey={(r) => r.n}
+              columns={columns}
+              dataSource={filtered}
+              pagination={{ pageSize: 25, showSizeChanger: false, className: "px-4 sm:px-5 pb-4" }}
+              onChange={onTableChange}
+              size="middle"
+              className="pipeline-table"
+            />
+          ) : (
+            <div className="px-6 py-16">
+              <Empty description="No matches — pick another stage or clear the search." />
+            </div>
+          )}
+        </div>
       )}
     </PageShell>
   );
 }
 
-function StatTile({
+/* ── Funnel segment — chevron-linked stage with count ──────────────────── */
+function FunnelSeg({
+  first = false,
+  active,
+  count,
   label,
-  value,
-  tone = "default",
+  dot,
   onClick,
 }: {
+  first?: boolean;
+  active: boolean;
+  count: number;
   label: string;
-  value: number | string;
-  tone?: "default" | "brand";
-  onClick?: () => void;
+  dot: string;
+  onClick: () => void;
 }) {
-  const body = (
-    <>
-      <div className={cn("text-2xl font-semibold tabular-nums", tone === "brand" && "text-brand")}>{value}</div>
-      <div className="mt-1 text-xs uppercase tracking-wide text-faint">{label}</div>
-    </>
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "funnel-seg text-left transition-colors focus-visible:outline-none",
+        first && "funnel-seg-first",
+        active
+          ? "bg-brand-soft text-brand-text"
+          : "bg-surface text-muted hover:bg-surface-hover hover:text-foreground",
+        count === 0 && !active && "opacity-60",
+      )}
+    >
+      <span className="block text-xl font-semibold tabular-nums leading-none tracking-tight">{count}</span>
+      <span className="mt-1.5 flex items-center gap-1.5">
+        <span className={cn("size-1.5 shrink-0 rounded-full", dot)} />
+        <span className="truncate text-[10px] font-semibold uppercase tracking-widest">{label}</span>
+      </span>
+    </button>
   );
-  const base = "rounded-2xl border border-border bg-surface/50 p-4 text-left";
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className={cn(base, "cursor-pointer transition-colors hover:border-brand/40 hover:bg-surface-hover")}
-      >
-        {body}
-      </button>
-    );
-  }
-  return <div className={base}>{body}</div>;
 }
 
-function InboxEmpty({ count, filtered }: { count: number; filtered: boolean }) {
-  if (filtered) {
-    return (
-      <Card className="mt-4">
-        <Empty description="Clear the search to see the full inbox." />
-      </Card>
-    );
-  }
+function ViewToggle({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
   return (
-    <Card className="dot-bg mt-4 overflow-hidden border-brand/20 bg-linear-to-tr from-brand/10 via-transparent to-transparent">
-      <div className="px-6 py-10 text-center">
-        <Typography.Title level={4}>
-          Your <span className="text-brand">inbox</span> is empty
-        </Typography.Title>
-        {count > 0 ? (
-          <Typography.Paragraph type="secondary">Nothing pending right now.</Typography.Paragraph>
-        ) : (
-          <>
-            <Typography.Paragraph type="secondary" className="mx-auto max-w-sm">
-              Find roles that match your CV — free, no tokens spent.
-            </Typography.Paragraph>
-            <Link href="/explore?run=1">
-              <Button type="primary" icon={<CompassOutlined />} className="mt-2">
-                Run your first free scan
-              </Button>
-            </Link>
-            <Typography.Paragraph type="secondary" className="mx-auto mt-4 max-w-sm text-xs">
-              Or add job URLs to <code>data/pipeline.md</code>
-            </Typography.Paragraph>
-          </>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+        active ? "bg-brand text-brand-foreground shadow-sm" : "text-muted hover:text-foreground",
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+/* ── Board column — one stage, cards sorted by score ───────────────────── */
+function BoardColumn({
+  label,
+  dot,
+  accent,
+  rows,
+  showStatus = false,
+  muted = false,
+  onSeeAll,
+}: {
+  label: string;
+  dot: string;
+  accent: string;
+  rows: Application[];
+  showStatus?: boolean;
+  muted?: boolean;
+  onSeeAll: () => void;
+}) {
+  const visible = rows.slice(0, BOARD_CAP);
+  return (
+    <section
+      className={cn(
+        "flex w-70 shrink-0 flex-col self-start rounded-2xl border border-border border-t-2 bg-surface/40 2xl:w-auto 2xl:min-w-0",
+        accent,
+        muted && "opacity-80",
+      )}
+    >
+      <header className="flex items-center gap-2 px-4 pb-2.5 pt-3.5">
+        <span className={cn("size-2 shrink-0 rounded-full", dot)} />
+        <h2 className="text-[11px] font-semibold uppercase tracking-widest text-foreground">{label}</h2>
+        <span className="ml-auto rounded-md bg-surface-hover px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted">
+          {rows.length}
+        </span>
+      </header>
+      <div className="flex flex-col gap-2 px-3 pb-3">
+        {visible.map((row) => (
+          <BoardCard key={row.n} row={row} showStatus={showStatus} />
+        ))}
+        {rows.length === 0 && (
+          <div className="rounded-xl border border-dashed border-border/80 px-3 py-6 text-center text-xs text-faint">
+            No roles here yet
+          </div>
+        )}
+        {rows.length > BOARD_CAP && (
+          <button
+            type="button"
+            onClick={onSeeAll}
+            className="rounded-xl border border-border/80 py-2 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand"
+          >
+            See all {rows.length} in table
+          </button>
         )}
       </div>
-    </Card>
+    </section>
+  );
+}
+
+function BoardCard({ row, showStatus }: { row: Application; showStatus: boolean }) {
+  const hasScore = !!row.score && row.score.trim() !== "" && row.score.trim() !== "—";
+  return (
+    <article className="group rounded-xl border border-border bg-surface p-3 transition-all duration-150 hover:border-brand/40 hover:shadow-sm">
+      <div className="flex items-start gap-2.5">
+        <CompanyLogo name={row.company} size={22} className="mt-px shrink-0" />
+        <div className="min-w-0 flex-1">
+          <Link
+            href={`/pipeline/${row.n}`}
+            className="block truncate text-sm font-semibold text-foreground transition-colors hover:text-brand"
+          >
+            {row.company}
+          </Link>
+          <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-muted">{row.role}</p>
+        </div>
+        {hasScore && <Badge tone={scoreTone(row.score)}>{row.score}</Badge>}
+      </div>
+      <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/60 pt-2">
+        <span className="min-w-0 truncate text-[11px] tabular-nums text-faint">
+          {showStatus ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span className={cn("size-1.5 shrink-0 rounded-full", statusDot(row.status))} />
+              {row.status}
+              {row.date ? ` · ${row.date}` : ""}
+            </span>
+          ) : (
+            row.date || "—"
+          )}
+        </span>
+        <span className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <PipelineRowActions n={row.n} company={row.company} role={row.role} />
+        </span>
+      </div>
+    </article>
+  );
+}
+
+/* ── Shared empty state ─────────────────────────────────────────────────── */
+function EmptyPanel({ title, body, cta = false }: { title: React.ReactNode; body: string; cta?: boolean }) {
+  return (
+    <div className="dot-bg mt-5 overflow-hidden rounded-2xl border border-brand/25 bg-linear-to-tr from-brand/10 via-transparent to-transparent">
+      <div className="px-8 py-16 text-center">
+        <h2 className={cn(instrumentSerif.className, "text-2xl tracking-tight text-landing sm:text-3xl")}>{title}</h2>
+        <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-muted">{body}</p>
+        {cta && (
+          <Link href="/explore?run=1" className="mt-6 inline-block">
+            <Button type="primary" size="large" icon={<CompassOutlined />}>
+              Run a free scan
+            </Button>
+          </Link>
+        )}
+      </div>
+    </div>
   );
 }

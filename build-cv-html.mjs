@@ -222,6 +222,7 @@ function renderReport(payload) {
     LANG: escapeHtml(payload.lang || 'en'),
     PAGE_WIDTH: pageWidth,
     NAME: escapeHtml(candidate.name || ''),
+    HEADLINE: escapeHtml(candidate.headline || ''),
     SECTION_SUMMARY: escapeHtml(sectionTitles.summary),
     SUMMARY_TEXT: escapeHtml(payload.summary || ''),
     SECTION_COMPETENCIES: escapeHtml(sectionTitles.competencies),
@@ -366,6 +367,7 @@ async function runSelfTest() {
     page_format: 'letter',
     candidate: {
       name: 'Test Candidate',
+      headline: 'Senior Software Engineer',
       phone: '+1 234 567 8900',
       email: 'test@example.com',
       linkedin: { url: 'https://linkedin.com/in/test', display: 'linkedin.com/in/test' },

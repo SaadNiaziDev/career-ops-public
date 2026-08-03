@@ -1,6 +1,6 @@
 # Career-Ops — UI-First Job Search Pipeline
 
-Personal fork of [career-ops](https://github.com/santifer/career-ops) by Saad Ali Khan. Forked from [santifer](https://santifer.io)'s open-source system; optimized for a **local web UI** plus **Claude Code**, **Codex**, and **Cursor** agents.
+UI-first fork of [career-ops](https://github.com/santifer/career-ops) by Saad Ali Khan. Upstream by [santifer](https://santifer.io). Optimized for a **local web UI** plus **Claude Code**, **Codex**, and **Cursor** agents.
 
 **Primary interface:** `npm run web:dev` → http://localhost:3000 (`web/`). Agents and scripts read/write the same files under the repo root — no separate database.
 
@@ -57,7 +57,7 @@ Parse the JSON output:
 
 The user can say "check for updates" or "update career-ops" anytime. Rollback: `node update-system.mjs rollback`
 
-Updates pull from this fork's GitHub remote (`SaadNiaziDev/career-ops`), not upstream santifer.
+Updates pull from the public release remote (`SaadNiaziDev/career-ops-public`), not upstream santifer.
 
 ## What is career-ops
 
