@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Bookmark, BookmarkCheck, Loader2, X } from "lucide-react";
+import { Bookmark, BookmarkCheck, ExternalLink, Loader2, X } from "lucide-react";
 import type { InboxJob } from "@/lib/career-ops";
 import type { AtsSource } from "@/lib/explore";
 import { ATS_LABEL } from "@/lib/explore";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { CompanyLogo } from "@/components/company-logo";
 import { cn } from "@/lib/cn";
 
@@ -20,9 +21,6 @@ function agoLabel(age: number | null): string | null {
   return `${Math.floor(age / 30)}mo ago`;
 }
 
-// One raw posting in the triage list. Shows ONLY cheap, free signals + an honest
-// "not scored" (CRUDA) — never a fake match%. Once its shortlist eval finishes it
-// flips to EVALUADA (a real A–F badge). Save→shortlist / Skip→hidden are free + undoable.
 export function TriageRow({
   job,
   source,
@@ -48,75 +46,96 @@ export function TriageRow({
   const evaluated = !!scored && (scored.running || scored.score != null);
 
   return (
-    <li
-      className={cn(
-        "flex items-center gap-2.5 px-3 py-2.5 transition-colors sm:gap-3 sm:px-4",
-        selected ? "bg-brand-soft/50" : "hover:bg-surface-hover",
-        evaluated && "opacity-95",
-      )}
-    >
-      {/* multi-select — power-user batch to shortlist */}
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={onToggleSelect}
-        aria-label={`Select ${job.company} ${job.role}`}
-        className="size-4 shrink-0 accent-brand max-sm:min-h-[44px] max-sm:min-w-[24px]"
-      />
-
-      <CompanyLogo name={job.company} size={20} />
-
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm">
-          <span className="font-medium text-foreground">{job.company}</span>
-          <span className="text-muted"> · {job.role}</span>
-        </p>
-        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">
-          {job.location && <span className="truncate">{job.location}</span>}
-          {source && <span className="rounded bg-surface-hover px-1 py-px font-medium text-muted">{ATS_LABEL[source]}</span>}
-          {ago && <span>{ago}</span>}
-          {/* 🔴 CRUDA: honest "not scored" — no fabricated match%. */}
-          {!evaluated && <span className="italic text-muted">not scored</span>}
-        </p>
-      </div>
-
-      {/* EVALUADA state (right-aligned, visually distinct from raw rows) */}
-      {evaluated ? (
-        <Link href={`/jobs/${scored!.jobId}`} className="flex shrink-0 items-center gap-1.5 text-xs">
-          {scored!.running ? (
-            <>
-              <Loader2 className="size-3.5 animate-spin text-brand" />
-              <span className="text-brand max-sm:hidden">Scoring…</span>
-            </>
-          ) : (
-            <Badge tone={scored!.tone}>{scored!.score}/5</Badge>
+    <li>
+      <article
+        className={cn(
+          "group relative flex h-full flex-col rounded-2xl border border-border bg-surface/60 p-4 transition-all duration-150",
+          "hover:border-brand/35 hover:bg-surface-hover/80 hover:shadow-md hover:shadow-black/5",
+          selected && "border-brand/50 bg-brand-soft/40 ring-1 ring-brand/25",
+          evaluated && "border-border/80",
+        )}
+      >
+        <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            aria-label={`Select ${job.company} ${job.role}`}
+            className="mt-1 size-4 shrink-0 accent-brand"
+          />
+          <CompanyLogo name={job.company} size={28} className="shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium leading-snug text-foreground">{job.company}</p>
+            <p className="mt-0.5 line-clamp-2 text-sm leading-relaxed text-muted">{job.role}</p>
+          </div>
+          {evaluated && (
+            <Link
+              href={`/jobs/${scored!.jobId}`}
+              className="shrink-0"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {scored!.running ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Scoring
+                </span>
+              ) : (
+                <Badge tone={scored!.tone}>{scored!.score}/5</Badge>
+              )}
+            </Link>
           )}
-        </Link>
-      ) : (
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={onSave}
-            title={shortlisted ? "In your shortlist" : "Save to shortlist"}
-            aria-pressed={shortlisted}
-            className={cn(
-              "inline-flex items-center justify-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors max-sm:min-h-[44px] max-sm:min-w-[44px]",
-              shortlisted ? "text-brand" : "text-muted hover:bg-surface-hover hover:text-brand",
-            )}
-          >
-            {shortlisted ? <BookmarkCheck className="size-4" /> : <Bookmark className="size-4" />}
-            <span className="max-sm:hidden">{shortlisted ? "Saved" : "Save"}</span>
-          </button>
-          <button
-            type="button"
-            onClick={onSkip}
-            title="Skip — hide from the inbox"
-            className="inline-flex items-center justify-center rounded-md p-1 text-faint transition-colors hover:bg-surface-hover hover:text-foreground max-sm:min-h-[44px] max-sm:min-w-[44px]"
-          >
-            <X className="size-4" />
-          </button>
         </div>
-      )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 pl-7">
+          {job.location && (
+            <span className="max-w-full truncate rounded-md border border-border/80 bg-surface px-2 py-0.5 text-[11px] text-muted">
+              {job.location}
+            </span>
+          )}
+          {source && (
+            <span className="rounded-md border border-border/80 bg-surface px-2 py-0.5 text-[11px] font-medium text-muted">
+              {ATS_LABEL[source]}
+            </span>
+          )}
+          {ago && <span className="text-[11px] tabular-nums text-faint">{ago}</span>}
+          {!evaluated && (
+            <span className="rounded-md border border-dashed border-border px-2 py-0.5 text-[11px] italic text-faint">
+              Not scored
+            </span>
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3 pl-7">
+          <a
+            href={job.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-muted transition-colors hover:text-brand"
+          >
+            View posting
+            <ExternalLink className="size-3" />
+          </a>
+          {!evaluated && (
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant={shortlisted ? "secondary" : "outline"}
+                size="sm"
+                onClick={onSave}
+                aria-pressed={shortlisted}
+                className={cn(shortlisted && "border-brand/40 text-brand")}
+              >
+                {shortlisted ? <BookmarkCheck className="size-3.5" /> : <Bookmark className="size-3.5" />}
+                {shortlisted ? "Saved" : "Save"}
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={onSkip} aria-label={`Skip ${job.company}`}>
+                <X className="size-3.5" />
+                Skip
+              </Button>
+            </div>
+          )}
+        </div>
+      </article>
     </li>
   );
 }

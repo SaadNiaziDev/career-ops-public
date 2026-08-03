@@ -11,13 +11,14 @@ import {
   RocketOutlined,
   ArrowRightOutlined,
   FundOutlined,
+  LinkOutlined,
 } from "@ant-design/icons";
 import type { Application, InboxJob } from "@/lib/career-ops";
 import type { DiscoveredOffer } from "@/lib/explore";
 import { DiscoveryCard } from "@/components/explore/discovery-card";
 import { FollowUpCard, type FollowUp } from "@/components/home/follow-up-card";
 import { DecisionCard } from "@/components/home/decision-card";
-import { QuickEvaluate } from "@/components/quick-evaluate";
+import { JobLinkHub } from "@/components/job-link-hub";
 import { TitlesBroadening } from "@/components/portals/titles-broadening";
 import { DossierHero } from "@/components/dossier/dossier-hero";
 import { DossierStat } from "@/components/dossier/dossier-stat";
@@ -107,9 +108,13 @@ export function TodayDashboard({
                 Open pipeline
               </Button>
             </Link>
+            <Link href="/add">
+              <Button size="large" icon={<LinkOutlined />}>
+                Add job link
+              </Button>
+            </Link>
           </>
         }
-        footer={inBetween ? <QuickEvaluate /> : undefined}
       />
 
       <Row gutter={[12, 12]} className="mb-5 sm:mb-6">
@@ -225,6 +230,7 @@ export function TodayDashboard({
         </Col>
 
         <Col xs={24} lg={8}>
+          <JobLinkHub compact origin="/" className="mb-4" />
           <TitlesBroadening compact />
         </Col>
       </Row>

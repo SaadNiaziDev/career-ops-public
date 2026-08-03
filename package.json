@@ -1,6 +1,6 @@
 {
   "name": "career-ops",
-  "version": "1.21.0",
+  "version": "1.22.0",
   "description": "Local-first AI job search — web UI with Claude Code, Codex, and Cursor agents",
   "private": true,
   "scripts": {
@@ -24,6 +24,7 @@
     "scan": "node scan.mjs",
     "scan:full": "node scan-ats-full.mjs",
     "validate:portals": "node validate-portals.mjs",
+    "verify:public": "node verify-public-release.mjs",
     "verify:portals": "node verify-portals.mjs",
     "tracker": "node tracker.mjs",
     "find": "node find.mjs",

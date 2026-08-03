@@ -178,6 +178,9 @@ export default {
           location: formatLocation(j),
           salary: parseCompensation(j),
           postedAt: toEpochMs(j.publishedAt),
+          // Ashby's list API already ships the full JD text — no extra request.
+          // Feeds content_filter and location_filter.relocation_override.
+          description: typeof j.descriptionPlain === 'string' ? j.descriptionPlain : '',
         }));
       } catch (e) {
         lastErr = e;

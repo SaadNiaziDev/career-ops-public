@@ -27,6 +27,8 @@ Read `portals.yml` which contains:
 - `tracked_companies`: Specific companies with `careers_url` for direct navigation
 - `tracked_companies[].parser`: Optional local parser for SSR pages or stable HTML
 - `title_filter`: Keywords (positive/negative/seniority_boost) for filtering job titles
+- `location_filter`: Optional geography gate; supports `relocation_override` when JD text mentions visa/relocation
+- `tracked_companies[].fetch_content`: Greenhouse opt-in — pull full JD bodies for `content_filter` / `relocation_override`
 
 ## Discovery Strategy (4 Levels)
 
@@ -215,9 +217,11 @@ Levels are additive — they are executed in order, and results are merged and d
 6b. **Filter by Location (Optional)** using `location_filter` from `portals.yml`:
    - If the `location_filter` block is absent, all locations pass (default behavior).
    - Empty location on a posting → passes (do not penalize missing data).
-   - Any keyword from `block` present → reject (precedes allow).
+   - Any keyword from `always_allow` present → passes (checked before `block`).
+   - Any keyword from `block` present → reject (precedes allow and relocation_override).
    - Empty `allow` → passes (already cleared block).
    - Non-empty `allow` → must match at least one keyword.
+   - **`relocation_override`** (optional): when enabled, a posting whose location would be rejected can still pass if the JD body (title + description) contains one of `relocation_override.keywords` (e.g. "visa sponsorship", "relocation package"). Requires description text — for Greenhouse boards, set `fetch_content: true` on the company entry. `block` still wins.
    - All matches are case-insensitive substring matches.
    - The location is persisted as the 7th column in `scan-history.tsv` for later auditing.
 

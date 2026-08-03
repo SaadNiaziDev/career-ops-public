@@ -141,6 +141,17 @@ export async function validatePortalsConfig(config, { providerIds = new Set() } 
       validateKeywordList(config.location_filter.always_allow, 'location_filter.always_allow', errors);
       validateKeywordList(config.location_filter.allow, 'location_filter.allow', errors);
       validateKeywordList(config.location_filter.block, 'location_filter.block', errors);
+      const override = config.location_filter.relocation_override;
+      if (override !== undefined) {
+        if (!isObject(override)) {
+          add(errors, 'location_filter.relocation_override', 'relocation_override must be an object when set');
+        } else {
+          if (override.enabled !== undefined && typeof override.enabled !== 'boolean') {
+            add(errors, 'location_filter.relocation_override.enabled', 'enabled must be a boolean when set');
+          }
+          validateKeywordList(override.keywords, 'location_filter.relocation_override.keywords', errors);
+        }
+      }
     }
   }
 
@@ -218,6 +229,10 @@ export async function validatePortalsConfig(config, { providerIds = new Set() } 
       }
 
       validateParser(company.parser, `${base}.parser`, errors);
+
+      if (company.fetch_content !== undefined && typeof company.fetch_content !== 'boolean') {
+        add(errors, `${base}.fetch_content`, 'fetch_content must be a boolean when set');
+      }
     }
   }
 

@@ -180,53 +180,73 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   if (inbox.length === 0) return null;
 
   return (
-    <div className={cn("mx-auto mt-4 max-w-3xl", shortlist.length > 0 && "pb-28 sm:pb-24")}>
-      <FacetChips
-        within={within}
-        setWithin={setWithin}
-        sources={sources}
-        toggleSource={(s) => setSources((set) => { const n = new Set(set); n.has(s) ? n.delete(s) : n.add(s); return n; })}
-        seniorities={seniorities}
-        toggleSeniority={(s) => setSeniorities((set) => { const n = new Set(set); n.has(s) ? n.delete(s) : n.add(s); return n; })}
-        locQ={locQ}
-        setLocQ={setLocQ}
-        kw={kw}
-        setKw={setKw}
-        availSources={availSources}
-        availSeniorities={availSeniorities}
-        resultCount={filtered.length}
-        totalCount={enriched.length - hiddenCount}
-        anyActive={anyFacet}
-        onClear={() => { setWithin(null); setSources(new Set()); setSeniorities(new Set()); setLocQ(""); setKw(""); }}
-      />
+    <div className={cn("pipeline-inbox mt-6", shortlist.length > 0 && "pb-28 sm:pb-24")}>
+      <div className="grid gap-6 xl:grid-cols-[minmax(280px,320px)_minmax(0,1fr)] xl:items-start">
+        <aside className="space-y-4 xl:sticky xl:top-6">
+          <div className="rounded-2xl border border-border bg-surface/50 p-4 sm:p-5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-faint">Refine</p>
+            <h2 className="mt-1 text-base font-semibold text-foreground">Filter inbox</h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted">
+              Narrow the list before you save or score — filtering never uses tokens.
+            </p>
+            <div className="mt-4">
+              <FacetChips
+                within={within}
+                setWithin={setWithin}
+                sources={sources}
+                toggleSource={(s) => setSources((set) => { const n = new Set(set); n.has(s) ? n.delete(s) : n.add(s); return n; })}
+                seniorities={seniorities}
+                toggleSeniority={(s) => setSeniorities((set) => { const n = new Set(set); n.has(s) ? n.delete(s) : n.add(s); return n; })}
+                locQ={locQ}
+                setLocQ={setLocQ}
+                kw={kw}
+                setKw={setKw}
+                availSources={availSources}
+                availSeniorities={availSeniorities}
+                resultCount={filtered.length}
+                totalCount={enriched.length - hiddenCount}
+                anyActive={anyFacet}
+                onClear={() => { setWithin(null); setSources(new Set()); setSeniorities(new Set()); setLocQ(""); setKw(""); }}
+              />
+            </div>
+          </div>
+        </aside>
 
+        <section className="min-w-0">
       {/* batch header: fresh slice by default, or the full filtered set */}
-      <div className="mt-4 flex items-baseline justify-between gap-3">
-        <p className="text-sm font-medium text-foreground">
-          {capped ? "Fresh — worth a look" : anyFacet ? `${filtered.length} match${filtered.length === 1 ? "" : "es"}` : "All roles"}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-faint">Queue</p>
+          <p className="mt-1 text-lg font-semibold text-foreground">
+            {capped ? "Fresh — worth a look" : anyFacet ? `${filtered.length} match${filtered.length === 1 ? "" : "es"}` : "All roles"}
+          </p>
+          <p className="mt-0.5 text-sm text-muted">
+            {visible.length} shown
+            {capped && ordered.length > BATCH ? ` · ${ordered.length} total in inbox` : ""}
+          </p>
+        </div>
         {hiddenCount > 0 && (
-          <button type="button" onClick={() => setHidden([])} className="text-xs text-faint transition-colors hover:text-foreground">
-            {hiddenCount} hidden · restore
+          <button type="button" onClick={() => setHidden([])} className="rounded-lg border border-border px-3 py-2 text-xs text-muted transition-colors hover:border-brand/40 hover:text-foreground">
+            Restore {hiddenCount} hidden
           </button>
         )}
       </div>
 
       {/* multi-select action bar */}
       {selected.size > 0 && (
-        <div className="mt-2 flex items-center gap-3 rounded-lg border border-brand/30 bg-brand-soft px-3 py-2 text-sm">
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-brand/30 bg-brand-soft px-4 py-3 text-sm">
           <span className="font-medium text-brand tabular-nums">{selected.size} selected</span>
-          <button type="button" onClick={saveSelected} className="rounded-md bg-brand px-2.5 py-1 text-xs font-medium text-brand-foreground max-sm:min-h-[44px]">
+          <button type="button" onClick={saveSelected} className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-brand-foreground transition hover:brightness-110">
             Save to shortlist
           </button>
-          <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-muted hover:text-foreground max-sm:min-h-[44px]">
-            Clear
+          <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-muted hover:text-foreground">
+            Clear selection
           </button>
         </div>
       )}
 
       {visible.length > 0 ? (
-        <ul className="mt-3 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface/40">
+        <ul className="mt-5 grid list-none gap-4 p-0 sm:grid-cols-2 2xl:grid-cols-3">
           {visible.map((e) => (
             <TriageRow
               key={e.job.url}
@@ -243,27 +263,29 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
           ))}
         </ul>
       ) : (
-        <div className="mt-3 rounded-2xl border border-dashed border-border bg-surface/30 px-6 py-10 text-center">
-          <p className="font-display text-lg">No matches</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-muted">Loosen the filters to see more of your inbox.</p>
+        <div className="mt-5 rounded-2xl border border-dashed border-border bg-surface/30 px-8 py-14 text-center">
+          <p className="font-display text-xl font-medium">No matches</p>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">Loosen the filters on the left to see more of your inbox.</p>
         </div>
       )}
 
-      {/* "See all N" — only when the fresh batch is capping a larger list */}
       {capped && ordered.length > BATCH && (
         <button
           type="button"
           onClick={() => setShowAll(true)}
-          className="mt-3 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-border bg-surface/40 py-2.5 text-sm font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand max-sm:min-h-[44px]"
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface/60 py-3.5 text-sm font-medium text-muted transition-colors hover:border-brand/40 hover:bg-surface-hover hover:text-brand"
         >
-          See all {ordered.length} in inbox →
+          See all {ordered.length} in inbox
         </button>
       )}
 
-      {/* empty-shortlist guidance (only once there's nothing saved) */}
       {shortlist.length === 0 && (
-        <p className="mt-4 text-center text-xs text-faint">Save roles worth a look, then score them together — one token spend.</p>
+        <p className="mt-6 rounded-xl border border-border/60 bg-surface/30 px-4 py-3 text-center text-xs leading-relaxed text-faint">
+          Save roles worth a look, then score them together — one token spend.
+        </p>
       )}
+        </section>
+      </div>
 
       {/* undo toast (sits above the tray) */}
       {undo && (

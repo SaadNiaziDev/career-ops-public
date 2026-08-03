@@ -379,7 +379,7 @@ export async function runSeedScan(seedId, opts, ctx, seenUrls, label) {
       if (dateClass === 'stale') continue;
       if (dateClass === 'undated' && !opts.includeUndated) continue;
       if (!opts.titleFilter(job.title)) continue;
-      if (!opts.locationFilter(job.location)) continue;
+      if (!opts.locationFilter(job.location, job.description)) continue;
       if (seenUrls.has(job.url)) continue;
       seenUrls.add(job.url);
       offers.push({ ...job, source: sourceName, dateStatus: job.postedAt ? 'dated' : 'unknown' });
@@ -512,7 +512,7 @@ async function main() {
           if (dateClass === 'stale') continue;
           if (dateClass === 'undated' && !opts.includeUndated) { droppedNoDate++; continue; }
           if (!titleFilter(job.title)) continue;
-          if (!locationFilter(job.location)) continue;
+          if (!locationFilter(job.location, job.description)) continue;
           if (seenUrls.has(job.url)) continue;
           seenUrls.add(job.url); // intra-scan dedup
           newOffers.push({ ...job, source: `${name}-full`, dateStatus: job.postedAt ? 'dated' : 'unknown' });

@@ -44,7 +44,7 @@ export function ShortlistTray({
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 sm:bottom-4">
-      <div className="mx-auto max-w-3xl sm:px-6">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="border-t border-border bg-surface shadow-lg shadow-black/10 sm:rounded-2xl sm:border">
           {/* expandable saved-items list */}
           {open && (

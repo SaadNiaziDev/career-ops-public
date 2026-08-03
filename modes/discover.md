@@ -17,7 +17,7 @@ You are a **proposer**, not a writer: never edit files, never merge into the tra
 | `cv.md` | Ground suggestions in what the user actually does — don't propose wildly off-CV roles |
 | `config/profile.yml` | Target roles, location policy, comp band, archetypes |
 | `modes/_profile.md` | Deal-breakers, narrative, framing |
-| `portals.yml` | Optional — companies/keywords already on the deterministic scan watchlist |
+| `portals.yml` | **Required** — `location_filter` (allowed geographies), `tracked_companies` (PK/Gulf-friendly employers), `search_queries` (portal-tuned query patterns) |
 
 The prompt also includes an **ALREADY KNOWN** block (companies/roles/URL count from inbox + tracker + scan history). **Do not re-propose those companies.**
 
@@ -30,7 +30,8 @@ The prompt also includes an **ALREADY KNOWN** block (companies/roles/URL count f
 ## Philosophy: generous finder, not judge
 
 - You **find** candidates; the A–F evaluation (`oferta`) **judges** fit later with the full JD.
-- When location, seniority, or company stage can't be confirmed from shallow signals, **include** the candidate and flag uncertainty in `why` — don't silently discard.
+- When seniority or company stage can't be confirmed from shallow signals, **include** the candidate and flag uncertainty in `why` — don't silently discard.
+- Location is the one filter you enforce hard (see Search strategy step 6) — `portals.yml` `location_filter` exists because generic global postings rarely sponsor PK candidates, and silently including them defeats the point of this mode.
 - Never invent URLs. Every `url` must be a real `https://` link you found via search or fetch.
 - Never score fit (no X/5). Never claim a posting is "verified live" — all offers are `verification: unconfirmed`.
 
@@ -38,13 +39,15 @@ The prompt also includes an **ALREADY KNOWN** block (companies/roles/URL count f
 
 1. Parse the user's intent: role family, seniority, geography, industry, exclusions.
 2. Cross-check `cv.md` + profile targets so queries aren't absurd for this person.
-3. Run **3–6** targeted WebSearch queries. Prefer:
-   - `"role keywords" site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com`
-   - `"role keywords" "careers" remote` with location terms from profile
-   - Company-specific queries only when intent names a sector or employer type
-4. For each promising hit, extract: company, title, location (if visible), direct posting URL.
-5. **Dedup** against the ALREADY KNOWN block — skip companies already in pipeline/tracker.
-6. Stop when you have **5–12 strong candidates** or exhaust high-yield queries. Quality over quantity.
+3. Read `portals.yml` first. Build queries **from it**, not generic templates:
+   - Take `search_queries[].query` entries where `enabled: true` and adapt them to the user's stated intent (swap role keywords, keep geography/site scoping intact).
+   - Take `tracked_companies[]` names (esp. the PK/Gulf-headquartered ones) and run company-specific queries for any not already in the ALREADY KNOWN block: `"<title keywords>" site:<their careers domain/ATS>`.
+   - Only fall back to a generic `site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com` query if `portals.yml` search_queries/tracked_companies are exhausted and you still need more candidates.
+4. Run **3–6** targeted WebSearch queries total, portal-sourced queries first.
+5. For each promising hit, extract: company, title, location (if visible), direct posting URL.
+6. **Apply `portals.yml` `location_filter` as a hard filter**, not a soft note: if location is known and matches neither `always_allow` nor `allow`, and no `relocation_override` keyword is present in the snippet/JD, **drop the candidate** — don't emit it just to flag uncertainty. Only include unclear-location postings when location literally can't be determined from any signal, and say so in `why`.
+7. **Dedup** against the ALREADY KNOWN block — skip companies already in pipeline/tracker.
+8. Stop when you have **5–12 strong candidates** or exhaust high-yield queries. Quality over quantity.
 
 ## Output contract (CRITICAL — web parser)
 
