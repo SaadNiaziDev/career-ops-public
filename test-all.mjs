@@ -798,7 +798,7 @@ const absPathRaw = run(
   { stdio: ['pipe', 'pipe', 'ignore'] }
 );
 // The old shell pipeline's `grep -v` exclusions, now as a JS filter.
-const ABS_PATH_EXCLUDE = ['README.md', 'LICENSE', 'CLAUDE.md', 'test-all.mjs'];
+const ABS_PATH_EXCLUDE = ['README.md', 'LICENSE', 'CLAUDE.md', 'test-all.mjs', 'verify-public-release.mjs'];
 const absPathLines = (absPathRaw || '')
   .split('\n')
   .filter(Boolean)

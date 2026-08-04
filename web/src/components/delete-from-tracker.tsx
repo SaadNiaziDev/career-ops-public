@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { DeleteOutlined } from "@ant-design/icons";
-import { Button, Popconfirm, Space, Typography } from "antd";
-
-const { Text } = Typography;
+import { MaterialSymbol } from "@/components/material-symbol";
+import { Button } from "@/components/ui/button";
 
 export function DeleteFromTracker({ n }: { n: string }) {
   const router = useRouter();
@@ -13,6 +11,7 @@ export function DeleteFromTracker({ n }: { n: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [checked, setChecked] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function loadOrphan() {
     if (checked) return true;
@@ -60,29 +59,52 @@ export function DeleteFromTracker({ n }: { n: string }) {
     }
   }
 
+  function openConfirm() {
+    if (err && checked) return;
+    setConfirmOpen(true);
+    void loadOrphan();
+  }
+
   return (
-    <Space direction="vertical" className="w-full">
-      <Popconfirm
-        title={`Permanently remove application #${n}?`}
-        description={
-          <>
-            This can&apos;t be undone.
-            {orphan ? ` Its report file (${orphan}) is left on disk.` : ""}
-          </>
-        }
-        onOpenChange={(open) => {
-          if (open) void loadOrphan();
-        }}
-        onConfirm={confirmDelete}
-        okText="Delete"
-        okButtonProps={{ danger: true, loading: busy }}
-        disabled={!!err && checked}
-      >
-        <Button danger size="small" icon={<DeleteOutlined />} loading={busy}>
+    <div className="flex w-full flex-col gap-2">
+      {!confirmOpen ? (
+        <Button
+          variant="outline"
+          size="sm"
+          type="button"
+          disabled={!!err && checked}
+          onClick={openConfirm}
+          className="border-[var(--md-sys-color-error)] text-[var(--md-sys-color-error)] hover:bg-[var(--md-sys-color-error-container)]"
+        >
+          <MaterialSymbol name="delete" size={16} />
           Remove from tracker
         </Button>
-      </Popconfirm>
-      {err && <Text type="danger" className="text-xs">{err}</Text>}
-    </Space>
+      ) : (
+        <div className="md3-alert md3-alert--warning flex-col items-stretch">
+          <p className="mb-0 text-sm font-medium">Permanently remove application #{n}?</p>
+          <p className="mb-0 text-xs">
+            This can&apos;t be undone.
+            {orphan ? ` Its report file (${orphan}) is left on disk.` : ""}
+          </p>
+          <div className="md3-actions-row mt-1">
+            <Button variant="ghost" size="sm" type="button" onClick={() => setConfirmOpen(false)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              type="button"
+              disabled={busy}
+              onClick={() => void confirmDelete()}
+              className="bg-[var(--md-sys-color-error)] text-[var(--md-sys-color-on-error)] hover:brightness-110"
+            >
+              {busy ? <MaterialSymbol name="progress_activity" size={16} className="animate-spin" /> : null}
+              Delete
+            </Button>
+          </div>
+        </div>
+      )}
+      {err ? <span className="text-xs text-[var(--md-sys-color-error)]">{err}</span> : null}
+    </div>
   );
 }

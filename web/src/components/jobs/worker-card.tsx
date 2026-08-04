@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, X, Loader2, AlertTriangle } from "lucide-react";
 import type { Job } from "@/components/jobs/job-store";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { cn } from "@/lib/cn";
 import { fmtElapsed, fmtTokens, humanizeStep, isAuthError, useElapsed } from "@/components/jobs/job-utils";
 
@@ -42,11 +42,11 @@ export function WorkerCard({
     <div className={cn(inline && "rounded-xl border border-border bg-surface/60 p-2.5")}>
       <div className="flex items-center gap-2">
         {job.status === "running" ? (
-          <Loader2 className="size-3 shrink-0 animate-spin text-brand" />
+          <MaterialSymbol name="progress_activity" size={14} className="shrink-0 animate-spin text-brand" />
         ) : job.status === "error" ? (
-          <AlertTriangle className={cn("size-3 shrink-0", tone.icon)} />
+          <MaterialSymbol name="warning" size={14} className={cn("shrink-0", tone.icon)} />
         ) : (
-          <Check className={cn("size-3 shrink-0", tone.icon)} />
+          <MaterialSymbol name="check" size={14} className={cn("shrink-0", tone.icon)} />
         )}
         <span className={cn("truncate font-medium", inline ? "text-sm" : "text-xs")}>{job.title}</span>
         {hasScore && (
@@ -89,5 +89,3 @@ export function WorkerCard({
     </div>
   );
 }
-
-export { X as DismissIcon };

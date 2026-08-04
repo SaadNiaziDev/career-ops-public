@@ -1,25 +1,20 @@
-import { LayoutDashboard, Compass, ListChecks, Radar, BarChart3, FileText, Settings, Users, Link2 } from "lucide-react";
-import type { ComponentType, SVGProps } from "react";
-
-// Single source of truth for the app's primary destinations — shared by the
-// desktop sidebar and the mobile nav so they can never drift.
 export type NavItem = {
   href: string;
   label: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  icon: string;
   chip?: string;
 };
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Today", icon: LayoutDashboard },
-  { href: "/add", label: "Add job", icon: Link2 },
-  { href: "/explore", label: "Explore", icon: Compass, chip: "New" },
-  { href: "/pipeline", label: "Pipeline", icon: ListChecks },
-  { href: "/contacts", label: "Outreach", icon: Users },
-  { href: "/portals", label: "Portals", icon: Radar },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/cv", label: "CV", icon: FileText },
-  { href: "/config", label: "Config", icon: Settings },
+  { href: "/", label: "Today", icon: "dashboard" },
+  { href: "/add", label: "Add job", icon: "link" },
+  { href: "/explore", label: "Explore", icon: "explore", chip: "New" },
+  { href: "/pipeline", label: "Pipeline", icon: "checklist" },
+  { href: "/contacts", label: "Outreach", icon: "group" },
+  { href: "/portals", label: "Portals", icon: "radar" },
+  { href: "/analytics", label: "Analytics", icon: "bar_chart" },
+  { href: "/cv", label: "CV", icon: "description" },
+  { href: "/config", label: "Config", icon: "settings" },
 ];
 
 export function isActivePath(href: string, pathname: string): boolean {

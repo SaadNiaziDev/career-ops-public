@@ -2,15 +2,10 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import {
-  FilePdfOutlined,
-  FileTextOutlined,
-  LoadingOutlined,
-  ReloadOutlined,
-} from "@ant-design/icons";
-import { Button, Space } from "antd";
-import { useJobs } from "@/components/jobs/job-store";
+import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { CostBadge } from "@/components/cost/cost-badge";
+import { useJobs } from "@/components/jobs/job-store";
+import { cn } from "@/lib/cn";
 
 export function GeneratePdfButton({
   n,
@@ -39,65 +34,45 @@ export function GeneratePdfButton({
 
   if (job?.status === "running") {
     return (
-      <Link href={`/jobs/${job.id}`}>
-        <Button block={rail} icon={<LoadingOutlined spin />}>
+      <Link href={`/jobs/${job.id}`} className={cn(rail && "block w-full")}>
+        <Md3ActionButton variant="outlined" loading className={cn(rail && "w-full")}>
           Generating CV…
-        </Button>
+        </Md3ActionButton>
       </Link>
     );
   }
 
   const ready = pdfReady || job?.status === "done";
   if (ready) {
-    if (rail) {
-      return (
-        <Space.Compact block className="w-full">
-          <Button
-            type="primary"
-            block
-            icon={<FileTextOutlined />}
-            href={`/api/cv-pdf?company=${encodeURIComponent(company)}`}
-            target="_blank"
-            rel="noreferrer"
-            className="bg-emerald-600! hover:bg-emerald-500! border-emerald-600!"
-          >
-            View tailored CV
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={generate} title="Regenerate CV" />
-        </Space.Compact>
-      );
-    }
     return (
-      <Space size={4}>
-        <Button
-          type="primary"
-          icon={<FileTextOutlined />}
+      <div className={cn("md3-actions-row", rail && "w-full")}>
+        <a
           href={`/api/cv-pdf?company=${encodeURIComponent(company)}`}
           target="_blank"
           rel="noreferrer"
-          className="bg-emerald-600! hover:bg-emerald-500! border-emerald-600!"
+          className={cn("md3-action-btn md3-action-btn--filled flex-1", rail && "w-full")}
         >
-          View tailored CV
-        </Button>
-        <Button icon={<ReloadOutlined />} onClick={generate} title="Regenerate the tailored CV" />
-      </Space>
+          <span className="material-symbols-outlined text-[18px] leading-none">description</span>
+          <span className="md3-action-btn__label">View tailored CV</span>
+        </a>
+        <Md3ActionButton variant="outlined" icon="refresh" onClick={generate} title="Regenerate CV" aria-label="Regenerate CV" />
+      </div>
     );
   }
 
   if (rail) {
     return (
-      <Button block icon={<FilePdfOutlined />} onClick={generate}>
+      <Md3ActionButton variant="outlined" icon="picture_as_pdf" className="w-full" onClick={generate}>
         Generate tailored CV
-      </Button>
+      </Md3ActionButton>
     );
   }
 
   return (
-    <Space size={8}>
-      <Button icon={<FilePdfOutlined />} onClick={generate} title="Generate an ATS-optimized CV tailored to this role">
+    <div className="md3-actions-row items-center">
+      <Md3ActionButton variant="outlined" icon="picture_as_pdf" cost="spend" onClick={generate}>
         Generate tailored CV (PDF)
-      </Button>
-      <CostBadge kind="spend" size="xs" />
-    </Space>
+      </Md3ActionButton>
+    </div>
   );
 }

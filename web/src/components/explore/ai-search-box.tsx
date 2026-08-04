@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { CostBadge } from "@/components/cost/cost-badge";
 
 const EXAMPLES = [
@@ -9,19 +9,6 @@ const EXAMPLES = [
   "Forward-deployed engineer at Series A devtools, US-remote",
   "Head of Applied AI at healthtech, posted this week",
 ];
-
-// The "magic" natural-language box: a soft contained halo at rest that intensifies
-// on focus (erupts into the full-viewport hunt on submit). Effect CSS co-located
-// per the Tailwind v4 stale-CSS HMR gotcha.
-const STYLE = `
-.co-aibox{position:relative;border-radius:1.1rem;border:1px solid var(--co-border,hsl(0 0% 50% /.22));background:color-mix(in srgb, var(--bg) 55%, transparent);transition:border-color .3s,box-shadow .3s}
-.co-aibox::before{content:"";position:absolute;inset:-1px;border-radius:1.1rem;padding:1px;background:radial-gradient(70% 140% at 28% -10%, hsl(26 82% 55% /.45), transparent 62%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.45;transition:opacity .3s;pointer-events:none}
-.co-aibox:focus-within::before{opacity:1}
-.co-aibox:focus-within{border-color:hsl(26 73% 51% /.5);box-shadow:0 0 0 4px hsl(26 73% 51% /.09)}
-.co-aibox textarea{width:100%;resize:none;background:transparent;border:none;outline:none;font-size:16px;line-height:1.5;color:inherit}
-.co-aibox textarea::placeholder{color:var(--co-faint,hsl(0 0% 58%))}
-@media(prefers-reduced-motion:reduce){.co-aibox,.co-aibox::before{transition:none}}
-`;
 
 export function AiSearchBox({
   intent,
@@ -49,10 +36,10 @@ export function AiSearchBox({
 
   return (
     <div>
-      <style>{STYLE}</style>
-      <div className="co-aibox p-4">
-        <div className="mb-2 flex items-center gap-2 text-[12px] font-medium text-brand">
-          <Sparkles className="size-3.5" /> Describe the role — an AI hunts the open web for it
+      <div className="rounded-[var(--md-sys-shape-corner-extra-large)] border border-[var(--md-sys-color-primary-container)] bg-[var(--md-sys-color-surface-container)] p-6 transition-[border-color,box-shadow] duration-300 focus-within:border-[var(--md-sys-color-primary)] focus-within:shadow-[0_0_0_1px_var(--md-sys-color-primary)]">
+        <div className="mb-3 flex items-center gap-2 md-label-large text-[var(--md-sys-color-primary)]">
+          <MaterialSymbol name="auto_awesome" size={18} />
+          Describe the role — an AI hunts the open web for it
         </div>
         <textarea
           ref={ref}
@@ -69,12 +56,13 @@ export function AiSearchBox({
             }
           }}
           placeholder="“AI infra at climate startups, remote EU, not staff-level” — plain language, your words"
+          className="w-full resize-none border-none bg-transparent text-lg leading-7 text-[var(--md-sys-color-on-surface)] outline-none placeholder:text-[var(--md-sys-color-outline)]"
         />
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <span className="text-[12px] text-muted">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <span className="md-body-small text-[var(--md-sys-color-on-surface-variant)]">
             {cliConfigured ? (
               <>
-                Reads the public web with <span className="text-foreground">{cliName || "your CLI"}</span> — it costs your tokens.
+                Reads the public web with <span className="text-[var(--md-sys-color-on-surface)]">{cliName || "your CLI"}</span> — it costs your tokens.
               </>
             ) : (
               "Connect an AI CLI in Config to use AI search."
@@ -84,27 +72,31 @@ export function AiSearchBox({
             type="button"
             disabled={!intent.trim()}
             onClick={onSubmit}
-            className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-brand-foreground shadow-sm transition hover:brightness-110 disabled:opacity-50"
+            className="md3-btn-filled disabled:opacity-50"
           >
             Search the open web
             <CostBadge kind="spend" size="xs" />
-            <ArrowRight className="size-4" />
+            <MaterialSymbol name="arrow_forward" size={18} />
           </button>
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         {EXAMPLES.map((ex) => (
           <button
             key={ex}
             type="button"
             onClick={() => onIntent(ex)}
-            className="rounded-full border border-border bg-surface/40 px-3 py-1.5 text-[12px] text-muted transition hover:border-brand/40 hover:text-brand"
+            className="md3-chip min-h-[40px] rounded-[var(--md-sys-shape-corner-full)]"
           >
             {ex}
           </button>
         ))}
-        <button type="button" onClick={onRunScan} className="ml-auto inline-flex items-center gap-1 text-[12px] text-faint transition hover:text-foreground">
+        <button
+          type="button"
+          onClick={onRunScan}
+          className="md3-btn-text ml-auto md-body-small"
+        >
           or run the free Scan instead →
         </button>
       </div>

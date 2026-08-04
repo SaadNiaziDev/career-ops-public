@@ -123,6 +123,10 @@ package-lock.json
 # Planning (local scratchpad)
 plan/
 
+# Design-tool exports (Pencil/Figma handoff dumps — not source, not published)
+*.zip
+design_handoff_*/
+
 # Web runtime artifacts (machine-local)
 .career-ops-web/
 !.career-ops-web/logo-cache/.gitkeep

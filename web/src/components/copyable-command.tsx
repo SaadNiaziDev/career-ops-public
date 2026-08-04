@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 
@@ -55,9 +55,9 @@ export function CopyableCommand({
         className="shrink-0 text-muted"
       >
         {copied ? (
-          <CheckIcon className="size-4 text-brand" aria-hidden="true" />
+          <MaterialSymbol name="check" size={18} className="text-brand" />
         ) : (
-          <CopyIcon className="size-4" aria-hidden="true" />
+          <MaterialSymbol name="content_copy" size={18} />
         )}
       </Button>
     </div>

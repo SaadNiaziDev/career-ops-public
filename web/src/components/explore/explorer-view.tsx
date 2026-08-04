@@ -1,20 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  CompassOutlined,
-  ReloadOutlined,
-  SettingOutlined,
-  ThunderboltOutlined,
-  WarningOutlined,
-} from "@ant-design/icons";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Alert, Button, Card, Collapse, Empty, Space, Tag, Typography } from "antd";
 import type { Application, InboxJob } from "@/lib/career-ops";
 import { paramsToFilters, paramsToAi, type ExploreFilters } from "@/lib/explore";
 import { useCliConfig, resolveCliIdForRun } from "@/lib/cli-config";
 import { PageShell } from "@/components/dossier/page-shell";
 import { DossierStack } from "@/components/dossier/dossier-stack";
+import { MaterialSymbol } from "@/components/material-symbol";
+import { Badge } from "@/components/ui/badge";
+import { Md3ActionButton } from "@/components/ui/md3-action-button";
+import { Md3Card } from "@/components/ui/md3-card";
+import { Md3Empty } from "@/components/ui/md3-empty";
+import { cn } from "@/lib/cn";
 import { FilterBuilder } from "./filter-builder";
 import { DiscoveringState } from "./discovering-state";
 import { AiHuntView } from "./ai-hunt-view";
@@ -23,9 +21,36 @@ import { AiSearchBox } from "./ai-search-box";
 import { ResultsList, type EnrichedOffer } from "./results-list";
 import { useExplore } from "./explore-provider";
 
-const { Title, Paragraph, Text } = Typography;
-
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+function ControlledMd3Collapse({
+  open,
+  onOpenChange,
+  title,
+  children,
+  className,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={cn("md3-collapse", className)}>
+      <button
+        type="button"
+        className="md3-collapse__header"
+        onClick={() => onOpenChange(!open)}
+        aria-expanded={open}
+      >
+        <span className="min-w-0 flex-1 text-left">{title}</span>
+        <MaterialSymbol name="expand_more" size={22} className={cn("transition-transform", open && "rotate-180")} />
+      </button>
+      {open ? <div className="md3-collapse__body">{children}</div> : null}
+    </section>
+  );
+}
 
 export function ExplorerView({
   seed,
@@ -58,8 +83,6 @@ export function ExplorerView({
       setAiIntent(ai);
     } else {
       initFilters(sp.toString() ? paramsToFilters(sp) : seed.filters);
-      // Onboarding hand-off: ?run=1 auto-fires the free scan + flags the first-run
-      // banner (the "matches found from your CV, free" reveal).
       if (sp.get("run") === "1") {
         setFirstRun(true);
         void discover();
@@ -93,163 +116,155 @@ export function ExplorerView({
   return (
     <PageShell width="default">
       <DossierStack>
-      <header>
-        <div className="flex flex-wrap items-center gap-4">
-          <Space>
-            <CompassOutlined className="text-xl text-[var(--ant-color-primary)]" />
-            <Title level={2} className="!mb-0 !font-display">
-              Explore
-            </Title>
-            <Tag color="orange">New</Tag>
-          </Space>
-          <div className="w-full sm:ml-auto sm:w-auto">
-            <ExploreModeToggle mode={mode} onChange={setMode} cliConfigured={cliConfigured} />
+        <header>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <MaterialSymbol name="explore" size={24} className="text-[var(--md-sys-color-primary)]" />
+              <h2 className="mb-0 md-headline-medium">Explore</h2>
+              <Badge tone="warn">New</Badge>
+            </div>
+            <div className="w-full sm:ml-auto sm:w-auto">
+              <ExploreModeToggle mode={mode} onChange={setMode} cliConfigured={cliConfigured} />
+            </div>
           </div>
-        </div>
-        {!isResults && (
-          <Paragraph type="secondary" className="!mt-3 max-w-2xl">
-            {isAi
-              ? "Describe the role in plain language — an AI hunts the open web for it, on your own AI. Candidates are unverified until you evaluate."
-              : "Scan the public ATS network — Greenhouse, Lever, Ashby, Workday. Fresh postings matched to you, zero tokens. You only spend when you choose to evaluate one."}
-          </Paragraph>
+          {!isResults && (
+            <p className="mt-3 max-w-2xl md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
+              {isAi
+                ? "Describe the role in plain language — an AI hunts the open web for it, on your own AI. Candidates are unverified until you evaluate."
+                : "Scan the public ATS network — Greenhouse, Lever, Ashby, Workday. Fresh postings matched to you, zero tokens. You only spend when you choose to evaluate one."}
+            </p>
+          )}
+        </header>
+
+        {!rootExists && (
+          <p className="md3-alert md3-alert--warning mb-5">
+            <MaterialSymbol name="warning" size={20} className="shrink-0" />
+            <span>Your career-ops home isn&apos;t set up yet — discovery needs a checkout with a profile to seed from.</span>
+          </p>
         )}
-      </header>
 
-      {!rootExists && (
-        <Alert
-          className="mb-5"
-          type="warning"
-          showIcon
-          message="Your career-ops home isn't set up yet — discovery needs a checkout with a profile to seed from."
-        />
-      )}
-
-      {isAi ? (
-        phase === "blocked" && !cliConfigured ? (
-          <BlockedCard
-            onRetry={() => {
-              void resolveCliIdForRun().then((id) => {
-                if (id) void discoverAI();
-              });
-            }}
-          />
-        ) : (
-          <div className="space-y-6">
-            <AiSearchBox
-              intent={aiIntent}
-              onIntent={setAiIntent}
-              onSubmit={() => void discoverAI()}
-              cliConfigured={cliConfigured}
-              cliName={cliName}
-              onRunScan={() => setMode("scan")}
+        {isAi ? (
+          phase === "blocked" && !cliConfigured ? (
+            <BlockedCard
+              onRetry={() => {
+                void resolveCliIdForRun().then((id) => {
+                  if (id) void discoverAI();
+                });
+              }}
             />
-            {phase === "results" && <ResultsList offers={enriched} />}
+          ) : (
+            <div className="space-y-6">
+              <AiSearchBox
+                intent={aiIntent}
+                onIntent={setAiIntent}
+                onSubmit={() => void discoverAI()}
+                cliConfigured={cliConfigured}
+                cliName={cliName}
+                onRunScan={() => setMode("scan")}
+              />
+              {phase === "results" && <ResultsList offers={enriched} />}
+              {phase === "empty-loose" && (
+                <EmptyState
+                  tone="loose"
+                  title="No public matches — yet."
+                  body="AI search reads what's public. Try broader intent, or run the free Scan over the ATS network."
+                  onRerun={() => setMode("scan")}
+                  rerunLabel="Run the free Scan"
+                />
+              )}
+              {phase === "failed" && <FailedCard msg={error || status} onRetry={() => void discoverAI()} />}
+            </div>
+          )
+        ) : (
+          <>
+            {isResults ? (
+              <ControlledMd3Collapse
+                className="mb-6"
+                open={refineOpen}
+                onOpenChange={setRefineOpen}
+                title={
+                  <span className="inline-flex items-center gap-2">
+                    <MaterialSymbol name="explore" size={18} />
+                    Refine search
+                  </span>
+                }
+              >
+                <div className="flex w-full flex-col gap-4">
+                  <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
+                  <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Re-cast (free)" />
+                </div>
+              </ControlledMd3Collapse>
+            ) : (
+              <Md3Card className="mb-6">
+                <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
+                <div className="mt-5">
+                  <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Discover (free)" />
+                </div>
+              </Md3Card>
+            )}
+
+            {isResults && firstRun && (
+              <p className="md3-alert md3-alert--success mb-4">
+                <MaterialSymbol name="bolt" size={20} className="shrink-0" />
+                <span>
+                  These are live roles that match your CV.{" "}
+                  <span className="text-[var(--md-sys-color-on-tertiary-container)]">
+                    Nothing here cost you a token.
+                  </span>{" "}
+                  Pick the one you&apos;re most curious about — Evaluate it and I&apos;ll tell you exactly how you score,
+                  and why.
+                </span>
+              </p>
+            )}
+
+            {isResults && capHit && (
+              <CappedBanner
+                companiesScanned={companiesScanned}
+                companiesAvailable={companiesAvailable}
+                onRefine={() => setRefineOpen(true)}
+              />
+            )}
+            {isResults && <ResultsList offers={enriched} />}
+
+            {phase === "empty-current" && (
+              <EmptyState
+                tone="good"
+                title="You're all caught up."
+                body="Nothing new since your last scan. Your pipeline is current — that's the goal."
+                note={scanNote}
+                onRerun={() => {
+                  setFilters({ ...filters, sinceDays: Math.max(filters.sinceDays, 30) });
+                  void discover();
+                }}
+                rerunLabel="Look back 30 days"
+              />
+            )}
             {phase === "empty-loose" && (
               <EmptyState
                 tone="loose"
-                title="No public matches — yet."
-                body="AI search reads what's public. Try broader intent, or run the free Scan over the ATS network."
-                onRerun={() => setMode("scan")}
-                rerunLabel="Run the free Scan"
+                title="No fresh matches — yet."
+                body="Discovery is free — loosen and re-cast as often as you want."
+                note={scanNote}
+                onRerun={() => {
+                  setFilters({ ...filters, sinceDays: 30, block: [], allow: [] });
+                  void discover();
+                }}
+                rerunLabel="Widen to 30 days · clear location"
               />
             )}
-            {phase === "failed" && <FailedCard msg={error || status} onRetry={() => void discoverAI()} />}
-          </div>
-        )
-      ) : (
-        <>
-          {isResults ? (
-            <Collapse
-              className="mb-6"
-              items={[
-                {
-                  key: "refine",
-                  label: (
-                    <Space>
-                      <CompassOutlined />
-                      Refine search
-                    </Space>
-                  ),
-                  children: (
-                    <Space direction="vertical" className="w-full" size={16}>
-                      <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
-                      <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Re-cast (free)" />
-                    </Space>
-                  ),
-                },
-              ]}
-              activeKey={refineOpen ? ["refine"] : []}
-              onChange={(keys) => setRefineOpen(keys.includes("refine"))}
-            />
-          ) : (
-            <Card className="mb-6">
-              <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
-              <div className="mt-5">
-                <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Discover (free)" />
-              </div>
-            </Card>
-          )}
-
-          {isResults && firstRun && (
-            <Alert
-              className="mb-4"
-              type="success"
-              showIcon
-              icon={<ThunderboltOutlined />}
-              message={
-                <>
-                  These are live roles that match your CV.{" "}
-                  <Text type="success">Nothing here cost you a token.</Text> Pick the one you&apos;re most curious about
-                  — Evaluate it and I&apos;ll tell you exactly how you score, and why.
-                </>
-              }
-            />
-          )}
-
-          {isResults && capHit && (
-            <CappedBanner companiesScanned={companiesScanned} companiesAvailable={companiesAvailable} onRefine={() => setRefineOpen(true)} />
-          )}
-          {isResults && <ResultsList offers={enriched} />}
-
-          {phase === "empty-current" && (
-            <EmptyState
-              tone="good"
-              title="You're all caught up."
-              body="Nothing new since your last scan. Your pipeline is current — that's the goal."
-              note={scanNote}
-              onRerun={() => {
-                setFilters({ ...filters, sinceDays: Math.max(filters.sinceDays, 30) });
-                void discover();
-              }}
-              rerunLabel="Look back 30 days"
-            />
-          )}
-          {phase === "empty-loose" && (
-            <EmptyState
-              tone="loose"
-              title="No fresh matches — yet."
-              body="Discovery is free — loosen and re-cast as often as you want."
-              note={scanNote}
-              onRerun={() => {
-                setFilters({ ...filters, sinceDays: 30, block: [], allow: [] });
-                void discover();
-              }}
-              rerunLabel="Widen to 30 days · clear location"
-            />
-          )}
-          {phase === "degraded" && (
-            <DegradedCard
-              onRetry={() => void discover()}
-              companiesScanned={companiesScanned}
-              companiesAvailable={companiesAvailable}
-              capHit={capHit}
-              droppedNoDate={droppedNoDate}
-              partial={partial}
-            />
-          )}
-          {phase === "failed" && <FailedCard msg={error || status} onRetry={() => void discover()} />}
-        </>
-      )}
+            {phase === "degraded" && (
+              <DegradedCard
+                onRetry={() => void discover()}
+                companiesScanned={companiesScanned}
+                companiesAvailable={companiesAvailable}
+                capHit={capHit}
+                droppedNoDate={droppedNoDate}
+                partial={partial}
+              />
+            )}
+            {phase === "failed" && <FailedCard msg={error || status} onRetry={() => void discover()} />}
+          </>
+        )}
       </DossierStack>
     </PageShell>
   );
@@ -257,37 +272,43 @@ export function ExplorerView({
 
 function DiscoverBar({ canDiscover, onDiscover, label }: { canDiscover: boolean; onDiscover: () => void; label: string }) {
   return (
-    <Space wrap>
-      <Button type="primary" icon={<CompassOutlined />} disabled={!canDiscover} onClick={onDiscover}>
+    <div className="md3-actions-row">
+      <Md3ActionButton variant="filled" icon="explore" disabled={!canDiscover} onClick={onDiscover}>
         {label}
-      </Button>
-      <Text type="secondary" className="text-xs">
+      </Md3ActionButton>
+      <span className="text-xs text-[var(--md-sys-color-on-surface-variant)]">
         Evaluating a role later costs tokens. Discovering never does.
-      </Text>
-    </Space>
+      </span>
+    </div>
   );
 }
 
-function EmptyState({ tone, title, body, note, onRerun, rerunLabel }: { tone: "good" | "loose"; title: string; body: string; note?: string; onRerun: () => void; rerunLabel: string }) {
+function EmptyState({
+  tone,
+  title,
+  body,
+  note,
+  onRerun,
+  rerunLabel,
+}: {
+  tone: "good" | "loose";
+  title: string;
+  body: string;
+  note?: string;
+  onRerun: () => void;
+  rerunLabel: string;
+}) {
   return (
-    <Card>
-      <Empty
-        image={<ThunderboltOutlined className={tone === "good" ? "text-emerald-500" : "text-[var(--ant-color-primary)]"} style={{ fontSize: 48 }} />}
-        description={
-          <>
-            <Title level={4} className="!font-display">
-              {title}
-            </Title>
-            <Paragraph type="secondary">{body}</Paragraph>
-            {note && <Text type="secondary" className="text-xs">{note}</Text>}
-          </>
-        }
-      >
-        <Button icon={<ReloadOutlined />} onClick={onRerun}>
+    <Md3Card>
+      <Md3Empty icon={tone === "good" ? "task_alt" : "bolt"}>
+        <h4 className="mt-3 mb-1 md-title-medium">{title}</h4>
+        <p className="mb-0 md-body-medium text-[var(--md-sys-color-on-surface-variant)]">{body}</p>
+        {note && <p className="mt-2 mb-0 text-xs text-[var(--md-sys-color-on-surface-variant)]">{note}</p>}
+        <Md3ActionButton className="mt-4" icon="refresh" onClick={onRerun}>
           {rerunLabel}
-        </Button>
-      </Empty>
-    </Card>
+        </Md3ActionButton>
+      </Md3Empty>
+    </Md3Card>
   );
 }
 
@@ -306,9 +327,6 @@ function DegradedCard({
   droppedNoDate: number;
   partial: boolean;
 }) {
-  // 0 results, but the scan was NOT a clean full search → never "all caught up".
-  // Pick the most informative reason (authoritative when the scanner's --json mode
-  // is available; otherwise the 0-companies fallback).
   let title = "The scan ran, but couldn’t reach any sources.";
   let body =
     "The public ATS directories didn’t respond — usually a transient network hiccup or rate-limit, so nothing could be searched. This isn’t “all caught up”; a retry in a moment usually clears it.";
@@ -323,39 +341,41 @@ function DegradedCard({
     body = `The scan searched ${companiesScanned.toLocaleString()} companies, but one or more sources didn’t respond — so this is a partial result, not “all caught up”. A retry usually clears it.`;
   }
   return (
-    <Alert
-      type="warning"
-      showIcon
-      icon={<WarningOutlined />}
-      message={title}
-      description={
-        <>
-          <Paragraph className="!mb-2">{body}</Paragraph>
-          <Button type="primary" icon={<ReloadOutlined />} onClick={onRetry}>
-            Retry the scan
-          </Button>
-        </>
-      }
-    />
+    <div className="md3-alert md3-alert--warning flex-col items-stretch">
+      <div className="flex items-start gap-3">
+        <MaterialSymbol name="warning" size={20} className="shrink-0" />
+        <div className="min-w-0">
+          <p className="mb-1 md-title-small">{title}</p>
+          <p className="mb-0 md-body-medium">{body}</p>
+        </div>
+      </div>
+      <Md3ActionButton variant="filled" icon="refresh" className="mt-3 self-start" onClick={onRetry}>
+        Retry the scan
+      </Md3ActionButton>
+    </div>
   );
 }
 
-function CappedBanner({ companiesScanned, companiesAvailable, onRefine }: { companiesScanned: number; companiesAvailable: number; onRefine: () => void }) {
+function CappedBanner({
+  companiesScanned,
+  companiesAvailable,
+  onRefine,
+}: {
+  companiesScanned: number;
+  companiesAvailable: number;
+  onRefine: () => void;
+}) {
   return (
-    <Alert
-      className="mb-4"
-      type="warning"
-      showIcon
-      message={
-        <>
-          Showing a capped slice — searched {companiesScanned.toLocaleString()}
-          {companiesAvailable > companiesScanned ? ` of ${companiesAvailable.toLocaleString()}` : ""} companies.{" "}
-          <Button type="link" size="small" onClick={onRefine} className="px-0">
-            Raise scan depth to search deeper
-          </Button>
-        </>
-      }
-    />
+    <p className="md3-alert md3-alert--warning mb-4">
+      <MaterialSymbol name="warning" size={20} className="shrink-0" />
+      <span>
+        Showing a capped slice — searched {companiesScanned.toLocaleString()}
+        {companiesAvailable > companiesScanned ? ` of ${companiesAvailable.toLocaleString()}` : ""} companies.{" "}
+        <button type="button" className="md3-action-btn md3-action-btn--text px-0" onClick={onRefine}>
+          Raise scan depth to search deeper
+        </button>
+      </span>
+    </p>
   );
 }
 
@@ -363,81 +383,62 @@ function FailedCard({ msg, onRetry }: { msg: string; onRetry: () => void }) {
   const scannerMissing = /isn'?t available|data only|complete career-ops checkout|scanner/i.test(msg);
   if (scannerMissing) {
     return (
-      <Card>
-        <Empty
-          image={<CompassOutlined style={{ fontSize: 48, color: "var(--ant-color-primary)" }} />}
-          description={
-            <>
-              <Title level={4} className="!font-display">
-                Discovery needs the full toolkit
-              </Title>
-              <Paragraph type="secondary">
-                Your career-ops home looks data-only or is on an older version. The free scanner ships with a complete
-                checkout — update career-ops, or paste a job URL on the pipeline to evaluate it directly.
-              </Paragraph>
-            </>
-          }
-        >
-          <Space>
-            <Link href="/pipeline">
-              <Button type="primary">Open pipeline</Button>
+      <Md3Card>
+        <Md3Empty icon="explore">
+          <h4 className="mt-3 mb-1 md-title-medium">Discovery needs the full toolkit</h4>
+          <p className="mb-0 md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
+            Your career-ops home looks data-only or is on an older version. The free scanner ships with a complete
+            checkout — update career-ops, or paste a job URL on the pipeline to evaluate it directly.
+          </p>
+          <div className="md3-actions-row mt-4">
+            <Link href="/pipeline" className="md3-action-btn md3-action-btn--filled">
+              <span className="md3-action-btn__label">Open pipeline</span>
             </Link>
-            <Link href="/config">
-              <Button>Open Config</Button>
+            <Link href="/config" className="md3-action-btn md3-action-btn--outlined">
+              <span className="md3-action-btn__label">Open Config</span>
             </Link>
-          </Space>
-        </Empty>
-      </Card>
+          </div>
+        </Md3Empty>
+      </Md3Card>
     );
   }
   return (
-    <Alert
-      type="warning"
-      showIcon
-      icon={<WarningOutlined />}
-      message="Couldn't finish the search."
-      description={
-        <>
-          <Paragraph className="!mb-2">{msg}</Paragraph>
-          <Button icon={<ReloadOutlined />} onClick={onRetry}>
-            Try again
-          </Button>
-        </>
-      }
-    />
+    <div className="md3-alert md3-alert--warning flex-col items-stretch">
+      <div className="flex items-start gap-3">
+        <MaterialSymbol name="warning" size={20} className="shrink-0" />
+        <div className="min-w-0">
+          <p className="mb-1 md-title-small">Couldn&apos;t finish the search.</p>
+          <p className="mb-0 md-body-medium">{msg}</p>
+        </div>
+      </div>
+      <Md3ActionButton icon="refresh" className="mt-3 self-start" onClick={onRetry}>
+        Try again
+      </Md3ActionButton>
+    </div>
   );
 }
 
 function BlockedCard({ onRetry }: { onRetry?: () => void }) {
   return (
-    <Card>
-      <Empty
-        image={<ThunderboltOutlined style={{ fontSize: 48, color: "var(--ant-color-primary)" }} />}
-        description={
-          <>
-            <Title level={4} className="!font-display">
-              AI search needs a CLI
-            </Title>
-            <Paragraph type="secondary">
-              Install and select Claude Code or Codex in Config — your key, your tokens, your machine. The free Scan
-              works without one.
-            </Paragraph>
-          </>
-        }
-      >
-        <Space>
+    <Md3Card>
+      <Md3Empty icon="bolt">
+        <h4 className="mt-3 mb-1 md-title-medium">AI search needs a CLI</h4>
+        <p className="mb-0 md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
+          Install and select Claude Code or Codex in Config — your key, your tokens, your machine. The free Scan works
+          without one.
+        </p>
+        <div className="md3-actions-row mt-4">
           {onRetry && (
-            <Button icon={<ReloadOutlined />} onClick={onRetry}>
+            <Md3ActionButton icon="refresh" onClick={onRetry}>
               Check again
-            </Button>
+            </Md3ActionButton>
           )}
-          <Link href="/config">
-            <Button type="primary" icon={<SettingOutlined />}>
-              Open Config
-            </Button>
+          <Link href="/config" className="md3-action-btn md3-action-btn--filled">
+            <MaterialSymbol name="settings" size={18} />
+            <span className="md3-action-btn__label">Open Config</span>
           </Link>
-        </Space>
-      </Empty>
-    </Card>
+        </div>
+      </Md3Empty>
+    </Md3Card>
   );
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { SendOutlined } from "@ant-design/icons";
 import { ApplyView } from "@/components/apply-view";
 import { ApplyBackdropMount } from "@/components/apply/apply-backdrop-mount";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { PageShell } from "@/components/dossier/page-shell";
 import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
 import { DossierStack } from "@/components/dossier/dossier-stack";
@@ -19,7 +19,7 @@ export default function ApplyPage() {
             <DossierPageHeader
               title={
                 <span className="inline-flex items-center gap-3">
-                  <SendOutlined className="text-[var(--ant-color-primary)]" />
+                  <MaterialSymbol name="send" size={24} className="text-[var(--md-sys-color-primary)]" />
                   Apply
                 </span>
               }

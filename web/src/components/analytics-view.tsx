@@ -1,16 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Card, Col, Progress, Row, Statistic, Typography } from "antd";
 import type { Application } from "@/lib/career-ops";
 import { PageShell } from "@/components/dossier/page-shell";
 import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
 import { DossierSection } from "@/components/dossier/dossier-section";
 import { DossierStack } from "@/components/dossier/dossier-stack";
 import { DossierStat } from "@/components/dossier/dossier-stat";
+import { Md3Card } from "@/components/ui/md3-card";
 import { canonStatus, scoreNum } from "@/lib/format";
-
-const { Text } = Typography;
+import { cn } from "@/lib/cn";
 
 const STAGES: { key: string; label: string }[] = [
   { key: "EVALUATED", label: "Evaluated" },
@@ -27,34 +26,33 @@ function BarRow({
   value,
   pct,
   total,
-  strokeColor,
+  fill = "secondary",
 }: {
   label: string;
   value: number;
   pct: number;
   total?: number;
-  strokeColor?: string;
+  fill?: "secondary" | "primary";
 }) {
   const share = total && total > 0 ? Math.round((value / total) * 100) : null;
+  const fillClass =
+    fill === "primary"
+      ? "bg-[var(--md-sys-color-primary)]"
+      : "bg-[var(--md-sys-color-secondary-container)]";
+
   return (
-    <div className="flex items-center gap-4 py-0.5">
-      <Text type="secondary" className="w-32 shrink-0 truncate text-sm">
-        {label}
-      </Text>
-      <Progress
-        percent={Math.max(pct, value > 0 ? 4 : 0)}
-        showInfo={false}
-        strokeColor={strokeColor}
-        className="flex-1"
-      />
-      <Text className="w-20 shrink-0 text-right tabular-nums">
+    <div className="flex items-center gap-4 py-2">
+      <span className="w-[120px] shrink-0 truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)]">{label}</span>
+      <div className="relative h-9 min-w-0 flex-1 overflow-hidden rounded-[var(--md-sys-shape-corner-medium)] bg-[var(--md-sys-color-surface-container)]">
+        <div
+          className={cn("absolute inset-y-0 left-0 rounded-[var(--md-sys-shape-corner-medium)]", fillClass)}
+          style={{ width: `${Math.max(pct, value > 0 ? 4 : 0)}%` }}
+        />
+      </div>
+      <span className="w-20 shrink-0 text-right tabular-nums md-body-medium text-[var(--md-sys-color-on-surface)]">
         {value}
-        {share !== null && (
-          <Text type="secondary" className="ml-1 text-xs">
-            {share}%
-          </Text>
-        )}
-      </Text>
+        {share !== null && <span className="ml-1 md-body-small text-[var(--md-sys-color-on-surface-variant)]">{share}%</span>}
+      </span>
     </div>
   );
 }
@@ -87,38 +85,30 @@ export function AnalyticsView({ applications }: { applications: Application[] })
   const interviews = stageCounts.find((s) => s.key === "INTERVIEW")?.n ?? 0;
 
   return (
-    <PageShell width="default">
+    <PageShell width="default" className="max-w-[900px]">
       <DossierStack>
         <DossierPageHeader title="Analytics" description={`Across ${total} tracked evaluations.`} />
 
-        <Row gutter={[16, 16]}>
-          <Col xs={12} sm={6}>
-            <DossierStat title="evaluated" value={total} />
-          </Col>
-          <Col xs={12} sm={6}>
-            <Card size="small" className="dossier-stat h-full">
-              <Statistic title="avg score" value={avg ? avg.toFixed(2) : "—"} />
-            </Card>
-          </Col>
-          <Col xs={12} sm={6}>
-            <DossierStat
-              title="interviews"
-              value={interviews}
-              href={interviews === 0 ? "/" : undefined}
-              accent={interviews === 0 ? "muted" : "default"}
-            />
-            {interviews === 0 && (
-              <Link href="/">
-                <Text type="secondary" className="mt-2 block text-xs">
-                  Interviews follow replies — keep follow-ups warm
-                </Text>
-              </Link>
-            )}
-          </Col>
-          <Col xs={12} sm={6}>
-            <DossierStat title="offers" value={offers} accent={offers > 0 ? "brand" : "muted"} />
-          </Col>
-        </Row>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <DossierStat title="evaluated" value={total} />
+          <Md3Card>
+            <p className="dossier-stat-title mb-1">avg score</p>
+            <p className="text-[28px] tabular-nums text-[var(--md-sys-color-on-surface)]">{avg ? avg.toFixed(2) : "—"}</p>
+          </Md3Card>
+          <DossierStat
+            title="interviews"
+            value={interviews}
+            href={interviews === 0 ? "/" : undefined}
+            accent={interviews === 0 ? "muted" : "default"}
+          />
+          <DossierStat title="offers" value={offers} accent={offers > 0 ? "brand" : "muted"} />
+        </div>
+
+        {interviews === 0 && (
+          <Link href="/" className="block md-body-small text-[var(--md-sys-color-on-surface-variant)]">
+            Interviews follow replies — keep follow-ups warm
+          </Link>
+        )}
 
         <DossierSection title="Pipeline by stage">
           {stageCounts.map((s) => (
@@ -128,7 +118,7 @@ export function AnalyticsView({ applications }: { applications: Application[] })
               value={s.n}
               pct={(s.n / maxStage) * 100}
               total={total}
-              strokeColor={s.key === "OFFER" ? "var(--ant-color-success)" : undefined}
+              fill={s.key === "OFFER" ? "primary" : "secondary"}
             />
           ))}
         </DossierSection>

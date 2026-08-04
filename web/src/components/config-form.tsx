@@ -1,51 +1,77 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  CheckCircleOutlined,
-  CodeOutlined,
-  ExportOutlined,
-  KeyOutlined,
-  LoadingOutlined,
-  MinusCircleOutlined,
-} from "@ant-design/icons";
-import {
-  Alert,
-  Button,
-  Card,
-  Empty,
-  Radio,
-  Space,
-  Switch,
-  Typography,
-} from "antd";
+import { useEffect, useMemo, useState } from "react";
 import { PageShell } from "@/components/dossier/page-shell";
-import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
-import { DossierSection } from "@/components/dossier/dossier-section";
-import { DossierStack } from "@/components/dossier/dossier-stack";
-import { readCliConfig, writeCliConfig, CONFIG_KEY } from "@/lib/cli-config";
-
-const { Text, Paragraph } = Typography;
-
-type Cli = {
-  id: string;
-  name: string;
-  run: string;
-  url: string;
-  installed: boolean;
-  path: string | null;
-};
+import { DossierHero } from "@/components/dossier/dossier-hero";
+import { MaterialSymbol } from "@/components/material-symbol";
+import { ConfigCliTile, type ConfigCli } from "@/components/config/config-cli-tile";
+import { ConfigEngineDiagram } from "@/components/config/config-engine-diagram";
+import { Md3Empty } from "@/components/ui/md3-empty";
+import { Md3SelectableCard } from "@/components/ui/md3-selectable-card";
+import { Button } from "@/components/ui/button";
+import { cliDisplayName, readCliConfig, writeCliConfig, CONFIG_KEY } from "@/lib/cli-config";
+import { cn } from "@/lib/cn";
 
 type Mode = "cli" | "key" | "manual";
 
 const STORAGE_KEY = CONFIG_KEY;
 
+const MODE_OPTIONS: {
+  value: Mode;
+  icon: string;
+  title: string;
+  subtitle: string;
+  blurb: string;
+  disabled?: boolean;
+}[] = [
+  {
+    value: "cli",
+    icon: "terminal",
+    title: "Local CLI",
+    subtitle: "Recommended",
+    blurb: "Spawn workers through a tool you already signed into — Claude Code, Codex, Cursor, and more.",
+  },
+  {
+    value: "key",
+    icon: "key",
+    title: "API key",
+    subtitle: "Soon",
+    blurb: "Paste a provider key when you want a hosted model without a CLI.",
+    disabled: true,
+  },
+  {
+    value: "manual",
+    icon: "touch_app",
+    title: "Manual",
+    subtitle: "Soon",
+    blurb: "Use the web UI only — copy prompts and run modes yourself.",
+    disabled: true,
+  },
+];
+
+const PRIVACY_POINTS = [
+  {
+    icon: "folder_shared",
+    title: "Files never upload",
+    body: "CV, tracker, and reports stay in your repo folder.",
+  },
+  {
+    icon: "person",
+    title: "Your AI account",
+    body: "Workers bill against the CLI you already use — not career-ops.",
+  },
+  {
+    icon: "shield",
+    title: "No hosted login",
+    body: "This app does not store credentials or run models in the cloud.",
+  },
+] as const;
+
 export function ConfigForm() {
   const [mode, setMode] = useState<Mode>("cli");
-  const [clis, setClis] = useState<Cli[] | null>(null);
+  const [clis, setClis] = useState<ConfigCli[] | null>(null);
   const [cliId, setCliId] = useState<string>("");
   const [provider, setProvider] = useState("anthropic");
-  const [apiKey, setApiKey] = useState("");
   const [logos, setLogos] = useState(true);
   const [saved, setSaved] = useState(false);
 
@@ -68,7 +94,7 @@ export function ConfigForm() {
     fetch("/api/clis")
       .then((r) => r.json())
       .then((d) => {
-        const list: Cli[] = d.clis ?? [];
+        const list: ConfigCli[] = d.clis ?? [];
         setClis(list);
         const savedCli = readCliConfig().cliId;
         const savedOk = savedCli && list.some((c) => c.id === savedCli && c.installed);
@@ -89,175 +115,199 @@ export function ConfigForm() {
     setTimeout(() => setSaved(false), 2000);
   }
 
+  function selectCli(id: string) {
+    setCliId(id);
+    writeCliConfig({ cliId: id, mode: "cli" });
+  }
+
   const installed = clis?.filter((c) => c.installed) ?? [];
+  const activeCli = clis?.find((c) => c.id === cliId);
+  const cliReady = mode === "cli" && !!activeCli?.installed;
+  const cliName = cliDisplayName(cliId);
+
+  const modeBlurb = useMemo(
+    () => MODE_OPTIONS.find((m) => m.value === mode)?.blurb ?? "",
+    [mode],
+  );
 
   return (
-    <PageShell width="narrow">
-      <DossierStack>
-        <DossierPageHeader
-          title="Config"
-          description="Run career-ops on your own AI, right on your computer. Your CV and data never leave your machine."
-        />
-
-        <DossierSection title="AI Engine">
-          <Radio.Group
-            value={mode}
-            onChange={(e) => setMode(e.target.value as Mode)}
-            className="w-full"
-          >
-            <Space direction="vertical" className="w-full" size={10}>
-            <Radio.Button value="cli" className="!h-auto !w-full !text-left !px-4 !py-3">
-              <Space>
-                <CodeOutlined />
-                <span>
-                  <Text strong>Use an AI tool you have</Text>
-                  <br />
-                  <Text type="secondary" className="text-xs">
-                    Recommended
-                  </Text>
-                </span>
-              </Space>
-            </Radio.Button>
-            <Radio.Button value="key" disabled className="!h-auto !w-full !text-left !px-4 !py-3">
-              <Space>
-                <KeyOutlined />
-                <span>
-                  <Text strong>Paste an AI key</Text>
-                  <br />
-                  <Text type="secondary" className="text-xs">
-                    Coming soon
-                  </Text>
-                </span>
-              </Space>
-            </Radio.Button>
-            <Radio.Button value="manual" disabled className="!h-auto !w-full !text-left !px-4 !py-3">
-              <Space>
-                <MinusCircleOutlined />
-                <span>
-                  <Text strong>No setup needed</Text>
-                  <br />
-                  <Text type="secondary" className="text-xs">
-                    Coming soon
-                  </Text>
-                </span>
-              </Space>
-            </Radio.Button>
-          </Space>
-          </Radio.Group>
-
-          {mode === "cli" && (
-            <>
-              <Paragraph type="secondary" className="mb-0!">
-                career-ops uses an AI tool you already have — signed in, your own usage, nothing to paste.
-              </Paragraph>
-              <Text type="secondary" className="text-xs">
-                Works with Claude Code, Codex, Cursor, and more — free ones work great.
-              </Text>
-              {clis === null ? (
-                <div>
-                  <LoadingOutlined spin /> <Text type="secondary">Checking what&apos;s on your computer…</Text>
-                </div>
-              ) : installed.length === 0 ? (
-                <Alert
-                  type="info"
-                  showIcon
-                  message={
-                    <>
-                      No AI tool yet? Free options like OpenCode with Qwen or GLM work great.{" "}
-                      <a href="https://career-ops.org/docs/free-ai-engine" target="_blank" rel="noreferrer">
-                        Get one free <ExportOutlined />
-                      </a>
-                    </>
-                  }
-                />
+    <PageShell width="default" className="config-page">
+      <DossierHero
+        eyebrow="Local-first · Engine setup"
+        title="Wire up your engine"
+        description="career-ops runs on your machine. Pick how workers connect, choose a CLI, and tune the UI — nothing leaves your computer unless you open a job posting."
+        actions={
+          <>
+            <Button variant="primary" size="hero" onClick={save}>
+              {saved ? (
+                <>
+                  <MaterialSymbol name="check" size={20} />
+                  Saved
+                </>
               ) : (
-                <Space direction="vertical" className="w-full" size={10}>
-                  {clis.map((c) => {
-                    const selected = c.id === cliId;
-                    return (
-                      <Card
-                        key={c.id}
-                        size="small"
-                        className={selected ? "border-[var(--ant-color-primary)]" : undefined}
-                      >
-                        <div className="flex flex-wrap items-center gap-4">
-                          {c.installed ? (
-                            <CheckCircleOutlined className="text-emerald-500" />
-                          ) : (
-                            <MinusCircleOutlined className="text-[var(--ant-color-text-secondary)]" />
-                          )}
-                          <Button
-                            type={selected ? "primary" : "text"}
-                            disabled={!c.installed}
-                            onClick={() => {
-                              setCliId(c.id);
-                              writeCliConfig({ cliId: c.id, mode: "cli" });
-                            }}
-                            className="flex-1 justify-start"
-                          >
-                            <span className="font-medium">{c.name}</span>
-                            <Text code className="ml-2 text-xs">
-                              {c.run}
-                            </Text>
-                          </Button>
-                          {c.installed ? (
-                            <Text type="secondary" className="hidden max-w-[40%] truncate text-xs sm:block">
-                              {c.path}
-                            </Text>
-                          ) : (
-                            <Button
-                              type="link"
-                              size="small"
-                              href={c.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              icon={<ExportOutlined />}
-                            >
-                              Install
-                            </Button>
-                          )}
-                        </div>
-                      </Card>
-                    );
-                  })}
-                  <Text type="secondary" className="text-xs">
-                    Best on Claude Code (live progress, agentic apply + AI search, reliable evaluation persistence).
-                    Other CLIs work for the core flows with reduced features.
-                  </Text>
-                </Space>
+                "Save config"
               )}
-            </>
-          )}
+            </Button>
+            <span
+              className={cn(
+                "config-status-chip",
+                cliReady ? "config-status-chip--ready" : "config-status-chip--pending",
+              )}
+            >
+              <MaterialSymbol name={cliReady ? "bolt" : "schedule"} size={16} filled={cliReady} />
+              {cliReady ? `${cliName} ready` : "Finish setup below"}
+            </span>
+          </>
+        }
+        footer={<ConfigEngineDiagram cliName={cliName} cliReady={cliReady} logos={logos} />}
+      />
 
-          {mode === "key" && <Empty description="API key mode is on the roadmap." />}
-
-          {mode === "manual" && (
-            <Alert type="info" showIcon message="The easiest way in — no keys, nothing to set up. On the roadmap." />
-          )}
-        </DossierSection>
-
-        <DossierSection title="Appearance">
-          <div className="flex items-center justify-between gap-6">
-            <div className="min-w-0">
-              <Text strong>Company logos</Text>
-              <Paragraph type="secondary" className="mb-0! text-xs">
-                Show each company&apos;s real logo. Fetched once through your local server and cached on disk — only the
-                employer domain is sent to a third party. Off = colored monograms only.
-              </Paragraph>
+      <div className="config-grid">
+        <section className="config-panel" aria-labelledby="config-mode-heading">
+          <header className="config-panel__header">
+            <div>
+              <h2 id="config-mode-heading" className="config-panel__title">
+                Connection method
+              </h2>
+              <p className="config-panel__lede">How should workers reach an AI model?</p>
             </div>
-            <Switch checked={logos} onChange={setLogos} />
-          </div>
-        </DossierSection>
+          </header>
 
-        <Space size="middle">
-          <Button type="primary" size="large" onClick={save}>
-            {saved ? "Saved" : "Save config"}
-          </Button>
-          <Text type="secondary" className="text-xs">
-            Local-first · on our roadmap
-          </Text>
-        </Space>
-      </DossierStack>
+          <div className="config-mode-grid" role="radiogroup" aria-label="Connection method">
+            {MODE_OPTIONS.map((opt) => {
+              const selected = mode === opt.value;
+              return (
+                <Md3SelectableCard
+                  key={opt.value}
+                  selected={selected}
+                  disabled={opt.disabled}
+                  onSelect={() => setMode(opt.value)}
+                  className="config-mode-card"
+                >
+                  <div className="config-mode-card__body">
+                    <span className="config-mode-card__icon" aria-hidden>
+                      <MaterialSymbol name={opt.icon} size={22} />
+                    </span>
+                    <span className="config-mode-card__title">{opt.title}</span>
+                    <span className="config-mode-card__subtitle">{opt.subtitle}</span>
+                  </div>
+                </Md3SelectableCard>
+              );
+            })}
+          </div>
+
+          <p className="config-panel__note">{modeBlurb}</p>
+
+          {mode === "key" && <Md3Empty description="API key mode is on the roadmap." />}
+          {mode === "manual" && (
+            <p className="md3-alert md3-alert--info">The easiest way in — no keys, nothing to set up. On the roadmap.</p>
+          )}
+        </section>
+
+        <section className="config-panel" aria-labelledby="config-cli-heading">
+          <header className="config-panel__header">
+            <div>
+              <h2 id="config-cli-heading" className="config-panel__title">
+                AI worker
+              </h2>
+              <p className="config-panel__lede">
+                {mode === "cli"
+                  ? `${installed.length} tool${installed.length === 1 ? "" : "s"} detected on this machine`
+                  : "Available when CLI mode is selected"}
+              </p>
+            </div>
+            {mode === "cli" && installed.length === 0 && clis !== null ? (
+              <a
+                href="https://career-ops.org/docs/free-ai-engine"
+                target="_blank"
+                rel="noreferrer"
+                className="config-panel__link"
+              >
+                Get a free CLI
+                <MaterialSymbol name="open_in_new" size={14} />
+              </a>
+            ) : null}
+          </header>
+
+          {mode !== "cli" ? (
+            <div className="config-panel__placeholder">
+              <MaterialSymbol name="terminal" size={28} className="text-[var(--md-sys-color-outline)]" />
+              <p>Switch to Local CLI to pick a worker.</p>
+            </div>
+          ) : clis === null ? (
+            <div className="config-panel__loading">
+              <MaterialSymbol name="progress_activity" size={24} className="animate-spin text-[var(--md-sys-color-primary)]" />
+              <span>Scanning PATH for installed tools…</span>
+            </div>
+          ) : installed.length === 0 ? (
+            <div className="md3-alert md3-alert--info">
+              No AI CLI detected yet. Free options like OpenCode with Qwen or GLM work great — install one, then refresh
+              this page.
+            </div>
+          ) : (
+            <div className="config-cli-grid">
+              {clis.map((c) => (
+                <ConfigCliTile
+                  key={c.id}
+                  cli={c}
+                  selected={c.id === cliId}
+                  onSelect={() => selectCli(c.id)}
+                />
+              ))}
+            </div>
+          )}
+
+          {mode === "cli" && installed.length > 0 ? (
+            <p className="config-panel__note">
+              Claude Code unlocks live worker progress, agentic apply, and the most reliable report persistence. Other
+              CLIs cover evaluate, PDF, and outreach flows.
+            </p>
+          ) : null}
+        </section>
+      </div>
+
+      <section className="config-appearance" aria-labelledby="config-appearance-heading">
+        <div className="config-appearance__copy">
+          <h2 id="config-appearance-heading" className="config-panel__title">
+            Appearance
+          </h2>
+          <p className="config-panel__lede">
+            Company marks in pipeline and reports — real logos when enabled, deterministic monograms when off.
+          </p>
+        </div>
+
+        <div className="config-appearance__preview" aria-hidden>
+          <div className="config-logo-preview" data-mode={logos ? "logo" : "mono"}>
+            <span className="config-logo-preview__label">Preview</span>
+            <div className="config-logo-preview__marks">
+              <span className="config-logo-preview__mark config-logo-preview__mark--mono">AC</span>
+              <span className="config-logo-preview__mark config-logo-preview__mark--logo">
+                <MaterialSymbol name="domain" size={18} />
+              </span>
+            </div>
+            <span className="config-logo-preview__caption">{logos ? "Favicon logos" : "Monograms only"}</span>
+          </div>
+        </div>
+
+        <label className="config-appearance__toggle">
+          <span className="sr-only">Show company logos</span>
+          <input type="checkbox" checked={logos} onChange={(e) => setLogos(e.target.checked)} />
+          <span className="md3-switch__track" />
+          <span className="md3-switch__thumb" />
+        </label>
+      </section>
+
+      <section className="config-privacy" aria-label="Privacy guarantees">
+        {PRIVACY_POINTS.map((point) => (
+          <article key={point.title} className="config-privacy__item">
+            <span className="config-privacy__icon" aria-hidden>
+              <MaterialSymbol name={point.icon} size={22} />
+            </span>
+            <h3 className="config-privacy__title">{point.title}</h3>
+            <p className="config-privacy__body">{point.body}</p>
+          </article>
+        ))}
+      </section>
     </PageShell>
   );
 }

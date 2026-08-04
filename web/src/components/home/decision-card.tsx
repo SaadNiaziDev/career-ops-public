@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, Card, Space, Tag, Typography } from "antd";
-import { CheckOutlined, CloseOutlined, FileTextOutlined, LoadingOutlined } from "@ant-design/icons";
+import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { CompanyLogo } from "@/components/company-logo";
+import { Badge } from "@/components/ui/badge";
+import { Md3Card } from "@/components/ui/md3-card";
 import { scoreNum, scoreTone } from "@/lib/format";
 import type { Application } from "@/lib/career-ops";
-
-const SCORE_COLOR = { good: "success", warn: "warning", bad: "error", muted: "default" } as const;
 
 export function DecisionCard({ app }: { app: Application }) {
   const router = useRouter();
@@ -37,47 +37,26 @@ export function DecisionCard({ app }: { app: Application }) {
   if (done) return null;
 
   return (
-    <Card size="small" className="dossier-decision-card h-full">
+    <Md3Card className="dossier-decision-card h-full !p-4">
       <div className="mb-3 flex items-start gap-2.5">
         <CompanyLogo name={app.company} size={24} />
         <div className="min-w-0 flex-1">
-          <Typography.Text strong className="block truncate">
-            {app.company}
-          </Typography.Text>
-          <Typography.Text type="secondary" className="block truncate text-sm">
-            {app.role}
-          </Typography.Text>
+          <p className="truncate md-title-small text-[var(--md-sys-color-on-surface)]">{app.company}</p>
+          <p className="truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)]">{app.role}</p>
         </div>
-        {Number.isFinite(score) && score > 0 && (
-          <Tag color={SCORE_COLOR[tone]}>{app.score}</Tag>
-        )}
+        {Number.isFinite(score) && score > 0 && <Badge tone={tone}>{app.score}</Badge>}
       </div>
-      <Space wrap className="w-full">
-        <Button
-          type="primary"
-          size="small"
-          disabled={!!busy}
-          icon={busy === "Applied" ? <LoadingOutlined /> : <CheckOutlined />}
-          onClick={() => setStatus("Applied")}
-        >
+      <div className="md3-actions-row">
+        <Md3ActionButton variant="filled" icon="check" loading={busy === "Applied"} disabled={!!busy} onClick={() => setStatus("Applied")}>
           Mark applied
-        </Button>
-        <Button
-          size="small"
-          disabled={!!busy}
-          icon={busy === "Discarded" ? <LoadingOutlined /> : <CloseOutlined />}
-          onClick={() => setStatus("Discarded")}
-        >
+        </Md3ActionButton>
+        <Md3ActionButton variant="outlined" icon="close" loading={busy === "Discarded"} disabled={!!busy} onClick={() => setStatus("Discarded")}>
           Skip
-        </Button>
-        <Button
-          type="text"
-          size="small"
-          href={`/pipeline/${app.n}`}
-          icon={<FileTextOutlined />}
-          aria-label="Open report"
-        />
-      </Space>
-    </Card>
+        </Md3ActionButton>
+        <Link href={`/pipeline/${app.n}`} className="md3-action-btn md3-action-btn--text" aria-label="Open report">
+          <span className="material-symbols-outlined text-[18px] leading-none">description</span>
+        </Link>
+      </div>
+    </Md3Card>
   );
 }

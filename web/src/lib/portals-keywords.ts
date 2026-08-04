@@ -60,3 +60,39 @@ export function appendPortalsKeywords(keywords: string[]): { added: string[]; po
   atomicWriteWithBackup(file, yaml.dump(doc, { lineWidth: 100, noRefs: true }));
   return { added, positive: existing };
 }
+
+export type NewCompany = {
+  name: string;
+  careers_url: string;
+  api?: string;
+  notes?: string;
+};
+
+/** Append a company to tracked_companies (dedup by name, case-insensitive). */
+export function appendPortalsCompany(company: NewCompany): { added: boolean; total: number } {
+  const root = careerOpsRoot();
+  const file = path.join(root, "portals.yml");
+  let doc: Record<string, unknown> = {};
+  try {
+    doc = (yaml.load(fs.readFileSync(file, "utf8")) as Record<string, unknown>) || {};
+  } catch {
+    try {
+      doc = (yaml.load(fs.readFileSync(path.join(root, "templates", "portals.example.yml"), "utf8")) as Record<string, unknown>) || {};
+    } catch {
+      doc = {};
+    }
+  }
+
+  const list = Array.isArray(doc.tracked_companies) ? [...(doc.tracked_companies as Record<string, unknown>[])] : [];
+  const name = company.name.trim();
+  const exists = list.some((c) => typeof c?.name === "string" && c.name.trim().toLowerCase() === name.toLowerCase());
+  if (exists) return { added: false, total: list.length };
+
+  const entry: Record<string, unknown> = { name, careers_url: company.careers_url.trim(), enabled: true };
+  if (company.api?.trim()) entry.api = company.api.trim();
+  if (company.notes?.trim()) entry.notes = company.notes.trim();
+  list.push(entry);
+  doc.tracked_companies = list;
+  atomicWriteWithBackup(file, yaml.dump(doc, { lineWidth: 100, noRefs: true }));
+  return { added: true, total: list.length };
+}

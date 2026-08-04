@@ -1,6 +1,6 @@
 "use client";
 
-import { RadarChartOutlined } from "@ant-design/icons";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { PortalsView } from "@/components/portals-view";
 import { TitlesBroadening } from "@/components/portals/titles-broadening";
 import { PortalsHero } from "@/components/portals/portals-hero";
@@ -17,7 +17,7 @@ export default function PortalsPage() {
         <PortalsHero />
         <TitlesBroadening />
         <DossierSection
-          icon={<RadarChartOutlined className="text-[var(--ant-color-primary)]" />}
+          icon={<MaterialSymbol name="radar" size={22} className="text-[var(--md-sys-color-primary)]" />}
           title="Portal health"
           hint="Broken ATS links drop companies silently"
         >

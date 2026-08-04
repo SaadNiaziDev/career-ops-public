@@ -3,33 +3,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Input, Table, Tag, Empty, Button } from "antd";
-import type { ColumnsType, TableProps } from "antd/es/table";
-import {
-  CompassOutlined,
-  CloseOutlined,
-  LinkOutlined,
-  ProjectOutlined,
-  TableOutlined,
-} from "@ant-design/icons";
 import type { Application, InboxJob } from "@/lib/career-ops";
 import { CompanyLogo } from "@/components/company-logo";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { canonStatus, scoreNum, scoreTone, statusDot } from "@/lib/format";
-import { Badge } from "@/components/ui/badge";
 import { InboxTriage } from "@/components/inbox/inbox-triage";
 import { PipelineRowActions } from "@/components/pipeline/pipeline-row-actions";
 import { PageShell } from "@/components/dossier/page-shell";
 import { JobLinkHub } from "@/components/job-link-hub";
-import { instrumentSerif } from "@/lib/fonts";
 import { cn } from "@/lib/cn";
 
-/* Active stages, in flow order — the funnel and the board share this. */
 const STAGES = [
-  { key: "EVALUATED", label: "Evaluated", dot: "bg-zinc-400", accent: "border-t-zinc-400" },
-  { key: "APPLIED", label: "Applied", dot: "bg-sky-400", accent: "border-t-sky-400" },
-  { key: "RESPONDED", label: "Responded", dot: "bg-sky-500", accent: "border-t-sky-500" },
-  { key: "INTERVIEW", label: "Interview", dot: "bg-emerald-400", accent: "border-t-emerald-400" },
-  { key: "OFFER", label: "Offer", dot: "bg-emerald-500", accent: "border-t-emerald-500" },
+  { key: "EVALUATED", label: "Evaluated", stage: "evaluated" as const },
+  { key: "APPLIED", label: "Applied", stage: "applied" as const },
+  { key: "RESPONDED", label: "Responded", stage: "responded" as const },
+  { key: "INTERVIEW", label: "Interview", stage: "interview" as const },
+  { key: "OFFER", label: "Offer", stage: "offer" as const },
 ] as const;
 type StageKey = (typeof STAGES)[number]["key"];
 
@@ -41,14 +30,12 @@ type Tab = (typeof TABS)[number];
 const SORT_KEYS = ["company", "role", "score", "status", "date"] as const;
 type SortKey = (typeof SORT_KEYS)[number];
 
-const SCORE_TONE: Record<string, string> = {
-  good: "success",
-  warn: "warning",
-  bad: "error",
-  muted: "default",
-};
-
 const BOARD_CAP = 10;
+
+const STAGE_TAB_ITEMS = [
+  { key: "INBOX" as const, label: "Inbox" },
+  ...STAGES.map((s) => ({ key: s.key as Tab, label: s.label })),
+];
 
 export function PipelineView({
   applications,
@@ -116,7 +103,6 @@ export function PipelineView({
     return out;
   }, [inbox]);
 
-  /* Rows bucketed by canonical stage — feeds the funnel counts AND the board. */
   const byStage = useMemo(() => {
     const buckets = new Map<StageKey, Application[]>(STAGES.map((s) => [s.key, []]));
     const closed: Application[] = [];
@@ -175,157 +161,102 @@ export function PipelineView({
     });
   }, [applications, mode, tab, q, sortKey, sortDir, minFilter]);
 
-  const columns: ColumnsType<Application> = [
-    {
-      title: "Company",
-      dataIndex: "company",
-      sorter: true,
-      sortOrder: sortKey === "company" ? (sortDir === 1 ? "ascend" : "descend") : null,
-      render: (company: string, row) => (
-        <Link href={`/pipeline/${row.n}`} className="inline-flex items-center gap-2.5 font-medium hover:text-brand">
-          <CompanyLogo name={company} size={24} />
-          {company}
-        </Link>
-      ),
-    },
-    {
-      title: "Role",
-      dataIndex: "role",
-      sorter: true,
-      sortOrder: sortKey === "role" ? (sortDir === 1 ? "ascend" : "descend") : null,
-      render: (role: string, row) => (
-        <Link href={`/pipeline/${row.n}`} className="text-muted hover:text-brand">
-          {role}
-        </Link>
-      ),
-    },
-    {
-      title: "Score",
-      dataIndex: "score",
-      width: 96,
-      sorter: true,
-      sortOrder: sortKey === "score" ? (sortDir === 1 ? "ascend" : "descend") : null,
-      render: (score: string) => <Tag color={SCORE_TONE[scoreTone(score)]}>{score || "—"}</Tag>,
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      sorter: true,
-      sortOrder: sortKey === "status" ? (sortDir === 1 ? "ascend" : "descend") : null,
-      render: (status: string) => (
-        <span className="inline-flex items-center gap-2 text-muted">
-          <span className={cn("size-2 shrink-0 rounded-full", statusDot(status))} />
-          {status}
-        </span>
-      ),
-    },
-    {
-      title: "Date",
-      dataIndex: "date",
-      width: 112,
-      sorter: true,
-      sortOrder: sortKey === "date" ? (sortDir === 1 ? "ascend" : "descend") : null,
-      className: "tabular-nums text-faint",
-    },
-    {
-      title: "",
-      key: "actions",
-      width: 56,
-      render: (_, row) => <PipelineRowActions n={row.n} company={row.company} role={row.role} />,
-    },
-  ];
-
-  const onTableChange: TableProps<Application>["onChange"] = (_pag, _filters, sorter) => {
-    const s = Array.isArray(sorter) ? sorter[0] : sorter;
-    const col = (s?.columnKey ?? s?.field) as SortKey | undefined;
-    if (!col || !(SORT_KEYS as readonly string[]).includes(col)) return;
-    const dir = s?.order === "ascend" ? 1 : -1;
-    setParams({ sort: col, dir });
-  };
-
   const goInbox = () => setParams({ tab: null, view: null, min: null });
   const goBoard = () => setParams({ tab: "ALL", view: null, min: null });
   const goTable = (t: Tab = "ALL") => setParams({ tab: t, view: t === "ALL" ? "table" : null });
 
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = { INBOX: pendingInbox.length };
+    for (const s of STAGES) counts[s.key] = (byStage.buckets.get(s.key) ?? []).length;
+    return counts;
+  }, [pendingInbox.length, byStage]);
+
+  const activeTabKey = mode === "inbox" ? "INBOX" : mode === "board" ? "ALL" : tab;
+
   return (
     <PageShell width="wide" className="pipeline-page">
-      {/* ── Command header — compact, no hero ─────────────────────────── */}
-      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-        <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-faint">Job search dossier</p>
-          <h1 className={cn(instrumentSerif.className, "mt-1.5 text-3xl tracking-tight text-landing sm:text-4xl")}>
-            Pipeline
-          </h1>
-          <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+      <header>
+        <h1 className="md-display-small-emphasized text-[var(--md-sys-color-on-surface)]">Pipeline</h1>
+        <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
+          <span>
+            <span className="font-medium tabular-nums text-[var(--md-sys-color-on-surface)]">{applications.length}</span> tracked
+          </span>
+          {stats.avg != null && (
             <span>
-              <span className="font-medium tabular-nums text-foreground">{applications.length}</span> tracked
+              <span className="font-medium tabular-nums text-[var(--md-sys-color-on-surface)]">{stats.avg.toFixed(1)}</span> avg score
             </span>
-            {stats.avg != null && (
-              <span>
-                <span className="font-medium tabular-nums text-foreground">{stats.avg.toFixed(1)}</span> avg score
-              </span>
-            )}
-            {stats.responseRate != null && (
-              <span>
-                <span className="font-medium tabular-nums text-foreground">{stats.responseRate}%</span> response rate
-              </span>
-            )}
-            {stats.applyReady > 0 && (
-              <button
-                type="button"
-                onClick={() => setParams({ tab: "EVALUATED", min: 4, view: null })}
-                className="font-medium text-brand-text transition-colors hover:underline"
-              >
-                {stats.applyReady} apply-ready →
-              </button>
-            )}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href="/explore?run=1">
-            <Button type="primary" icon={<CompassOutlined />}>
-              Run free scan
-            </Button>
-          </Link>
-          <Link href="/add">
-            <Button icon={<LinkOutlined />}>Add job link</Button>
-          </Link>
-        </div>
+          )}
+          {stats.responseRate != null && (
+            <span>
+              <span className="font-medium tabular-nums text-[var(--md-sys-color-on-surface)]">{stats.responseRate}%</span> response rate
+            </span>
+          )}
+          {stats.applyReady > 0 && (
+            <button
+              type="button"
+              onClick={() => setParams({ tab: "EVALUATED", min: 4, view: null })}
+              className="font-medium text-[var(--md-sys-color-primary)] transition-colors hover:underline"
+            >
+              {stats.applyReady} apply-ready →
+            </button>
+          )}
+        </p>
       </header>
 
-      {/* ── The funnel — the pipeline drawn as a pipeline ─────────────── */}
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <div className="funnel-scroll min-w-0 flex-1 overflow-x-auto">
-          <div className="funnel">
-            <FunnelSeg
-              first
-              active={mode === "inbox"}
-              count={pendingInbox.length}
-              label="Inbox"
-              dot="bg-brand"
-              onClick={goInbox}
-            />
-            {STAGES.map((s) => (
-              <FunnelSeg
-                key={s.key}
-                active={mode === "table" && tab === s.key}
-                count={(byStage.buckets.get(s.key) ?? []).length}
-                label={s.label}
-                dot={s.dot}
-                onClick={() => goTable(s.key)}
-              />
-            ))}
-          </div>
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 flex-1 flex-wrap items-end gap-1 border-b border-[var(--md-sys-color-outline-variant)]">
+          {STAGE_TAB_ITEMS.map((item) => {
+            const active = activeTabKey === item.key || (item.key !== "INBOX" && tab === item.key && mode === "table");
+            const count = tabCounts[item.key] ?? 0;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                className="md3-tab"
+                data-active={active ? "true" : "false"}
+                onClick={() => (item.key === "INBOX" ? goInbox() : goTable(item.key))}
+              >
+                {item.label}
+                {count > 0 && <span className="md3-tab-badge">{count}</span>}
+              </button>
+            );
+          })}
         </div>
         {mode !== "inbox" && (
-          <div className="inline-flex shrink-0 rounded-xl border border-border bg-surface p-1" role="group" aria-label="Tracker view">
-            <ViewToggle active={mode === "board"} onClick={goBoard} icon={<ProjectOutlined />} label="Board" />
-            <ViewToggle active={mode === "table"} onClick={() => goTable("ALL")} icon={<TableOutlined />} label="Table" />
+          <div className="md3-segmented" role="group" aria-label="Tracker view">
+            <button
+              type="button"
+              className="md3-segmented-btn"
+              data-active={mode === "board" ? "true" : "false"}
+              onClick={goBoard}
+            >
+              <MaterialSymbol name="view_kanban" size={20} />
+              Board
+            </button>
+            <button
+              type="button"
+              className="md3-segmented-btn"
+              data-active={mode === "table" ? "true" : "false"}
+              onClick={() => goTable("ALL")}
+            >
+              <MaterialSymbol name="table_rows" size={20} />
+              Table
+            </button>
           </div>
         )}
       </div>
 
-      {/* ── Content ───────────────────────────────────────────────────── */}
+      <div className="mt-4 md3-actions-row">
+        <Link href="/explore?run=1" className="md3-action-btn md3-action-btn--filled min-h-[56px] px-8">
+          <span className="material-symbols-outlined text-[22px] leading-none">explore</span>
+          <span className="md3-action-btn__label">Run free scan</span>
+        </Link>
+        <Link href="/add" className="md3-action-btn md3-action-btn--outlined">
+          <span className="material-symbols-outlined text-[20px] leading-none">link</span>
+          <span className="md3-action-btn__label">Add job link</span>
+        </Link>
+      </div>
+
       {mode === "inbox" && (
         <>
           <div className="mt-6">
@@ -337,7 +268,7 @@ export function PipelineView({
             <EmptyPanel
               title={
                 <>
-                  Your <span className="text-brand">inbox</span> is empty
+                  Your <span className="text-[var(--md-sys-color-primary)]">inbox</span> is empty
                 </>
               }
               body="Find roles that match your CV — free, no tokens spent."
@@ -355,80 +286,74 @@ export function PipelineView({
             cta
           />
         ) : (
-          <div className="mt-5 flex gap-3.5 overflow-x-auto pb-3 2xl:grid 2xl:grid-cols-6 2xl:overflow-visible">
+          <div className="md3-pipeline-board mt-6">
             {STAGES.map((s) => (
               <BoardColumn
                 key={s.key}
                 label={s.label}
-                dot={s.dot}
-                accent={s.accent}
+                stage={s.stage}
                 rows={byStage.buckets.get(s.key) ?? []}
                 onSeeAll={() => goTable(s.key)}
               />
             ))}
             <BoardColumn
               label="Closed"
-              dot="bg-zinc-600"
-              accent="border-t-zinc-600"
+              stage="closed"
               rows={byStage.closed}
               showStatus
-              muted
               onSeeAll={() => goTable("ALL")}
             />
           </div>
         ))}
 
       {mode === "table" && (
-        <div className="mt-5 overflow-hidden rounded-2xl border border-border bg-surface/50">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-border px-4 py-3.5 sm:px-5">
+        <div className="md3-pipeline-list-panel mt-6">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-[var(--md-sys-color-outline-variant)] px-4 py-3.5">
             <div className="flex flex-wrap items-center gap-1.5">
               {(["ALL", ...CLOSED] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
+                  className="md3-chip"
+                  data-active={tab === t ? "true" : "false"}
                   onClick={() => setParams({ tab: t, view: t === "ALL" ? "table" : null, min: null })}
-                  className={cn(
-                    "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                    tab === t
-                      ? "border-brand/40 bg-brand-soft text-brand-text"
-                      : "border-border text-muted hover:border-brand/30 hover:text-foreground",
-                  )}
                 >
                   {t === "ALL" ? "All" : t.charAt(0) + t.slice(1).toLowerCase()}
                 </button>
               ))}
               {minFilter != null && (
-                <Tag closable onClose={() => setParams({ min: null })} closeIcon={<CloseOutlined />} color="processing" className="ml-1">
-                  score ≥ {minFilter.toFixed(1)}
-                </Tag>
+                <button
+                  type="button"
+                  className="md3-chip"
+                  data-active="true"
+                  onClick={() => setParams({ min: null })}
+                >
+                  score ≥ {minFilter.toFixed(1)} ×
+                </button>
               )}
             </div>
             <div className="ml-auto flex items-center gap-3">
-              <span className="text-xs tabular-nums text-faint">
+              <span className="md-body-small tabular-nums text-[var(--md-sys-color-outline)]">
                 {filtered.length} role{filtered.length === 1 ? "" : "s"}
               </span>
-              <Input.Search
-                allowClear
+              <input
+                type="search"
                 placeholder="Search company or role…"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                className="w-56 sm:w-64"
+                className="h-12 w-56 rounded-[var(--md-sys-shape-corner-medium)] border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-high)] px-4 md-body-medium text-[var(--md-sys-color-on-surface)] outline-none focus:border-[var(--md-sys-color-primary)] sm:w-64"
               />
             </div>
           </div>
           {filtered.length > 0 ? (
-            <Table
-              rowKey={(r) => r.n}
-              columns={columns}
-              dataSource={filtered}
-              pagination={{ pageSize: 25, showSizeChanger: false, className: "px-4 sm:px-5 pb-4" }}
-              onChange={onTableChange}
-              size="middle"
-              className="pipeline-table"
-            />
+            <div>
+              {filtered.map((row) => (
+                <PipelineListRow key={row.n} row={row} />
+              ))}
+            </div>
           ) : (
-            <div className="px-6 py-16">
-              <Empty description="No matches — pick another stage or clear the search." />
+            <div className="px-6 py-16 text-center md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
+              No matches — pick another stage or clear the search.
             </div>
           )}
         </div>
@@ -437,121 +362,37 @@ export function PipelineView({
   );
 }
 
-/* ── Funnel segment — chevron-linked stage with count ──────────────────── */
-function FunnelSeg({
-  first = false,
-  active,
-  count,
-  label,
-  dot,
-  onClick,
-}: {
-  first?: boolean;
-  active: boolean;
-  count: number;
-  label: string;
-  dot: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "funnel-seg text-left transition-colors focus-visible:outline-none",
-        first && "funnel-seg-first",
-        active
-          ? "bg-brand-soft text-brand-text"
-          : "bg-surface text-muted hover:bg-surface-hover hover:text-foreground",
-        count === 0 && !active && "opacity-60",
-      )}
-    >
-      <span className="block text-xl font-semibold tabular-nums leading-none tracking-tight">{count}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <span className={cn("size-1.5 shrink-0 rounded-full", dot)} />
-        <span className="truncate text-[10px] font-semibold uppercase tracking-widest">{label}</span>
-      </span>
-    </button>
-  );
-}
-
-function ViewToggle({
-  active,
-  onClick,
-  icon,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
-        active ? "bg-brand text-brand-foreground shadow-sm" : "text-muted hover:text-foreground",
-      )}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-/* ── Board column — one stage, cards sorted by score ───────────────────── */
 function BoardColumn({
   label,
-  dot,
-  accent,
+  stage,
   rows,
   showStatus = false,
-  muted = false,
   onSeeAll,
 }: {
   label: string;
-  dot: string;
-  accent: string;
+  stage: "evaluated" | "applied" | "responded" | "interview" | "offer" | "closed";
   rows: Application[];
   showStatus?: boolean;
-  muted?: boolean;
   onSeeAll: () => void;
 }) {
   const visible = rows.slice(0, BOARD_CAP);
   return (
-    <section
-      className={cn(
-        "flex w-70 shrink-0 flex-col self-start rounded-2xl border border-border border-t-2 bg-surface/40 2xl:w-auto 2xl:min-w-0",
-        accent,
-        muted && "opacity-80",
-      )}
-    >
-      <header className="flex items-center gap-2 px-4 pb-2.5 pt-3.5">
-        <span className={cn("size-2 shrink-0 rounded-full", dot)} />
-        <h2 className="text-[11px] font-semibold uppercase tracking-widest text-foreground">{label}</h2>
-        <span className="ml-auto rounded-md bg-surface-hover px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted">
-          {rows.length}
-        </span>
+    <section className="md3-pipeline-column" data-stage={stage}>
+      <header className="md3-pipeline-column-header">
+        <h2 className="md-column-heading">{label}</h2>
+        <span className="md3-pipeline-column-count">{rows.length}</span>
       </header>
-      <div className="flex flex-col gap-2 px-3 pb-3">
+      <div className="flex flex-col gap-2">
         {visible.map((row) => (
-          <BoardCard key={row.n} row={row} showStatus={showStatus} />
+          <BoardCard key={row.n} row={row} showStatus={showStatus} stage={stage} />
         ))}
         {rows.length === 0 && (
-          <div className="rounded-xl border border-dashed border-border/80 px-3 py-6 text-center text-xs text-faint">
+          <div className="rounded-[var(--md-sys-shape-corner-large-increased)] border border-dashed border-[var(--md-sys-color-outline-variant)] px-3 py-6 text-center md-body-small text-[var(--md-sys-color-outline)]">
             No roles here yet
           </div>
         )}
         {rows.length > BOARD_CAP && (
-          <button
-            type="button"
-            onClick={onSeeAll}
-            className="rounded-xl border border-border/80 py-2 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand"
-          >
+          <button type="button" onClick={onSeeAll} className="md3-btn-text w-full">
             See all {rows.length} in table
           </button>
         )}
@@ -560,58 +401,100 @@ function BoardColumn({
   );
 }
 
-function BoardCard({ row, showStatus }: { row: Application; showStatus: boolean }) {
+function BoardCard({
+  row,
+  showStatus,
+  stage,
+}: {
+  row: Application;
+  showStatus: boolean;
+  stage: string;
+}) {
   const hasScore = !!row.score && row.score.trim() !== "" && row.score.trim() !== "—";
   return (
-    <article className="group rounded-xl border border-border bg-surface p-3 transition-all duration-150 hover:border-brand/40 hover:shadow-sm">
-      <div className="flex items-start gap-2.5">
-        <CompanyLogo name={row.company} size={22} className="mt-px shrink-0" />
-        <div className="min-w-0 flex-1">
-          <Link
-            href={`/pipeline/${row.n}`}
-            className="block truncate text-sm font-semibold text-foreground transition-colors hover:text-brand"
-          >
-            {row.company}
-          </Link>
-          <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-muted">{row.role}</p>
+    <div className="md3-pipeline-card group relative">
+      <Link
+        href={`/pipeline/${row.n}`}
+        className="absolute inset-0 z-0 rounded-[inherit]"
+        aria-label={`Open report for ${row.company}`}
+      />
+      <div className="relative z-[1] pointer-events-none">
+        <div className="flex items-start gap-2.5">
+          <CompanyLogo name={row.company} size={24} className="mt-px shrink-0" />
+          <div className="min-w-0 flex-1">
+            <span className="block truncate md-title-small text-inherit">{row.company}</span>
+            <p className="mt-0.5 line-clamp-2 md-body-medium opacity-80">{row.role}</p>
+          </div>
+          {hasScore && <ScoreBadge score={row.score} inverted={stage === "offer"} />}
         </div>
-        {hasScore && <Badge tone={scoreTone(row.score)}>{row.score}</Badge>}
+        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[var(--md-sys-color-outline-variant)] pt-2 opacity-70">
+          <span className="min-w-0 truncate md-body-small tabular-nums">
+            {showStatus ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className={cn("size-1.5 shrink-0 rounded-full", statusDot(row.status))} />
+                {row.status}
+                {row.date ? ` · ${row.date}` : ""}
+              </span>
+            ) : (
+              row.date || "—"
+            )}
+          </span>
+          <span className="pointer-events-auto opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            <PipelineRowActions n={row.n} company={row.company} role={row.role} />
+          </span>
+        </div>
       </div>
-      <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/60 pt-2">
-        <span className="min-w-0 truncate text-[11px] tabular-nums text-faint">
-          {showStatus ? (
-            <span className="inline-flex items-center gap-1.5">
-              <span className={cn("size-1.5 shrink-0 rounded-full", statusDot(row.status))} />
-              {row.status}
-              {row.date ? ` · ${row.date}` : ""}
-            </span>
-          ) : (
-            row.date || "—"
-          )}
-        </span>
-        <span className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          <PipelineRowActions n={row.n} company={row.company} role={row.role} />
-        </span>
-      </div>
-    </article>
+    </div>
   );
 }
 
-/* ── Shared empty state ─────────────────────────────────────────────────── */
+function PipelineListRow({ row }: { row: Application }) {
+  return (
+    <div className="md3-pipeline-list-row">
+      <span aria-hidden className="size-[22px] rounded-[var(--md-sys-shape-corner-extra-small)] border border-[var(--md-sys-color-outline-variant)]" />
+      <CompanyLogo name={row.company} size={40} />
+      <div className="min-w-0">
+        <Link href={`/pipeline/${row.n}`} className="block truncate md-title-small text-[var(--md-sys-color-on-surface)] hover:text-[var(--md-sys-color-primary)]">
+          {row.company}
+        </Link>
+        <p className="truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)]">{row.role}</p>
+      </div>
+      <span className="hidden truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)] lg:block">—</span>
+      <span className="hidden md-body-small text-[var(--md-sys-color-on-surface-variant)] xl:block">—</span>
+      <span className="font-mono text-sm tabular-nums text-[var(--md-sys-color-outline)]">{row.date || "—"}</span>
+      {row.score ? <ScoreBadge score={row.score} /> : <span />}
+      <PipelineRowActions n={row.n} company={row.company} role={row.role} />
+    </div>
+  );
+}
+
+function ScoreBadge({ score, inverted = false }: { score: string; inverted?: boolean }) {
+  const tone = scoreTone(score);
+  const toneClass =
+    tone === "good"
+      ? inverted
+        ? "bg-[var(--md-sys-color-on-primary)] text-[var(--md-sys-color-primary)]"
+        : "bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)]"
+      : tone === "warn"
+        ? "bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)]"
+        : tone === "bad"
+          ? "bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)]"
+          : "bg-[var(--md-sys-color-surface-container-highest)] text-[var(--md-sys-color-on-surface-variant)]";
+
+  return <span className={cn("md3-score-badge", toneClass)}>{score}</span>;
+}
+
 function EmptyPanel({ title, body, cta = false }: { title: React.ReactNode; body: string; cta?: boolean }) {
   return (
-    <div className="dot-bg mt-5 overflow-hidden rounded-2xl border border-brand/25 bg-linear-to-tr from-brand/10 via-transparent to-transparent">
-      <div className="px-8 py-16 text-center">
-        <h2 className={cn(instrumentSerif.className, "text-2xl tracking-tight text-landing sm:text-3xl")}>{title}</h2>
-        <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-muted">{body}</p>
-        {cta && (
-          <Link href="/explore?run=1" className="mt-6 inline-block">
-            <Button type="primary" size="large" icon={<CompassOutlined />}>
-              Run a free scan
-            </Button>
-          </Link>
-        )}
-      </div>
+    <div className="mt-6 overflow-hidden rounded-[var(--md-sys-shape-corner-extra-large)] bg-[var(--md-sys-color-surface-container)] px-8 py-16 text-center">
+      <h2 className="md-headline-medium text-[var(--md-sys-color-on-surface)]">{title}</h2>
+      <p className="mx-auto mt-3 max-w-md md-body-large text-[var(--md-sys-color-on-surface-variant)]">{body}</p>
+      {cta && (
+        <Link href="/explore?run=1" className="md3-action-btn md3-action-btn--filled mt-6 min-h-[56px] px-8">
+          <span className="material-symbols-outlined text-[20px] leading-none">explore</span>
+          <span className="md3-action-btn__label">Run a free scan</span>
+        </Link>
+      )}
     </div>
   );
 }

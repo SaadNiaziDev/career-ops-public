@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Gauge } from "lucide-react";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { cn } from "@/lib/cn";
 
 type Usage = { window5h: { tokens: number }; window7d: { tokens: number } };
@@ -16,9 +16,9 @@ function fmt(n: number): string {
   return `${n}`;
 }
 function tone(pct: number): string {
-  if (pct >= 85) return "bg-red-400";
-  if (pct >= 60) return "bg-amber-400";
-  return "bg-emerald-400";
+  if (pct >= 85) return "bg-[var(--md-sys-color-error)]";
+  if (pct >= 60) return "bg-[var(--md-sys-color-tertiary)]";
+  return "bg-[var(--md-sys-color-primary)]";
 }
 
 export function UsageMeter() {
@@ -66,7 +66,7 @@ export function UsageMeter() {
   return (
     <div className="border-t border-border pt-3">
       <div className="mb-1.5 flex items-center gap-1.5 px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-faint">
-        <Gauge className="size-3" /> Usage
+        <MaterialSymbol name="speed" size={14} /> Usage
       </div>
       <div className="space-y-2 px-1">
         {rows.map((r) => {
