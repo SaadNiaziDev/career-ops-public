@@ -1,89 +1,259 @@
 "use client";
 
-import { use } from "react";
+import { use, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, Loader2, Wrench, CircleDot, Check, X } from "lucide-react";
+import {
+  ArrowLeftOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  FileTextOutlined,
+  LoadingOutlined,
+  RedoOutlined,
+  SettingOutlined,
+} from "@ant-design/icons";
+import { Button, Card, Collapse, Empty, Space, Tag, Timeline, Typography } from "antd";
 import { useJobs } from "@/components/jobs/job-store";
 import { HeroGlow } from "@/components/hero-glow";
-import { Badge } from "@/components/ui/badge";
+import { PageShell } from "@/components/dossier/page-shell";
+import { DossierStack, DossierInsetStack } from "@/components/dossier/dossier-stack";
+import {
+  collapseSteps,
+  fmtElapsed,
+  fmtTokens,
+  formatCollapsedStep,
+  isAuthError,
+  jobBackHref,
+  jobDuration,
+  resolveArtifact,
+  SCORE_TAG_COLOR,
+  useElapsed,
+} from "@/components/jobs/job-utils";
+
+const { Title, Text, Paragraph } = Typography;
+
+function StatusTag({ status }: { status: "running" | "done" | "error" }) {
+  if (status === "running") {
+    return (
+      <Tag icon={<LoadingOutlined spin />} color="processing">
+        Working
+      </Tag>
+    );
+  }
+  if (status === "done") {
+    return (
+      <Tag icon={<CheckCircleOutlined />} color="success">
+        Done
+      </Tag>
+    );
+  }
+  return (
+    <Tag icon={<CloseCircleOutlined />} color="error">
+      Error
+    </Tag>
+  );
+}
 
 export default function JobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { jobs } = useJobs();
+  const { jobs, startJob } = useJobs();
+  const router = useRouter();
+  const [retrying, setRetrying] = useState(false);
   const job = jobs.find((j) => j.id === id);
+  const running = job?.status === "running";
+  const elapsed = useElapsed(running ?? false, job?.startedAt ?? Date.now());
+  const artifact = job ? resolveArtifact(job) : null;
+  const steps = useMemo(() => (job ? collapseSteps(job.steps) : []), [job]);
+  const [outputOpen, setOutputOpen] = useState<boolean | undefined>(undefined);
+  const outputExpanded = outputOpen ?? running;
 
   if (!job) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-10">
-        <Link href="/pipeline" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-brand">
-          <ArrowLeft className="size-4" /> Pipeline
-        </Link>
-        <p className="mt-8 text-sm text-muted">
-          This worker is no longer in memory (it finished earlier or the page was reloaded).
-        </p>
-      </div>
+      <PageShell width="narrow">
+        <DossierStack>
+          <Link href="/pipeline">
+            <Button type="text" icon={<ArrowLeftOutlined />} className="px-0">
+              Pipeline
+            </Button>
+          </Link>
+          <Empty
+            description="This worker is no longer in memory — it finished earlier or the page was reloaded."
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          >
+            <Space size="middle">
+              <Link href="/jobs">
+                <Button>Worker history</Button>
+              </Link>
+              <Link href="/pipeline">
+                <Button type="primary">Pipeline</Button>
+              </Link>
+            </Space>
+          </Empty>
+        </DossierStack>
+      </PageShell>
     );
   }
 
+  const backHref = jobBackHref(job);
+  const backLabel = backHref === "/pipeline" ? "Pipeline" : backHref === "/jobs" ? "Workers" : "Back";
+  const duration = running ? elapsed : jobDuration(job);
+  const authError = isAuthError(job);
+  const tokens = job.status === "done" ? job.cost?.tokens ?? 0 : 0;
+  const canRetry = job.status === "error" && !!job.kind && !!job.input;
+
+  const retry = () => {
+    if (!canRetry || retrying) return;
+    setRetrying(true); // optimistic: flip immediately, the new job also appears "running" the instant startJob returns
+    const newId = startJob({
+      title: job.title,
+      subtitle: job.subtitle,
+      kind: job.kind!,
+      input: job.input!,
+      page: job.page,
+      batchId: job.batchId,
+    });
+    if (newId) router.push(`/jobs/${newId}`);
+    else setRetrying(false);
+  };
+
+  const timelineItems = [
+    ...steps.map((step, i) => ({
+      key: `${step.label}-${i}`,
+      color: step.kind === "tool" ? ("blue" as const) : ("gray" as const),
+      children: (
+        <Text type={step.kind === "tool" ? undefined : "secondary"}>{formatCollapsedStep(step)}</Text>
+      ),
+    })),
+    ...(running
+      ? [
+          {
+            key: "thinking",
+            color: "blue" as const,
+            dot: <LoadingOutlined spin />,
+            children: <Text type="secondary">Thinking…</Text>,
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
-      <Link href="/pipeline" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-brand">
-        <ArrowLeft className="size-4" /> Pipeline
-      </Link>
+    <PageShell width="narrow">
+      <DossierStack>
+        <Link href={backHref}>
+          <Button type="text" icon={<ArrowLeftOutlined />} className="px-0">
+            {backLabel}
+          </Button>
+        </Link>
 
-      <section className="dot-bg relative mt-5 overflow-hidden rounded-2xl border border-border bg-surface/40 px-6 py-7">
-        {job.status === "running" && <HeroGlow />}
-        <div className="relative z-10">
-          <p className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.18em] text-faint">
-            {job.status === "running" ? (
-              <><Loader2 className="size-3 animate-spin text-brand" /> working</>
-            ) : job.status === "done" ? (
-              <><Check className="size-3 text-emerald-500" /> done</>
-            ) : (
-              <><X className="size-3 text-red-400" /> error</>
-            )}
-          </p>
-          <h1 className="mt-2 font-display text-2xl tracking-tight text-landing">{job.title}</h1>
-          {job.subtitle && <p className="mt-1 text-sm text-muted">{job.subtitle}</p>}
-          {job.result?.score != null && (
-            <div className="mt-3 flex flex-wrap items-center gap-2.5">
-              <Badge tone={job.result.tone}>{job.result.score}/5</Badge>
-              {job.result.summary && <span className="text-sm text-muted">{job.result.summary}</span>}
+        <Card className="relative overflow-hidden">
+          {running && <HeroGlow />}
+          <DossierInsetStack className="relative z-10">
+            <Space wrap size={[10, 10]} className="w-full items-center justify-between">
+              <Space wrap size={[10, 10]}>
+                <StatusTag status={job.status} />
+                {job.result?.score != null && (
+                  <Tag color={SCORE_TAG_COLOR[job.result.tone]}>{job.result.score}/5</Tag>
+                )}
+                <Text type="secondary" className="text-xs tabular-nums">
+                  {fmtElapsed(duration)}
+                  {tokens > 0 && ` · ${fmtTokens(tokens)} tokens`}
+                  {job.cost?.usd != null && ` · $${job.cost.usd.toFixed(2)}`}
+                </Text>
+              </Space>
+              {canRetry && (
+                <Button size="small" icon={<RedoOutlined />} loading={retrying} onClick={retry}>
+                  Retry
+                </Button>
+              )}
+            </Space>
+
+            <div>
+              <Title level={2} className="mb-1! font-display!">
+                {job.title}
+              </Title>
+              {job.subtitle && (
+                <Paragraph type="secondary" className="mb-0!">
+                  {job.subtitle}
+                </Paragraph>
+              )}
             </div>
-          )}
-        </div>
-      </section>
 
-      <ol className="mt-6 space-y-2">
-        {job.steps.map((s, i) => (
-          <li key={i} className="flex items-start gap-2.5 text-sm">
-            {s.kind === "tool" ? (
-              <Wrench className="mt-0.5 size-3.5 shrink-0 text-brand" />
-            ) : (
-              <CircleDot className="mt-0.5 size-3.5 shrink-0 text-faint" />
+            {job.status === "done" && job.result?.summary && !artifact && (
+              <Paragraph type="secondary" className="mb-0!">
+                {job.result.summary}
+              </Paragraph>
             )}
-            <span className={s.kind === "tool" ? "font-medium" : "text-muted"}>
-              {s.kind === "tool" ? `Using ${s.label}` : s.label}
-            </span>
-          </li>
-        ))}
-        {job.status === "running" && (
-          <li className="flex items-center gap-2.5 text-sm text-muted">
-            <Loader2 className="size-3.5 animate-spin text-brand" /> thinking…
-          </li>
-        )}
-      </ol>
 
-      {job.text && (
-        <div className="mt-8">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Output</h2>
-          <div className="report-prose mt-3 rounded-2xl border border-border bg-surface/40 p-5">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.text}</ReactMarkdown>
-          </div>
-        </div>
-      )}
-    </div>
+            {artifact && (
+              <Space wrap size="middle">
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<FileTextOutlined />}
+                  href={artifact.href}
+                  target={artifact.href.startsWith("/api/") ? "_blank" : undefined}
+                  rel={artifact.href.startsWith("/api/") ? "noreferrer" : undefined}
+                >
+                  {artifact.label}
+                </Button>
+                {artifact.path && (
+                  <Text type="secondary" className="text-xs font-mono">
+                    {artifact.path}
+                  </Text>
+                )}
+              </Space>
+            )}
+
+            {authError && (
+              <Space wrap size="middle">
+                <Text type="warning">Sign your CLI in from Config, then re-run.</Text>
+                <Link href="/config">
+                  <Button icon={<SettingOutlined />}>Open Config</Button>
+                </Link>
+                {canRetry && (
+                  <Button icon={<RedoOutlined />} loading={retrying} onClick={retry}>
+                    Retry
+                  </Button>
+                )}
+              </Space>
+            )}
+
+            {canRetry && !authError && (
+              <Space wrap size="middle">
+                <Button type="primary" icon={<RedoOutlined />} loading={retrying} onClick={retry}>
+                  Retry
+                </Button>
+              </Space>
+            )}
+          </DossierInsetStack>
+        </Card>
+
+        {steps.length > 0 && (
+          <Card title="Activity" size="small">
+            <Timeline items={timelineItems} />
+          </Card>
+        )}
+
+        {job.text && (
+          <Collapse
+            activeKey={outputExpanded ? ["output"] : []}
+            onChange={(keys) => setOutputOpen(keys.includes("output"))}
+            items={[
+              {
+                key: "output",
+                label: running ? "Output (live)" : "Output",
+                children: (
+                  <div className="report-prose">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.text}</ReactMarkdown>
+                  </div>
+                ),
+              },
+            ]}
+          />
+        )}
+      </DossierStack>
+    </PageShell>
   );
 }

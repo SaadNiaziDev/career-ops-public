@@ -248,7 +248,7 @@ export function PipelineView({
   const goTable = (t: Tab = "ALL") => setParams({ tab: t, view: t === "ALL" ? "table" : null });
 
   return (
-    <PageShell width="full" className="pipeline-page">
+    <PageShell width="wide" className="pipeline-page">
       {/* ── Command header — compact, no hero ─────────────────────────── */}
       <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div>

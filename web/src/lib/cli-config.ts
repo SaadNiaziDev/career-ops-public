@@ -14,6 +14,7 @@ export type CliConfig = {
 const CLI_NAMES: Record<string, string> = {
   claude: "Claude Code",
   codex: "Codex",
+  cursor: "Cursor",
 };
 
 export function readCliConfig(): CliConfig {

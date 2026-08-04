@@ -3,8 +3,14 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check, Loader2 } from "lucide-react";
-import { cn } from "@/lib/cn";
+import { CheckOutlined, LoadingOutlined } from "@ant-design/icons";
+import { Button, Card, Col, Input, Row, Spin, Typography } from "antd";
+import { PageShell } from "@/components/dossier/page-shell";
+import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
+import { DossierStack } from "@/components/dossier/dossier-stack";
+
+const { Text } = Typography;
+const { TextArea } = Input;
 
 export function CvEditor() {
   const [content, setContent] = useState("");
@@ -44,54 +50,67 @@ export function CvEditor() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl tracking-tight text-landing">CV editor</h1>
-          <p className="mt-1 text-sm text-muted">
-            Edit <code className="text-foreground">cv.md</code> with live preview.
-            {!exists && loaded && <span className="ml-1 text-faint">No cv.md yet — start typing to create it.</span>}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving || !dirty}
-          className={cn(
-            "inline-flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition-colors max-sm:min-h-[44px]",
-            dirty
-              ? "bg-brand text-brand-foreground hover:bg-brand-200"
-              : "border border-border bg-surface text-muted",
-          )}
-        >
-          {saving ? <Loader2 className="size-4 animate-spin" /> : saved ? <Check className="size-4" /> : null}
-          {saved ? "Saved" : "Save"}
-        </button>
-      </div>
+    <PageShell width="default">
+      <DossierStack>
+        <DossierPageHeader
+          title="CV editor"
+          description={
+            <>
+              Edit <Text code>cv.md</Text> with live preview.
+              {!exists && loaded && (
+                <Text type="secondary" className="ml-1">
+                  No cv.md yet — start typing to create it.
+                </Text>
+              )}
+            </>
+          }
+          extra={
+            <Button
+              type={dirty ? "primary" : "default"}
+              size="large"
+              onClick={save}
+              disabled={saving || !dirty}
+              icon={saving ? <LoadingOutlined spin /> : saved ? <CheckOutlined /> : undefined}
+            >
+              {saved ? "Saved" : "Save"}
+            </Button>
+          }
+        />
 
-      {!loaded ? (
-        <div className="mt-6 text-sm text-muted">Loading…</div>
-      ) : (
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <textarea
-            value={content}
-            onChange={(e) => {
-              setContent(e.target.value);
-              setDirty(true);
-            }}
-            spellCheck={false}
-            placeholder="# Your Name&#10;&#10;## Summary&#10;..."
-            className="min-h-[60vh] w-full resize-none rounded-2xl border border-border bg-surface/50 p-4 font-mono text-sm leading-relaxed outline-none transition-colors placeholder:text-faint focus:border-brand/40"
-          />
-          <article className="report-prose min-h-[60vh] overflow-auto rounded-2xl border border-border bg-surface/30 p-5">
-            {content.trim() ? (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-            ) : (
-              <p className="text-muted">Preview appears here.</p>
-            )}
-          </article>
-        </div>
-      )}
-    </div>
+        {!loaded ? (
+          <div className="flex justify-center py-16">
+            <Spin size="large" />
+          </div>
+        ) : (
+          <Row gutter={[20, 20]}>
+            <Col xs={24} lg={12}>
+              <TextArea
+                value={content}
+                onChange={(e) => {
+                  setContent(e.target.value);
+                  setDirty(true);
+                }}
+                spellCheck={false}
+                placeholder={"# Your Name\n\n## Summary\n..."}
+                autoSize={{ minRows: 24 }}
+                className="font-mono"
+                style={{ padding: "16px 18px", lineHeight: 1.6 }}
+              />
+            </Col>
+            <Col xs={24} lg={12}>
+              <Card className="min-h-[60vh]">
+                <article className="report-prose">
+                  {content.trim() ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                  ) : (
+                    <Text type="secondary">Preview appears here.</Text>
+                  )}
+                </article>
+              </Card>
+            </Col>
+          </Row>
+        )}
+      </DossierStack>
+    </PageShell>
   );
 }

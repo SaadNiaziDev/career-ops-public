@@ -1,59 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Check, X, Loader2, AlertTriangle } from "lucide-react";
 import type { Job } from "@/components/jobs/job-store";
 import { cn } from "@/lib/cn";
-
-// Humanize raw agent tool names into what the user actually cares about, so a
-// multi-minute evaluation reads as progress instead of a cryptic tool dump (#8).
-const STEP_LABELS: Record<string, string> = {
-  WebFetch: "Reading the posting",
-  WebSearch: "Searching the web",
-  Read: "Reading your CV & profile",
-  Glob: "Looking through your files",
-  Grep: "Looking through your files",
-  Write: "Writing the report",
-  Edit: "Updating the report",
-  NotebookEdit: "Updating the report",
-  Bash: "Saving to your tracker",
-  TodoWrite: "Planning the steps",
-  Task: "Working",
-};
-const humanizeStep = (label: string): string => STEP_LABELS[label] ?? label;
-
-// Auth/sign-in failures are the most common real error — detect them so we can give
-// a concrete next step instead of a dead end (#8).
-function isAuthError(job: Job): boolean {
-  if (job.status !== "error") return false;
-  const hay = `${job.steps[job.steps.length - 1]?.label ?? ""} ${job.text}`.toLowerCase();
-  return /auth|login|sign[ -]?in|credential|api[ -]?key|unauthorized|not authenticated|installed and authenticated/.test(hay);
-}
-
-const fmtElapsed = (ms: number): string => {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-};
-const fmtTokens = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
-
-// Tick once a second WHILE running so a long evaluation visibly counts up (never
-// looks frozen). Stops re-rendering as soon as the job settles.
-function useElapsed(running: boolean, startedAt: number): number {
-  const [now, setNow] = useState(startedAt);
-  useEffect(() => {
-    if (!running) return;
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [running, startedAt]);
-  return Math.max(0, now - startedAt);
-}
-
-// The ONE worker card — a pure function of a Job. Rendered in three surfaces:
-// the sidebar tray (variant="tray", inside WorkerPills' Link), inline in the
-// assistant chat (variant="inline"), and conceptually the /jobs/[id] timeline.
-// Keeping it single is what guarantees the human UI and the agentic UI stay
-// visually identical. TONE + pillTone live here (the canonical source).
+import { fmtElapsed, fmtTokens, humanizeStep, isAuthError, useElapsed } from "@/components/jobs/job-utils";
 
 export const TONE = {
   good: { bar: "bg-emerald-500/70", chip: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400", icon: "text-emerald-500" },
@@ -140,5 +90,4 @@ export function WorkerCard({
   );
 }
 
-// Re-exported icon used by callers that compose their own trailing affordances.
 export { X as DismissIcon };

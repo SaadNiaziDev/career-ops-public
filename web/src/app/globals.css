@@ -56,8 +56,16 @@
   --page-py: 1.5rem;
   --page-pb: 1.5rem;
   --section-gap: 1rem;
+  --block-gap: 1.5rem;
+  --inset-gap: 0.875rem;
+  --card-pad-x: 1.25rem;
+  --card-pad-y: 1.25rem;
   --hero-pad-x: 1.25rem;
   --hero-pad-y: 1.75rem;
+  /* Page max-widths — narrow forms, default dashboards, wide data views */
+  --page-width-narrow: 48rem;
+  --page-width-default: 72rem;
+  --page-width-wide: 80rem;
   color-scheme: light;
 }
 
@@ -67,6 +75,10 @@
     --page-py: 2rem;
     --page-pb: 2rem;
     --section-gap: 1.25rem;
+    --block-gap: 1.75rem;
+    --inset-gap: 1rem;
+    --card-pad-x: 1.375rem;
+    --card-pad-y: 1.375rem;
     --hero-pad-x: 1.75rem;
     --hero-pad-y: 2.25rem;
   }
@@ -229,7 +241,170 @@ html {
 .report-prose tbody tr:hover { background: color-mix(in srgb, var(--fg) 3%, transparent); }
 .report-prose img { border-radius: 0.5rem; }
 
-/* CostBadge (co-located → global): cost color-semantics, see cost-badge.tsx */
+/* Compact prose for report tabs / collapsed panels — tighter rhythm */
+.report-prose-compact {
+  color: color-mix(in srgb, var(--fg) 88%, transparent);
+  font-size: 0.875rem;
+  line-height: 1.65;
+}
+.report-prose-compact > :first-child { margin-top: 0; }
+.report-prose-compact h2,
+.report-prose-compact h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1rem 0 0.4rem;
+  border: none;
+  padding: 0;
+}
+.report-prose-compact p { margin: 0.55rem 0; }
+.report-prose-compact ul,
+.report-prose-compact ol { margin: 0.55rem 0; padding-left: 1.2rem; }
+.report-prose-compact li { margin: 0.2rem 0; }
+.report-prose-compact table { font-size: 0.8125rem; margin: 0.65rem 0; }
+.report-prose-compact th,
+.report-prose-compact td { padding: 0.4rem 0.55rem; }
+
+.report-page .report-verdict-alert .ant-alert-message {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+.report-page .report-verdict-alert {
+  border-left-width: 3px;
+  border-radius: 0.875rem;
+}
+.report-page .report-section-collapse .ant-collapse-header {
+  padding: 12px var(--card-pad-x) !important;
+}
+.report-page .report-meta-card .ant-descriptions-item-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.report-page .report-meta-card .ant-descriptions-item-content {
+  font-size: 13px;
+}
+
+/* ── Report hero header ──────────────────────────────────────────────────── */
+.report-hero {
+  isolation: isolate;
+}
+.report-score-badge {
+  display: flex;
+  align-items: baseline;
+  gap: 0.15rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.report-score-badge--good { border-color: color-mix(in srgb, var(--ant-color-success) 40%, transparent); background: color-mix(in srgb, var(--ant-color-success) 10%, var(--surface)); }
+.report-score-badge--warn { border-color: color-mix(in srgb, var(--ant-color-warning) 40%, transparent); background: color-mix(in srgb, var(--ant-color-warning) 10%, var(--surface)); }
+.report-score-badge--bad { border-color: color-mix(in srgb, var(--ant-color-error) 40%, transparent); background: color-mix(in srgb, var(--ant-color-error) 10%, var(--surface)); }
+.report-score-num {
+  font-family: var(--font-display);
+  font-size: 1.85rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.report-score-max {
+  font-size: 0.75rem;
+  color: var(--faint);
+}
+
+/* ── Section letter badges — encode the report's own A–G rubric blocks ──── */
+.report-letter-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.05rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--border);
+  background: var(--surface-hover);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* ── Top-level report sections (Full evaluation / Drafts / Technical) ───── */
+.report-page .report-toplevel-collapse {
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  background: var(--surface);
+  overflow: hidden;
+}
+.report-page .report-toplevel-collapse .ant-collapse-item {
+  border: none;
+}
+.report-page .report-toplevel-collapse .ant-collapse-header {
+  padding: 0.875rem 1.125rem !important;
+  transition: background-color 0.15s ease;
+}
+.report-page .report-toplevel-collapse .ant-collapse-header:hover {
+  background: var(--surface-hover);
+}
+.report-page .report-toplevel-collapse .ant-collapse-content-box {
+  padding: 0 1.125rem 1.125rem !important;
+}
+.report-page .report-section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.5rem;
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* ── Score meter apply-line marker — sits at the true 4.0/5.0 (80%) mark ── */
+.report-score-track {
+  padding-block: 2px;
+}
+.report-apply-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--fg) 35%, transparent);
+  pointer-events: none;
+}
+
+/* ── Sidebar rail action buttons — smaller, quieter than page-level CTAs ── */
+/* ── "At a glance" card — unify the score block and the stat rows ───────── */
+.report-page .report-glance-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-block: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+.report-page .report-glance-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.report-page .report-glance-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.report-page .report-glance-value {
+  min-width: 0;
+  text-align: right;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .co-cost{display:inline-flex;align-items:center;gap:.28rem;border-radius:999px;font-weight:600;line-height:1;white-space:nowrap;border:1px solid transparent}
 .co-cost[data-size="xs"]{font-size:10.5px;padding:.16rem .4rem;letter-spacing:.04em;text-transform:uppercase}
 .co-cost[data-size="sm"]{font-size:11px;padding:.24rem .5rem}
@@ -254,9 +429,61 @@ aside .ant-menu-item-selected a {
 }
 
 /* ── Dossier layout template (Today, Pipeline, Portals) ─────────────────── */
+.dossier-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--block-gap);
+}
+.dossier-inset-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--inset-gap);
+}
+.dossier-page-header {
+  margin-bottom: 0;
+}
 .dossier-page .ant-card {
   border-color: var(--border);
   box-shadow: none;
+}
+.dossier-page .ant-card > .ant-card-head {
+  padding: var(--card-pad-y) var(--card-pad-x);
+  min-height: auto;
+}
+.dossier-page .ant-card > .ant-card-body {
+  padding: var(--card-pad-y) var(--card-pad-x);
+}
+.dossier-page .ant-card.ant-card-small > .ant-card-head {
+  padding: calc(var(--card-pad-y) * 0.75) calc(var(--card-pad-x) * 0.85);
+}
+.dossier-page .ant-card.ant-card-small > .ant-card-body {
+  padding: calc(var(--card-pad-y) * 0.85) calc(var(--card-pad-x) * 0.9);
+}
+.dossier-page .ant-list .ant-list-item {
+  padding: 14px var(--card-pad-x) !important;
+}
+.dossier-page .ant-collapse > .ant-collapse-item > .ant-collapse-header {
+  padding: 14px var(--card-pad-x) !important;
+  align-items: center;
+}
+.dossier-page .ant-collapse .ant-collapse-content-box {
+  padding: var(--inset-gap) var(--card-pad-x) var(--card-pad-y) !important;
+}
+.dossier-page .ant-timeline {
+  margin-top: 4px;
+  padding-top: 0;
+}
+.dossier-page .ant-timeline .ant-timeline-item {
+  padding-bottom: calc(var(--inset-gap) + 2px);
+}
+.dossier-page .ant-empty {
+  padding: calc(var(--block-gap) * 1.25) var(--card-pad-x);
+}
+.dossier-page .ant-btn {
+  padding-inline: 16px;
+}
+.dossier-page .ant-segmented {
+  padding: 3px;
 }
 .dossier-hero-scrim {
   background: color-mix(in srgb, var(--surface) 62%, transparent);
@@ -357,7 +584,7 @@ html.dark .dossier-hero-scrim {
   width: 100%;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px !important;
+  gap: 6px !important;
 }
 .report-rail-actions .ant-space-item {
   width: 100%;
@@ -365,9 +592,19 @@ html.dark .dossier-hero-scrim {
 .report-rail-actions .ant-btn {
   width: 100%;
   justify-content: flex-start;
+  min-height: 34px;
+  padding: 6px 14px;
+  height: auto;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+}
+.report-rail-actions .ant-btn > .ant-btn-icon + span,
+.report-rail-actions .ant-btn > span + .ant-btn-icon {
+  margin-inline-start: 10px;
 }
 .report-rail-actions .co-cost {
   align-self: flex-start;
+  margin-top: 2px;
 }
 
 /* ── Lenis + page shell ───────────────────────────────────────────────────── */
@@ -392,6 +629,15 @@ html.dark .dossier-hero-scrim {
   margin-inline: auto;
   width: 100%;
   padding: var(--page-py) var(--page-px) var(--page-pb);
+}
+.page-width-narrow {
+  max-width: var(--page-width-narrow);
+}
+.page-width-default {
+  max-width: var(--page-width-default);
+}
+.page-width-wide {
+  max-width: var(--page-width-wide);
 }
 .page-shell > .ant-row {
   row-gap: var(--section-gap) !important;

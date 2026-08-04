@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default function AddJobPage() {
   return (
-    <PageShell width="3xl">
+    <PageShell width="narrow">
       <DossierHero
         eyebrow="Single posting"
         title="Add a job link"
