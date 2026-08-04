@@ -55,11 +55,20 @@ short message; otherwise run the LinkedIn power move below.
    - **Sentence 3 (CTA)**: "Looking forward to our conversation on [date]"
    - **Note**: Light tone, not desperate. The goal is to show that you prepared.
 
-5. **Versions**:
+5. **Two-tier LinkedIn output** — LinkedIn's connection-request note field is capped at
+   **200 characters**, not the DM composer. Generate both:
+   - **Connect note (≤200 chars, hard limit)** — the 3-sentence framework compressed to
+     fit. This is what actually gets sent with the connection request.
+   - **Post-accept follow-up (~300-400 chars)** — the fuller version of the same
+     message, to send once the connection is accepted, where there's no length cap.
+     Same persona emphasis and CTA, just room to breathe.
+   Count characters for both and label each with its count vs. its budget.
+
+6. **Versions**:
    - EN (default)
    - ES (if Spanish company)
 
-6. **Alternative targets** with justification for why they are good second choices
+7. **Alternative targets** with justification for why they are good second choices
 
 **Contact channel preference:** Read `contact_preferences.preferred_channel` from
 `config/profile.yml`. If it is absent or set to `"either"`, write the CTA
@@ -75,7 +84,9 @@ the CTA phrasing (e.g. "screens unknown numbers" → prefer email wording) but d
 not quote the note verbatim in a public-facing message.
 
 **Message rules:**
-- Maximum 300 characters (LinkedIn connection request limit)
+- Connect note: maximum 200 characters (LinkedIn's actual connection-request-note limit).
+  Post-accept follow-up: no hard cap, but keep it tight (~300-400 chars) — this is
+  outreach, not an email.
 - NO corporate-speak
 - NO "I'm passionate about..."
 - Something that makes them want to respond

@@ -2,20 +2,19 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
+import { CheckOutlined } from "@ant-design/icons";
+import { Select, Space, Typography } from "antd";
 import { CANONICAL_STATES } from "@/lib/format";
 
-// Status writeback control. Updates the existing tracker row (status cell) via
-// /api/status — never adds rows. Reverts on failure; confirms with the
-// terminal-popup animation.
+const { Text } = Typography;
+
 export function StatusSelect({ n, current }: { n: string; current: string }) {
   const [status, setStatus] = useState(current);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
 
-  async function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const next = e.target.value;
+  async function onChange(next: string) {
     const prev = status;
     setStatus(next);
     setBusy(true);
@@ -30,34 +29,33 @@ export function StatusSelect({ n, current }: { n: string; current: string }) {
       setTimeout(() => setSaved(false), 2000);
       router.refresh();
     } catch {
-      setStatus(prev); // revert on failure
+      setStatus(prev);
     } finally {
       setBusy(false);
     }
   }
 
   const known = (CANONICAL_STATES as readonly string[]).includes(status);
+  const options = [
+    ...(!known ? [{ value: status, label: status }] : []),
+    ...CANONICAL_STATES.map((s) => ({ value: s, label: s })),
+  ];
+
   return (
-    <span className="inline-flex items-center gap-2">
-      <label className="text-xs text-faint">status</label>
-      <select
+    <Space size={8}>
+      <Select
         value={status}
         onChange={onChange}
         disabled={busy}
-        className="rounded-md border border-border bg-surface px-2.5 py-1 text-sm text-foreground outline-none transition-colors focus:border-brand/50 disabled:opacity-50 max-sm:min-h-[44px]"
-      >
-        {!known && <option value={status}>{status}</option>}
-        {CANONICAL_STATES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
+        options={options}
+        size="small"
+        style={{ minWidth: 120 }}
+      />
       {saved && (
-        <span className="animate-terminal-popup inline-flex items-center gap-1 text-xs font-medium text-brand">
-          <Check className="size-3" /> saved
-        </span>
+        <Text type="success" className="text-xs">
+          <CheckOutlined /> saved
+        </Text>
       )}
-    </span>
+    </Space>
   );
 }

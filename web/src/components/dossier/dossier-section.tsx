@@ -22,14 +22,14 @@ export function DossierSection({
     <Card
       className={className}
       title={
-        <Space size={8}>
+        <Space size={10}>
           {icon}
           <span>{title}</span>
         </Space>
       }
       extra={extra ?? (hint ? <Typography.Text type="secondary" className="text-xs">{hint}</Typography.Text> : undefined)}
     >
-      {children}
+      <div className="dossier-inset-stack">{children}</div>
     </Card>
   );
 }

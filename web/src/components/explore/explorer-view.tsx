@@ -1,13 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Compass, ChevronDown, RotateCcw, AlertTriangle, Sparkles, Settings } from "lucide-react";
+import {
+  CompassOutlined,
+  ReloadOutlined,
+  SettingOutlined,
+  ThunderboltOutlined,
+  WarningOutlined,
+} from "@ant-design/icons";
 import Link from "next/link";
-import { cn } from "@/lib/cn";
-import { instrumentSerif } from "@/lib/fonts";
+import { Alert, Button, Card, Collapse, Empty, Space, Tag, Typography } from "antd";
 import type { Application, InboxJob } from "@/lib/career-ops";
 import { paramsToFilters, paramsToAi, type ExploreFilters } from "@/lib/explore";
 import { useCliConfig, resolveCliIdForRun } from "@/lib/cli-config";
+import { PageShell } from "@/components/dossier/page-shell";
+import { DossierStack } from "@/components/dossier/dossier-stack";
 import { FilterBuilder } from "./filter-builder";
 import { DiscoveringState } from "./discovering-state";
 import { AiHuntView } from "./ai-hunt-view";
@@ -15,6 +22,8 @@ import { ExploreModeToggle } from "./explore-mode-toggle";
 import { AiSearchBox } from "./ai-search-box";
 import { ResultsList, type EnrichedOffer } from "./results-list";
 import { useExplore } from "./explore-provider";
+
+const { Title, Paragraph, Text } = Typography;
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -82,31 +91,37 @@ export function ExplorerView({
   const isResults = phase === "results";
 
   return (
-    <div className="mx-auto max-w-5xl px-5 py-8 md:px-8">
-      <header className="mb-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2.5">
-            <Compass className="size-6 text-brand" />
-            <h1 className={`${instrumentSerif.className} text-3xl text-foreground`}>Explore</h1>
-            <span className="rounded-full border border-brand/30 bg-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-text">New</span>
-          </div>
+    <PageShell width="default">
+      <DossierStack>
+      <header>
+        <div className="flex flex-wrap items-center gap-4">
+          <Space>
+            <CompassOutlined className="text-xl text-[var(--ant-color-primary)]" />
+            <Title level={2} className="!mb-0 !font-display">
+              Explore
+            </Title>
+            <Tag color="orange">New</Tag>
+          </Space>
           <div className="w-full sm:ml-auto sm:w-auto">
             <ExploreModeToggle mode={mode} onChange={setMode} cliConfigured={cliConfigured} />
           </div>
         </div>
         {!isResults && (
-          <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
+          <Paragraph type="secondary" className="!mt-3 max-w-2xl">
             {isAi
               ? "Describe the role in plain language — an AI hunts the open web for it, on your own AI. Candidates are unverified until you evaluate."
               : "Scan the public ATS network — Greenhouse, Lever, Ashby, Workday. Fresh postings matched to you, zero tokens. You only spend when you choose to evaluate one."}
-          </p>
+          </Paragraph>
         )}
       </header>
 
       {!rootExists && (
-        <div className="mb-5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-          Your career-ops home isn’t set up yet — discovery needs a checkout with a profile to seed from.
-        </div>
+        <Alert
+          className="mb-5"
+          type="warning"
+          showIcon
+          message="Your career-ops home isn't set up yet — discovery needs a checkout with a profile to seed from."
+        />
       )}
 
       {isAi ? (
@@ -144,34 +159,51 @@ export function ExplorerView({
       ) : (
         <>
           {isResults ? (
-            <div className="mb-6 rounded-xl border border-border bg-surface/30">
-              <button type="button" onClick={() => setRefineOpen((v) => !v)} className="flex w-full items-center gap-2 px-4 py-3 text-sm font-medium text-foreground">
-                <Compass className="size-4 text-brand" /> Refine search
-                <ChevronDown className={cn("ml-auto size-4 text-muted transition-transform", refineOpen && "rotate-180")} />
-              </button>
-              {refineOpen && (
-                <div className="space-y-4 border-t border-border p-4">
-                  <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
-                  <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Re-cast (free)" />
-                </div>
-              )}
-            </div>
+            <Collapse
+              className="mb-6"
+              items={[
+                {
+                  key: "refine",
+                  label: (
+                    <Space>
+                      <CompassOutlined />
+                      Refine search
+                    </Space>
+                  ),
+                  children: (
+                    <Space direction="vertical" className="w-full" size={16}>
+                      <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
+                      <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Re-cast (free)" />
+                    </Space>
+                  ),
+                },
+              ]}
+              activeKey={refineOpen ? ["refine"] : []}
+              onChange={(keys) => setRefineOpen(keys.includes("refine"))}
+            />
           ) : (
-            <div className="mb-6 rounded-2xl border border-border bg-surface/30 p-5">
+            <Card className="mb-6">
               <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
               <div className="mt-5">
                 <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Discover (free)" />
               </div>
-            </div>
+            </Card>
           )}
 
           {isResults && firstRun && (
-            <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
-              <Sparkles className="mt-0.5 size-4 shrink-0 text-emerald-500" />
-              <p className="text-[13px] leading-relaxed text-foreground">
-                These are live roles that match your CV. <span className="text-emerald-600 dark:text-emerald-400">Nothing here cost you a token.</span> Pick the one you&apos;re most curious about — Evaluate it and I&apos;ll tell you exactly how you score, and why.
-              </p>
-            </div>
+            <Alert
+              className="mb-4"
+              type="success"
+              showIcon
+              icon={<ThunderboltOutlined />}
+              message={
+                <>
+                  These are live roles that match your CV.{" "}
+                  <Text type="success">Nothing here cost you a token.</Text> Pick the one you&apos;re most curious about
+                  — Evaluate it and I&apos;ll tell you exactly how you score, and why.
+                </>
+              }
+            />
           )}
 
           {isResults && capHit && (
@@ -218,42 +250,44 @@ export function ExplorerView({
           {phase === "failed" && <FailedCard msg={error || status} onRetry={() => void discover()} />}
         </>
       )}
-    </div>
+      </DossierStack>
+    </PageShell>
   );
 }
 
 function DiscoverBar({ canDiscover, onDiscover, label }: { canDiscover: boolean; onDiscover: () => void; label: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <button
-        type="button"
-        disabled={!canDiscover}
-        onClick={onDiscover}
-        className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-brand-foreground shadow-sm transition-all hover:brightness-110 disabled:opacity-50 max-sm:min-h-[44px]"
-      >
-        <Compass className="size-4" /> {label}
-      </button>
-      <span className="inline-flex items-center gap-1.5 text-[12px] text-muted">
-        <span className="size-1.5 rounded-full bg-emerald-500" />
+    <Space wrap>
+      <Button type="primary" icon={<CompassOutlined />} disabled={!canDiscover} onClick={onDiscover}>
+        {label}
+      </Button>
+      <Text type="secondary" className="text-xs">
         Evaluating a role later costs tokens. Discovering never does.
-      </span>
-    </div>
+      </Text>
+    </Space>
   );
 }
 
 function EmptyState({ tone, title, body, note, onRerun, rerunLabel }: { tone: "good" | "loose"; title: string; body: string; note?: string; onRerun: () => void; rerunLabel: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface/30 px-6 py-12 text-center">
-      <div className={cn("mx-auto grid size-12 place-items-center rounded-full", tone === "good" ? "bg-emerald-500/12 text-emerald-500" : "bg-brand-soft text-brand")}>
-        <Sparkles className="size-6" />
-      </div>
-      <h2 className={`${instrumentSerif.className} mt-4 text-2xl text-foreground`}>{title}</h2>
-      <p className="mx-auto mt-1.5 max-w-md text-sm text-muted">{body}</p>
-      {note && <p className="mx-auto mt-1 max-w-md text-[12px] text-faint">{note}</p>}
-      <button onClick={onRerun} className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface/50 px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand/40 hover:text-brand">
-        <RotateCcw className="size-4" /> {rerunLabel}
-      </button>
-    </div>
+    <Card>
+      <Empty
+        image={<ThunderboltOutlined className={tone === "good" ? "text-emerald-500" : "text-[var(--ant-color-primary)]"} style={{ fontSize: 48 }} />}
+        description={
+          <>
+            <Title level={4} className="!font-display">
+              {title}
+            </Title>
+            <Paragraph type="secondary">{body}</Paragraph>
+            {note && <Text type="secondary" className="text-xs">{note}</Text>}
+          </>
+        }
+      >
+        <Button icon={<ReloadOutlined />} onClick={onRerun}>
+          {rerunLabel}
+        </Button>
+      </Empty>
+    </Card>
   );
 }
 
@@ -289,95 +323,121 @@ function DegradedCard({
     body = `The scan searched ${companiesScanned.toLocaleString()} companies, but one or more sources didn’t respond — so this is a partial result, not “all caught up”. A retry usually clears it.`;
   }
   return (
-    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5 text-center">
-      <AlertTriangle className="mx-auto size-6 text-amber-500" />
-      <p className="mt-2 text-sm font-medium text-foreground">{title}</p>
-      <p className="mx-auto mt-1 max-w-md text-[13px] text-muted">{body}</p>
-      <button onClick={onRetry} className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-brand-soft px-3 py-1.5 text-sm font-medium text-brand">
-        <RotateCcw className="size-4" /> Retry the scan
-      </button>
-    </div>
+    <Alert
+      type="warning"
+      showIcon
+      icon={<WarningOutlined />}
+      message={title}
+      description={
+        <>
+          <Paragraph className="!mb-2">{body}</Paragraph>
+          <Button type="primary" icon={<ReloadOutlined />} onClick={onRetry}>
+            Retry the scan
+          </Button>
+        </>
+      }
+    />
   );
 }
 
 function CappedBanner({ companiesScanned, companiesAvailable, onRefine }: { companiesScanned: number; companiesAvailable: number; onRefine: () => void }) {
-  // Results ARE present, but the scan was capped — tell the user there's more, so a
-  // partial list never reads as "everything there is".
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] px-4 py-2.5 text-[13px]">
-      <span className="text-foreground">
-        Showing a capped slice — searched {companiesScanned.toLocaleString()}
-        {companiesAvailable > companiesScanned ? ` of ${companiesAvailable.toLocaleString()}` : ""} companies.
-      </span>
-      <button onClick={onRefine} className="font-medium text-brand hover:underline">
-        Raise scan depth to search deeper
-      </button>
-    </div>
+    <Alert
+      className="mb-4"
+      type="warning"
+      showIcon
+      message={
+        <>
+          Showing a capped slice — searched {companiesScanned.toLocaleString()}
+          {companiesAvailable > companiesScanned ? ` of ${companiesAvailable.toLocaleString()}` : ""} companies.{" "}
+          <Button type="link" size="small" onClick={onRefine} className="px-0">
+            Raise scan depth to search deeper
+          </Button>
+        </>
+      }
+    />
   );
 }
 
 function FailedCard({ msg, onRetry }: { msg: string; onRetry: () => void }) {
-  // The scanner-missing 400 (data-only / pre-scan-ats-full checkout) must NOT
-  // offer a "Try again" that re-fails forever — give a real next step instead.
   const scannerMissing = /isn'?t available|data only|complete career-ops checkout|scanner/i.test(msg);
   if (scannerMissing) {
     return (
-      <div className="rounded-2xl border border-border bg-surface/30 px-6 py-10 text-center">
-        <div className="mx-auto grid size-12 place-items-center rounded-full bg-brand-soft text-brand">
-          <Compass className="size-6" />
-        </div>
-        <h2 className={`${instrumentSerif.className} mt-4 text-2xl text-foreground`}>Discovery needs the full toolkit</h2>
-        <p className="mx-auto mt-1.5 max-w-md text-sm text-muted">
-          Your career-ops home looks data-only or is on an older version. The free scanner ships with a complete checkout —
-          update career-ops, or paste a job URL on the pipeline to evaluate it directly.
-        </p>
-        <div className="mt-4 flex flex-wrap justify-center gap-2">
-          <Link href="/pipeline" className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-brand-foreground transition hover:brightness-110">
-            Open pipeline
-          </Link>
-          <Link href="/config" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-sm font-medium text-foreground transition hover:border-brand/40 hover:text-brand">
-            Open Config
-          </Link>
-        </div>
-      </div>
+      <Card>
+        <Empty
+          image={<CompassOutlined style={{ fontSize: 48, color: "var(--ant-color-primary)" }} />}
+          description={
+            <>
+              <Title level={4} className="!font-display">
+                Discovery needs the full toolkit
+              </Title>
+              <Paragraph type="secondary">
+                Your career-ops home looks data-only or is on an older version. The free scanner ships with a complete
+                checkout — update career-ops, or paste a job URL on the pipeline to evaluate it directly.
+              </Paragraph>
+            </>
+          }
+        >
+          <Space>
+            <Link href="/pipeline">
+              <Button type="primary">Open pipeline</Button>
+            </Link>
+            <Link href="/config">
+              <Button>Open Config</Button>
+            </Link>
+          </Space>
+        </Empty>
+      </Card>
     );
   }
   return (
-    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5 text-center">
-      <AlertTriangle className="mx-auto size-6 text-amber-500" />
-      <p className="mt-2 text-sm font-medium text-foreground">Couldn’t finish the search.</p>
-      <p className="mt-1 text-[13px] text-muted">{msg}</p>
-      <button onClick={onRetry} className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-brand-soft px-3 py-1.5 text-sm font-medium text-brand">
-        <RotateCcw className="size-4" /> Try again
-      </button>
-    </div>
+    <Alert
+      type="warning"
+      showIcon
+      icon={<WarningOutlined />}
+      message="Couldn't finish the search."
+      description={
+        <>
+          <Paragraph className="!mb-2">{msg}</Paragraph>
+          <Button icon={<ReloadOutlined />} onClick={onRetry}>
+            Try again
+          </Button>
+        </>
+      }
+    />
   );
 }
 
 function BlockedCard({ onRetry }: { onRetry?: () => void }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface/30 px-6 py-12 text-center">
-      <div className="mx-auto grid size-12 place-items-center rounded-full bg-brand-soft text-brand">
-        <Sparkles className="size-6" />
-      </div>
-      <h2 className={`${instrumentSerif.className} mt-4 text-2xl text-foreground`}>AI search needs a CLI</h2>
-      <p className="mx-auto mt-1.5 max-w-md text-sm text-muted">
-        Install and select Claude Code or Codex in Config — your key, your tokens, your machine. The free Scan works without one.
-      </p>
-      <div className="mt-4 flex flex-wrap justify-center gap-2">
-        {onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-sm font-medium text-foreground transition hover:border-brand/40 hover:text-brand"
-          >
-            <RotateCcw className="size-4" /> Check again
-          </button>
-        )}
-        <Link href="/config" className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-brand-foreground transition hover:brightness-110">
-          <Settings className="size-4" /> Open Config
-        </Link>
-      </div>
-    </div>
+    <Card>
+      <Empty
+        image={<ThunderboltOutlined style={{ fontSize: 48, color: "var(--ant-color-primary)" }} />}
+        description={
+          <>
+            <Title level={4} className="!font-display">
+              AI search needs a CLI
+            </Title>
+            <Paragraph type="secondary">
+              Install and select Claude Code or Codex in Config — your key, your tokens, your machine. The free Scan
+              works without one.
+            </Paragraph>
+          </>
+        }
+      >
+        <Space>
+          {onRetry && (
+            <Button icon={<ReloadOutlined />} onClick={onRetry}>
+              Check again
+            </Button>
+          )}
+          <Link href="/config">
+            <Button type="primary" icon={<SettingOutlined />}>
+              Open Config
+            </Button>
+          </Link>
+        </Space>
+      </Empty>
+    </Card>
   );
 }

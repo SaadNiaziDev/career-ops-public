@@ -21,7 +21,7 @@ Point at another checkout with `CAREER_OPS_ROOT=/path/to/career-ops` in `web/.en
 
 ## Agents
 
-Background workers (evaluate, PDF, research) run through **Claude Code** or **Codex** — pick one in **Config**. Use **Cursor** in the repo for day-to-day editing; it loads the same skill via `.cursor/skills/career-ops/`.
+Background workers (evaluate, PDF, research) run through **Claude Code**, **Codex**, or **Cursor Agent CLI** — pick one in **Config**. Interactive Cursor also loads the same skill via `.cursor/skills/career-ops/`.
 
 ## Features
 

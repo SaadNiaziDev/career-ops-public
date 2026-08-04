@@ -42,6 +42,7 @@ Paste a job URL in chat for **auto-pipeline**, or invoke modes from your CLI:
 ```bash
 claude -p "Evaluate this JD with career-ops auto-pipeline: https://company.com/jobs/123"
 codex exec "Run career-ops scan mode in this repo."
+agent -p --force "Run career-ops scan mode in this repo."
 ```
 
 **Codex note:** start an interactive session with `codex`. Slash commands are not guaranteed in Codex, so use plain-language prompts if `/career-ops` is unavailable:

@@ -6,7 +6,7 @@ Based on [career-ops](https://github.com/santifer/career-ops) by [santifer](http
 
 **Start:** `npm run web:dev` → http://localhost:3000
 
-**Modes:** `claude -p "Run career-ops [mode]"` or `codex exec "Run career-ops [mode]"`
+**Modes:** `claude -p "Run career-ops [mode]"`, `codex exec "Run career-ops [mode]"`, or `agent -p --force "Run career-ops [mode]"`
 
 Example modes: `auto-pipeline` (evaluate URL), `scan` (portal scrape), `oferta` (offer eval), `pdf` (generate CV), `interview-prep`.
 

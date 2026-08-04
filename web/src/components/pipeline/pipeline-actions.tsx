@@ -23,7 +23,13 @@ type DraftState = { kind: DraftKind; content: string } | null;
 const KIND_LABEL: Record<DraftKind, string> = {
   cover: "Cover letter",
   email: "Application email",
-  contacto: "Contacts & outreach",
+  contacto: "Outreach contacts",
+};
+
+const RUN_LABEL: Record<DraftKind, string> = {
+  cover: "Write cover letter",
+  email: "Draft application email",
+  contacto: "Find people to reach out to",
 };
 
 export function PipelineActions({
@@ -32,17 +38,20 @@ export function PipelineActions({
   role,
   url,
   pdfReady,
+  variant = "inline",
 }: {
   n: string;
   company: string;
   role?: string;
   url?: string;
   pdfReady: boolean;
+  variant?: "inline" | "rail";
 }) {
   const { jobs, startJob } = useJobs();
   const [draft, setDraft] = useState<DraftState>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [available, setAvailable] = useState<DraftKind[]>([]);
+  const rail = variant === "rail";
 
   const loadDrafts = useCallback(() => {
     fetch(`/api/drafts?n=${encodeURIComponent(n)}`)
@@ -69,15 +78,15 @@ export function PipelineActions({
     return active?.kind as DraftKind | undefined;
   }, [jobs, n]);
 
-  const run = (kind: DraftKind, title: string) => {
+  const run = (kind: DraftKind) => {
     const id = startJob({
-      title,
+      title: `${KIND_LABEL[kind]} · ${company}`,
       subtitle: role ?? company,
       kind,
       input: n,
       page: `/pipeline/${n}`,
     });
-    if (id) message.info(`Started ${KIND_LABEL[kind].toLowerCase()} worker — check Workers for progress.`);
+    if (id) message.info(`Started ${KIND_LABEL[kind].toLowerCase()} — check Workers for progress.`);
   };
 
   const openDraft = async (kind: DraftKind) => {
@@ -91,40 +100,56 @@ export function PipelineActions({
     setDrawerOpen(true);
   };
 
-  const actionBtn = (kind: DraftKind, icon: ReactNode, label: string) => {
+  const actionBtn = (kind: DraftKind, icon: ReactNode) => {
     const has = available.includes(kind);
     const running = runningKind === kind;
+    const label = has ? `View ${KIND_LABEL[kind].toLowerCase()}` : RUN_LABEL[kind];
     return (
       <Button
         key={kind}
+        block={rail}
+        type={rail && kind === "cover" && !has ? "default" : undefined}
         icon={running ? <LoadingOutlined /> : icon}
         loading={running}
-        onClick={() => (has ? openDraft(kind) : run(kind, label))}
+        onClick={() => (has ? openDraft(kind) : run(kind))}
         onContextMenu={(e) => {
           e.preventDefault();
-          run(kind, label);
+          run(kind);
         }}
       >
-        {has ? `View ${KIND_LABEL[kind].toLowerCase()}` : label}
+        {label}
       </Button>
     );
   };
 
+  const actions = (
+    <>
+      <GeneratePdfButton n={n} company={company} pdfReady={pdfReady} rail={rail} />
+      {actionBtn("cover", <FileTextOutlined />)}
+      {actionBtn("email", <MailOutlined />)}
+      {actionBtn("contacto", <TeamOutlined />)}
+      <ApplyButton n={n} url={url?.startsWith("http") ? url : undefined} company={company} pdfReady={pdfReady} rail={rail} />
+      {available.length > 0 && (
+        <Button type="link" size="small" block={rail} icon={<EyeOutlined />} onClick={() => openDraft(available[0])}>
+          Open latest draft
+        </Button>
+      )}
+      {!rail && <CostBadge kind="spend" size="xs" />}
+    </>
+  );
+
   return (
     <>
-      <Space wrap size="small" className="pipeline-actions">
-        <GeneratePdfButton n={n} company={company} pdfReady={pdfReady} />
-        {actionBtn("cover", <FileTextOutlined />, `Cover · ${company}`)}
-        {actionBtn("email", <MailOutlined />, `Email · ${company}`)}
-        {actionBtn("contacto", <TeamOutlined />, `Find contacts · ${company}`)}
-        <ApplyButton n={n} url={url?.startsWith("http") ? url : undefined} company={company} pdfReady={pdfReady} />
-        {available.length > 0 && (
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => openDraft(available[0])}>
-            Open latest draft
-          </Button>
-        )}
-        <CostBadge kind="spend" size="xs" />
-      </Space>
+      {rail ? (
+        <Space direction="vertical" size={6} className="report-rail-actions w-full">
+          {actions}
+          <CostBadge kind="spend" size="xs" className="mt-0.5" />
+        </Space>
+      ) : (
+        <Space wrap size="middle" className="pipeline-actions w-full">
+          {actions}
+        </Space>
+      )}
 
       <Drawer
         title={draft ? KIND_LABEL[draft.kind] : "Draft"}
@@ -149,10 +174,10 @@ export function PipelineActions({
         {draft && (
           <>
             <Tag color="orange">Draft only — review before sending</Tag>
-            <Typography.Paragraph type="secondary" className="!mt-3 !mb-4 text-xs">
-              Right-click any action button to regenerate. Contacts also appear on the Outreach page.
+            <Typography.Paragraph type="secondary" className="mt-3! mb-4! text-xs">
+              Right-click any action to regenerate. Contacts also appear on Outreach.
             </Typography.Paragraph>
-            <article data-lenis-prevent className="report-prose max-h-[70vh] overflow-y-auto">
+            <article data-lenis-prevent className="report-prose-compact max-h-[70vh] overflow-y-auto">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{draft.content}</ReactMarkdown>
             </article>
           </>

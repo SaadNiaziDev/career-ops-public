@@ -97,7 +97,7 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
   ];
 
   return (
-    <PageShell width="6xl">
+    <PageShell width="default">
       <DossierHero
         eyebrow="Outreach ledger"
         title="Contacts & applications memory"

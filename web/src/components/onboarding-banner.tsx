@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, X } from "lucide-react";
+import { PageShell } from "@/components/dossier/page-shell";
 
 type Doctor = { available: boolean; onboardingNeeded: boolean; missing: string[]; warnings: string[] };
 
@@ -36,7 +37,7 @@ export function OnboardingBanner() {
   const primary = d.missing.map((m) => SETUP_LINKS[m]).find(Boolean);
 
   return (
-    <div className="page-shell max-w-6xl pb-0!">
+    <PageShell width="default" className="pb-0!">
       <div className="dot-bg relative overflow-hidden rounded-2xl border border-brand/30 bg-gradient-to-br from-brand/10 via-surface/40 to-transparent p-5">
         <button
           onClick={() => setDismissed(true)}
@@ -58,6 +59,6 @@ export function OnboardingBanner() {
           </Link>
         )}
       </div>
-    </div>
+    </PageShell>
   );
 }

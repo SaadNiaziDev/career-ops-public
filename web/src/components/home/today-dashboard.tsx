@@ -78,7 +78,7 @@ export function TodayDashboard({
   const actionCount = overdue + awaiting.length + Math.min(newThisWeek, 6);
 
   return (
-    <PageShell width="6xl">
+    <PageShell width="default">
       <DossierHero
         eyebrow={`Job search dossier · ${dateLabel}`}
         title={

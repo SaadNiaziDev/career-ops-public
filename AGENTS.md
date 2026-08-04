@@ -68,7 +68,7 @@ Local-first job search automation: pipeline tracking, offer evaluation, CV/PDF g
 | **Web UI** (`web/`) | Primary dashboard — Today, Explore, Pipeline, Apply, Analytics, CV, Config |
 | **Claude Code** | Interactive agent + headless workers (`claude -p "..."`) |
 | **Codex** | Headless workers (`codex exec "..."`) — see `CODEX.md` / `docs/CODEX.md` |
-| **Cursor** | Dev/customization via `.cursor/skills/career-ops/` — not a web subprocess target |
+| **Cursor** | Interactive IDE (`.cursor/skills/career-ops/`) + headless workers (`agent -p --force "..."` / `cursor-agent`) |
 
 ### Codex invocation
 
@@ -209,6 +209,7 @@ Quality over quantity. Never submit without user review. Strongly discourage app
 |-----|---------|
 | Claude Code | `claude -p "prompt"` |
 | Codex | `codex exec "prompt"` |
+| Cursor | `agent -p --force "prompt"` (or `cursor-agent`) |
 
 **Parallel fan-outs:** reserve report numbers first: `node reserve-report-num.mjs --count N`. Never let parallel workers compute `max+1` themselves.
 
