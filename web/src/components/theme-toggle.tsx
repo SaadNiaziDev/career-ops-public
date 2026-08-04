@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sun, Moon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { cn } from "@/lib/cn";
 
 const KEY = "career-ops:theme";
@@ -18,28 +17,27 @@ export function ThemeToggle({ className }: { className?: string }) {
     const next = !dark;
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
-    // keep the browser chrome (Safari status bar / Dynamic Island) tinted to match
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", next ? "#0a0a0a" : "#f7f6f3");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", next ? "#191211" : "#191211");
     try {
       localStorage.setItem(KEY, next ? "dark" : "light");
     } catch {
       /* ignore */
     }
-    // let theme-reactive components (shaders) re-read
     window.dispatchEvent(new Event("themechange"));
   }
 
   return (
-    <Button
-      variant="ghost"
-      size="icon"
+    <button
       type="button"
       onClick={toggle}
       aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
       title={dark ? "Light mode" : "Dark mode"}
-      className={cn("text-muted", className)}
+      className={cn(
+        "inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-[var(--md-sys-shape-corner-full)] text-[var(--md-sys-color-on-surface-variant)] transition-colors hover:bg-[var(--md-sys-color-surface-container-high)]",
+        className,
+      )}
     >
-      {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-    </Button>
+      <MaterialSymbol name={dark ? "light_mode" : "dark_mode"} size={22} />
+    </button>
   );
 }

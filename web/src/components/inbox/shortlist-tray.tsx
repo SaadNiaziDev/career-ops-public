@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Coins, Settings, Sparkles, X } from "lucide-react";
 import { CompanyLogo } from "@/components/company-logo";
 import { CostBadge } from "@/components/cost/cost-badge";
+import { MaterialSymbol } from "@/components/material-symbol";
+import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { cn } from "@/lib/cn";
 
 export type ShortItem = { url: string; company: string; role: string };
@@ -61,7 +62,7 @@ export function ShortlistTray({
                     aria-label={`Remove ${it.company}`}
                     className="inline-flex items-center justify-center rounded-md p-1 text-faint transition-colors hover:text-foreground max-sm:min-h-[44px] max-sm:min-w-[44px]"
                   >
-                    <X className="size-4" />
+                    <MaterialSymbol name="close" size={18} />
                   </button>
                 </li>
               ))}
@@ -75,7 +76,11 @@ export function ShortlistTray({
               onClick={() => setOpen((v) => !v)}
               className="inline-flex items-center gap-1.5 text-sm font-medium max-sm:min-h-[44px]"
             >
-              <ChevronDown className={cn("size-4 text-muted transition-transform", open && "rotate-180")} />
+              <MaterialSymbol
+                name="expand_more"
+                size={18}
+                className={cn("text-muted transition-transform", open && "rotate-180")}
+              />
               Shortlist <span className="tabular-nums text-brand-text">({n})</span>
             </button>
 
@@ -87,15 +92,10 @@ export function ShortlistTray({
 
             <div className="ml-auto flex items-center gap-2">
               {!confirming ? (
-                <button
-                  type="button"
-                  onClick={() => setConfirming(true)}
-                  className="inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-medium text-brand-foreground transition-colors hover:bg-brand-200 max-sm:min-h-[44px]"
-                >
-                  <Sparkles className="size-4" />
-                  <span>Score {n}</span>
-                  <span className="hidden text-xs font-normal text-brand-foreground/80 sm:inline">· {costText}</span>
-                </button>
+                <Md3ActionButton variant="filled" icon="auto_awesome" cost="spend" onClick={() => setConfirming(true)}>
+                  Score {n}
+                  <span className="hidden text-xs font-normal opacity-80 sm:inline">· {costText}</span>
+                </Md3ActionButton>
               ) : (
                 <ConfirmScore n={n} costText={costText} hasCli={hasCli} onCancel={() => setConfirming(false)} onConfirm={() => { setConfirming(false); onScore(); }} />
               )}
@@ -128,32 +128,28 @@ function ConfirmScore({
 }) {
   if (!hasCli) {
     return (
-      <div className="flex items-center gap-2 text-xs">
+      <div className="md3-actions-row text-xs">
         <span className="text-muted">No AI configured.</span>
         <Link href="/config" className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-brand-soft px-3 py-1.5 font-medium text-brand max-sm:min-h-[44px]">
-          <Settings className="size-3.5" /> Set up
+          <MaterialSymbol name="settings" size={16} /> Set up
         </Link>
-        <button type="button" onClick={onCancel} className="text-faint hover:text-foreground max-sm:min-h-[44px]">
+        <Md3ActionButton variant="text" onClick={onCancel}>
           Cancel
-        </button>
+        </Md3ActionButton>
       </div>
     );
   }
   return (
-    <div className="flex items-center gap-2">
+    <div className="md3-actions-row">
       <span className="hidden items-center gap-1 text-[11px] text-muted sm:inline-flex">
-        <Coins className="size-3.5 text-brand" /> {costText}
+        <CostBadge kind="spend" size="xs" /> {costText}
       </span>
-      <button
-        type="button"
-        onClick={onConfirm}
-        className="inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-medium text-brand-foreground transition-colors hover:bg-brand-200 max-sm:min-h-[44px]"
-      >
+      <Md3ActionButton variant="filled" icon="auto_awesome" cost="spend" onClick={onConfirm}>
         Score {n} now
-      </button>
-      <button type="button" onClick={onCancel} className="rounded-full px-2 py-2 text-xs text-faint transition-colors hover:text-foreground max-sm:min-h-[44px]">
+      </Md3ActionButton>
+      <Md3ActionButton variant="text" onClick={onCancel}>
         Cancel
-      </button>
+      </Md3ActionButton>
     </div>
   );
 }

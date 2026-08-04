@@ -1,17 +1,104 @@
 # career-ops
 
-Local-first AI job search automation — web dashboard plus Claude Code, Codex, and Cursor agents.
+Local-first AI job search automation — a web dashboard plus Claude Code, Codex, and Cursor agents. Scan job portals, evaluate listings against a structured A–F rubric, tailor your CV, and track applications, all running on your own machine.
 
-Based on [career-ops](https://github.com/santifer/career-ops) by [santifer](https://santifer.io). Maintained by Saad Ali Khan as a UI-first fork with a public release at [SaadNiaziDev/career-ops-public](https://github.com/SaadNiaziDev/career-ops-public).
+> **Fork notice.** This is a UI-first fork of [santifer/career-ops](https://github.com/santifer/career-ops) by [Santiago Fernández de Valderrama](https://santifer.io) — all credit for the original agent pipeline, scoring rubric, and provider architecture goes to the upstream project. This fork (maintained by [Saad Ali Khan](https://github.com/SaadNiaziDev)) adds a local web dashboard, a Material Design 3 UI, and a Pakistan-market portal base list, and re-releases it publicly at [SaadNiaziDev/career-ops-public](https://github.com/SaadNiaziDev/career-ops-public). Licensed MIT — see [LICENSE](LICENSE).
 
-**Start:** `npm run web:dev` → http://localhost:3000
+## Quick start
 
-**Modes:** `claude -p "Run career-ops [mode]"`, `codex exec "Run career-ops [mode]"`, or `agent -p --force "Run career-ops [mode]"`
+```bash
+git clone https://github.com/SaadNiaziDev/career-ops-public.git career-ops
+cd career-ops
+npm install
+npm run web:install
+npx playwright install chromium
+npm run web:dev
+```
 
-Example modes: `auto-pipeline` (evaluate URL), `scan` (portal scrape), `oferta` (offer eval), `pdf` (generate CV), `interview-prep`.
+Open http://localhost:3000 and follow onboarding, or set it up by hand:
 
-See `modes/` for all available modes, `AGENTS.md` for agent workflows, and `docs/SETUP.md` for first-run setup.
+1. Copy `templates/portals.example.yml` → `portals.yml`
+2. Copy `config/profile.example.yml` → `config/profile.yml`
+3. Copy `modes/_profile.template.md` → `modes/_profile.md`
+4. Create `cv.md` from your résumé
+5. Create `data/applications.md` from the template header if missing
 
-**Codex:** slash commands are not guaranteed — use plain-language prompts or `codex exec`. See `CODEX.md` and `docs/CODEX.md`.
+```bash
+node doctor.mjs --json        # onboarding/health check
+node verify-pipeline.mjs      # tracker integrity check
+```
 
-Personal data stays local: `cv.md`, `config/profile.yml`, `portals.yml`, `data/`, `reports/`. See `DATA_CONTRACT.md`.
+Full walkthrough: [docs/SETUP.md](docs/SETUP.md). Codex users: [docs/CODEX.md](docs/CODEX.md).
+
+## Agent workflows
+
+Paste a job URL into the web chat for **auto-pipeline**, or invoke modes from your CLI:
+
+```bash
+claude -p "Evaluate this JD with career-ops auto-pipeline: https://company.com/jobs/123"
+codex exec "Run career-ops scan mode in this repo."
+agent -p --force "Run career-ops scan mode in this repo."
+```
+
+See `modes/` for every mode and [AGENTS.md](AGENTS.md) for how agents route between them.
+
+**Codex note:** slash commands are not guaranteed in Codex — use plain-language prompts (e.g. `Run career-ops scan mode`) or `codex exec` for one-shot workers. See [CODEX.md](CODEX.md) and [docs/CODEX.md](docs/CODEX.md).
+
+## Tweak it to your own job search
+
+Everything that shapes *your* results lives in a small set of files the system never overwrites (the "user layer" — see [DATA_CONTRACT.md](DATA_CONTRACT.md)). Edit these directly, or ask your agent to edit them for you ("update my archetypes", "add this company to my portal scan").
+
+| Want to change... | Edit this |
+|---|---|
+| Target roles, comp band, location policy, spend tier | `config/profile.yml` |
+| Archetypes, narrative, negotiation scripts, proof points | `modes/_profile.md` |
+| House rules, output preferences, custom workflows | `modes/_custom.md` |
+| Your résumé (single source of truth for all generated content) | `cv.md` |
+| Extra proof points / achievements for CVs and cover letters | `article-digest.md` |
+| CV PDF layout | `templates/cv-template.html` |
+| Which companies/portals get scanned | `portals.yml` (see below) |
+| Output language (cover letters, reports, etc.) | `config/profile.yml` → `language.output` |
+
+### Customizing the portal scanner
+
+`portals.yml` controls what `scan` mode watches: `tracked_companies` (specific employers), `search_queries` (broad `site:` searches), `title_filter` (role keyword match), and `location_filter` (geography gate — applied in code, not just as an agent instruction).
+
+**Add a company:**
+- **From the web UI** — Portals page → **Add a company**. Fill in the name, official careers URL, and (optionally) an alternate ATS URL if you know it's Greenhouse/Lever/Breezy — the scanner then reads it directly at zero token cost. This writes straight into `portals.yml`.
+- **By hand** — add an entry under `tracked_companies:` in `portals.yml`:
+  ```yaml
+  - name: Example Co
+    careers_url: https://example.com/careers
+    api: https://boards-api.greenhouse.io/v1/boards/example/jobs   # optional, if known
+    notes: "Why you're tracking them"
+    enabled: true
+  ```
+
+**Base company lists:** `templates/portals.example.yml` ships with curated starter lists — a global AI/ML/dev-tools set and a dedicated **Pakistan tech market** section (Karachi/Lahore/Islamabad software houses, fintech, and product companies). `portals.yml` is your own copy — prune it to just the region/companies you care about, or add more. Nothing you add there is ever touched by `node update-system.mjs apply`.
+
+**Scope results to a region:** set `location_filter` — `always_allow`/`allow`/`block` on location strings, e.g.:
+```yaml
+location_filter:
+  always_allow: ["Pakistan", "Karachi", "Lahore", "Islamabad"]
+  allow: ["Remote"]
+  block: ["India", "United Arab Emirates"]
+```
+This is enforced in `scan.mjs` itself (hard filter, not best-effort). The web UI's free-text **Explore → AI search** is a separate, LLM-driven path — it's *instructed* to respect the same filter but isn't code-enforced the same way, so keep your search phrasing specific if you use it.
+
+### Everything else
+
+Full customization reference: [AGENTS.md](AGENTS.md) (mode routing, skill list) and [DATA_CONTRACT.md](DATA_CONTRACT.md) (which files are yours vs. system-managed).
+
+## Staying up to date
+
+```
+node update-system.mjs check    # pulls from this fork's release remote, never touches your data
+node update-system.mjs apply
+node update-system.mjs rollback
+```
+
+## Credits & license
+
+Built on [santifer/career-ops](https://github.com/santifer/career-ops) — the agent pipeline, evaluation rubric, and ATS provider layer originate there. This fork's own contributions (web dashboard, MD3 design system, portal add-company UI, Pakistan market base list) are maintained by [Saad Ali Khan](https://github.com/SaadNiaziDev).
+
+MIT License — see [LICENSE](LICENSE). Original copyright © 2026 Santiago Fernández de Valderrama.

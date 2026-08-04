@@ -1,15 +1,16 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Card, Statistic } from "antd";
+import { Md3Card } from "@/components/ui/md3-card";
+import { cn } from "@/lib/cn";
 
 type Accent = "brand" | "warn" | "muted" | "default";
 
-const ACCENT: Record<Accent, string | undefined> = {
-  brand: "var(--ant-color-primary)",
-  warn: "var(--ant-color-warning)",
-  muted: "var(--ant-color-text-secondary)",
-  default: undefined,
+const ACCENT: Record<Accent, string> = {
+  brand: "var(--md-sys-color-primary)",
+  warn: "var(--md-sys-color-tertiary)",
+  muted: "var(--md-sys-color-on-surface-variant)",
+  default: "var(--md-sys-color-on-surface)",
 };
 
 export function DossierStat({
@@ -20,34 +21,37 @@ export function DossierStat({
   href,
 }: {
   title: string;
-  value: number;
+  value: number | string;
   prefix?: ReactNode;
   accent?: Accent;
   href?: string;
 }) {
-  const color = ACCENT[accent];
   const body = (
-    <Statistic
-      title={title}
-      value={value}
-      prefix={prefix}
-      styles={color ? { content: { color } } : undefined}
-    />
+    <Md3Card className="dossier-stat h-full">
+      <p className="dossier-stat-title mb-1">{title}</p>
+      <p
+        className="flex items-baseline gap-2 text-[28px] font-normal leading-none tabular-nums"
+        style={{ color: ACCENT[accent] }}
+      >
+        {prefix}
+        {value}
+      </p>
+    </Md3Card>
   );
 
   if (href) {
     return (
-      <a href={href} className="dossier-stat-link block no-underline">
-        <Card size="small" className="dossier-stat h-full transition hover:border-[var(--ant-color-primary)]">
-          {body}
-        </Card>
+      <a
+        href={href}
+        className={cn(
+          "dossier-stat-link block no-underline transition-colors",
+          "hover:[&_.dossier-stat]:border-[var(--md-sys-color-primary)]",
+        )}
+      >
+        {body}
       </a>
     );
   }
 
-  return (
-    <Card size="small" className="dossier-stat h-full">
-      {body}
-    </Card>
-  );
+  return body;
 }

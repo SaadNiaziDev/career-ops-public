@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Loader2 } from "lucide-react";
 import { ApplyBackdrop } from "@/components/apply/apply-backdrop";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { instrumentSerif } from "@/lib/fonts";
 import { ATS_LABEL, ATS_SOURCES, type AtsSource } from "@/lib/explore";
 import { useExplore, type SourceState } from "./explore-provider";
@@ -53,7 +53,7 @@ function SourceChip({ ats, s }: { ats: AtsSource; s?: SourceState }) {
       {state === "active" ? (
         <span className="co-src__orb" />
       ) : state === "swept" || state === "noisy" ? (
-        <Check className="size-3.5 text-emerald-500" />
+        <MaterialSymbol name="check" size={16} className="text-emerald-500" />
       ) : (
         <span className="size-2.5 rounded-full border border-current opacity-40" />
       )}
@@ -98,7 +98,7 @@ export function DiscoveringState() {
         </div>
 
         <p className="flex items-center gap-2 text-[13px] text-faint">
-          <Loader2 className="size-3.5 animate-spin" />
+          <MaterialSymbol name="progress_activity" size={16} className="animate-spin" />
           {status || "Casting the net across the ATS network…"}
         </p>
 

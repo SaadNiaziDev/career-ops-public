@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Card, Space, Typography } from "antd";
+import { Md3Card } from "@/components/ui/md3-card";
 
 export function DossierSection({
   icon,
@@ -19,17 +19,22 @@ export function DossierSection({
   className?: string;
 }) {
   return (
-    <Card
+    <Md3Card
       className={className}
       title={
-        <Space size={10}>
+        <span className="inline-flex items-center gap-2.5 md-title-medium text-[var(--md-sys-color-on-surface)]">
           {icon}
-          <span>{title}</span>
-        </Space>
+          {title}
+        </span>
       }
-      extra={extra ?? (hint ? <Typography.Text type="secondary" className="text-xs">{hint}</Typography.Text> : undefined)}
+      extra={
+        extra ??
+        (hint ? (
+          <span className="md-body-small text-[var(--md-sys-color-on-surface-variant)]">{hint}</span>
+        ) : undefined)
+      }
     >
-      <div className="dossier-inset-stack">{children}</div>
-    </Card>
+      <div className="dossier-inset-stack -mt-2">{children}</div>
+    </Md3Card>
   );
 }

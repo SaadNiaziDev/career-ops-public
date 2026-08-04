@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { X, History } from "lucide-react";
 import { useJobs } from "@/components/jobs/job-store";
 import { WorkerCard, pillTone, TONE } from "@/components/jobs/worker-card";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { cn } from "@/lib/cn";
 
 // Back-compat re-exports (app/jobs/page.tsx imports pillTone from here).
@@ -25,7 +25,7 @@ export function WorkerPills() {
         <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-faint">Workers</span>
         {running > 0 && <span className="text-[10px] tabular-nums text-brand">{running} running</span>}
         <Link href="/jobs" className="ml-auto text-faint transition-colors hover:text-foreground" title="History" aria-label="Worker history">
-          <History className="size-3.5" />
+          <MaterialSymbol name="history" size={16} />
         </Link>
         {finished > 0 && (
           <button onClick={clearFinished} className="text-[10px] text-faint transition-colors hover:text-foreground" title="Clear finished">
@@ -57,7 +57,7 @@ export function WorkerPills() {
                       className="text-faint opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
                       aria-label="Dismiss job"
                     >
-                      <X className="size-3" />
+                      <MaterialSymbol name="close" size={14} />
                     </button>
                   }
                 />

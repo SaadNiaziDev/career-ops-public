@@ -1,21 +1,21 @@
 "use client";
 
-import { Loader2, Wand2, Asterisk, Paperclip, Sparkles, ArrowUpRight, ShieldCheck, RotateCcw, FileCheck2, AlertTriangle, Terminal, Check, ScanLine, PenLine, CheckCircle2, Info, ExternalLink, MousePointerClick } from "lucide-react";
 import type { ApplyIssue, DriveStep } from "@/lib/apply/issue";
 import { useApply } from "@/components/apply/apply-provider";
 import type { ApplyField } from "@/lib/apply/extract";
+import { MaterialSymbol } from "@/components/material-symbol";
+import { Md3ActionButton } from "@/components/ui/md3-action-button";
+import { Md3Collapse } from "@/components/ui/md3-collapse";
 import { cn } from "@/lib/cn";
 import { Fragment, useEffect, useRef, useState } from "react";
 
-// Co-located UI animations (HMR-proof vs Tailwind v4's stale globals.css):
-// field cascade-in, per-field "just drafted" flash, skeleton shimmer, hero orb.
 const STYLE = `
 @keyframes co-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 .co-rise{animation:co-rise .55s cubic-bezier(.22,1,.36,1) both}
-@keyframes co-flash{0%{box-shadow:0 0 0 0 hsl(26 82% 55% / 0)}22%{box-shadow:0 0 0 3px hsl(26 82% 55% / .38)}100%{box-shadow:0 0 0 0 hsl(26 82% 55% / 0)}}
+@keyframes co-flash{0%{box-shadow:0 0 0 0 color-mix(in srgb, var(--md-sys-color-primary) 0%, transparent)}22%{box-shadow:0 0 0 3px color-mix(in srgb, var(--md-sys-color-primary) 38%, transparent)}100%{box-shadow:0 0 0 0 color-mix(in srgb, var(--md-sys-color-primary) 0%, transparent)}}
 .co-flash{animation:co-flash 1.15s ease both;border-radius:.6rem}
 @keyframes co-shim{0%{background-position:-200% 0}100%{background-position:200% 0}}
-.co-skel{background:linear-gradient(90deg, color-mix(in srgb,var(--fg) 5%, transparent) 25%, color-mix(in srgb,var(--fg) 12%, transparent) 37%, color-mix(in srgb,var(--fg) 5%, transparent) 63%);background-size:200% 100%;animation:co-shim 1.6s linear infinite;border-radius:.5rem}
+.co-skel{background:linear-gradient(90deg, color-mix(in srgb,var(--md-sys-color-on-surface) 5%, transparent) 25%, color-mix(in srgb,var(--md-sys-color-on-surface) 12%, transparent) 37%, color-mix(in srgb,var(--md-sys-color-on-surface) 5%, transparent) 63%);background-size:200% 100%;animation:co-shim 1.6s linear infinite;border-radius:.5rem}
 @keyframes co-orb{0%,100%{transform:scale(1);opacity:.55}50%{transform:scale(1.35);opacity:.9}}
 .co-orb{animation:co-orb 2.4s ease-in-out infinite}
 @keyframes co-spin{to{transform:rotate(360deg)}}
@@ -23,10 +23,6 @@ const STYLE = `
 @media (prefers-reduced-motion: reduce){.co-rise,.co-flash,.co-skel,.co-orb,.co-ring{animation:none}}
 `;
 
-// The form-proxy UI: the real employer form is opened headlessly on the user's
-// machine and re-rendered here in plain language, pre-filled from their CV. The
-// user verifies every answer, then we fill the real form behind the scenes and
-// bring it to the front for them to submit. We never submit.
 export function ApplyView() {
   const a = useApply();
   const [input, setInput] = useState("");
@@ -34,30 +30,32 @@ export function ApplyView() {
   if (a.status === "idle" || a.status === "error") {
     return (
       <div>
-        <div className="flex w-full items-center gap-2 rounded-full border border-border bg-surface/70 py-1.5 pl-4 pr-1.5 shadow-sm transition focus-within:border-brand/50 focus-within:shadow-md">
+        <div className="flex w-full items-center gap-2 rounded-[var(--md-sys-shape-corner-full)] border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-high)] py-1.5 pl-4 pr-1.5 transition focus-within:border-[var(--md-sys-color-primary)]">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && a.open(input.trim())}
             placeholder="Paste an application form URL (Ashby, Lever, Greenhouse…)"
-            className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none placeholder:text-faint"
+            className="min-w-0 flex-1 bg-transparent py-1.5 md-body-medium text-[var(--md-sys-color-on-surface)] outline-none placeholder:text-[var(--md-sys-color-outline)]"
           />
-          <button
-            onClick={() => a.open(input.trim())}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand px-4 py-1.5 text-sm font-medium text-brand-foreground transition-colors hover:bg-brand-200"
-          >
-            <Wand2 className="size-4" /> Read form
+          <button onClick={() => a.open(input.trim())} className="md3-btn-filled shrink-0 py-2">
+            Read form
           </button>
         </div>
         {a.error && (
-          <div className="mt-4 w-full rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3.5">
+          <div className="md3-alert md3-alert--warning mt-4 flex-col items-stretch">
             <div className="flex items-start gap-2.5">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
+              <MaterialSymbol name="warning" size={18} className="mt-0.5 shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm text-amber-800 dark:text-amber-300">{a.error}</p>
+                <p className="text-sm">{a.error}</p>
                 {a.url && /^https?:\/\//.test(a.url) && (
-                  <a href={a.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">
-                    Open the form directly <ExternalLink className="size-3" />
+                  <a
+                    href={a.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--md-sys-color-primary)] hover:underline"
+                  >
+                    Open the form directly <MaterialSymbol name="open_in_new" size={12} />
                   </a>
                 )}
               </div>
@@ -80,19 +78,20 @@ export function ApplyView() {
     <div className="w-full">
       <style>{STYLE}</style>
 
-      {/* journey: Read → Draft → Review */}
       <PhaseRail phase={phase} />
 
       {!busy && (
         <div className="co-rise mb-4 flex items-baseline justify-between gap-3">
-          <h2 className="font-display text-xl text-landing drop-shadow-sm">{a.title || "Application"}</h2>
-          <button onClick={a.reset} className="inline-flex items-center gap-1 text-xs text-faint transition-colors hover:text-foreground">
-            <RotateCcw className="size-3" /> new
+          <h2 className="font-display text-xl text-[var(--md-sys-color-on-surface)] drop-shadow-sm">{a.title || "Application"}</h2>
+          <button
+            onClick={a.reset}
+            className="md3-action-btn md3-action-btn--text inline-flex items-center gap-1 text-xs"
+          >
+            <MaterialSymbol name="refresh" size={14} /> new
           </button>
         </div>
       )}
 
-      {/* opening: big magic hero + skeleton fields (no layout jump when real ones arrive) */}
       {opening && (
         <>
           <ProcessingHero title="Reading your form…" subtitle="Opening the real application on your machine and reading every field." />
@@ -100,67 +99,61 @@ export function ApplyView() {
         </>
       )}
 
-      {/* driving: watch the agent reach the form live (it navigates, never submits) */}
       {driving && <DrivePanel steps={a.driveSteps} />}
 
       {a.error && (
-        <p className="co-rise mb-3 flex items-start gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 backdrop-blur-sm dark:text-amber-400">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {a.error}
+        <p className="co-rise md3-alert md3-alert--warning mb-3">
+          <MaterialSymbol name="warning" size={18} className="mt-0.5 shrink-0" /> {a.error}
         </p>
       )}
 
       {!busy && (
         <div className="co-rise">
           <ApplyIssues issues={a.issues} />
-          {/* drafting banner while the planner writes the answers */}
+
           {prefilling && (
-            <div className="mb-4 flex items-center gap-3 rounded-xl border border-brand/30 bg-brand-soft/60 px-4 py-3 backdrop-blur-sm">
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-[color-mix(in_srgb,var(--md-sys-color-primary)_30%,transparent)] bg-[color-mix(in_srgb,var(--md-sys-color-primary-container)_60%,transparent)] px-4 py-3 backdrop-blur-sm">
               <span className="relative grid size-8 shrink-0 place-items-center">
-                <span className="co-orb absolute inset-0 rounded-full bg-brand/40 blur-[6px]" />
-                <Sparkles className="size-4 text-brand" />
+                <span className="co-orb absolute inset-0 rounded-full bg-[color-mix(in_srgb,var(--md-sys-color-primary)_40%,transparent)] blur-[6px]" />
+                <MaterialSymbol name="auto_awesome" size={18} className="text-[var(--md-sys-color-primary)]" />
               </span>
               <div className="min-w-0">
-                <div className="text-sm font-medium text-foreground">Drafting your answers…</div>
+                <div className="text-sm font-medium text-[var(--md-sys-color-on-surface)]">Drafting your answers…</div>
                 <RotatingStatus />
               </div>
-              <Loader2 className="ml-auto size-4 shrink-0 animate-spin text-brand" />
+              <MaterialSymbol name="progress_activity" size={18} className="ml-auto shrink-0 animate-spin text-[var(--md-sys-color-primary)]" />
             </div>
           )}
 
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <button
-              onClick={a.prefill}
-              disabled={prefilling || filling}
-              className="inline-flex items-center gap-1.5 rounded-full border border-brand/40 bg-brand-soft px-3.5 py-1.5 text-sm font-medium text-brand transition-colors hover:bg-brand/15 disabled:opacity-50"
-            >
-              {prefilling ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            <Md3ActionButton onClick={a.prefill} disabled={prefilling || filling} loading={prefilling} icon={prefilling ? undefined : "auto_awesome"}>
               {prefilling ? "Drafting from your CV…" : "Pre-fill from my CV"}
-            </button>
+            </Md3ActionButton>
           </div>
 
           {(prefilling || a.prefillLog.length > 0) && (
-            <details className="mb-4 rounded-lg border border-border bg-surface/60 backdrop-blur-sm" open={false}>
-              <summary className="flex cursor-pointer select-none items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted">
-                <Terminal className="size-3.5" /> Pre-fill diagnostics
-                {prefilling && <Loader2 className="size-3 animate-spin text-brand" />}
-                <span className="ml-auto text-faint">{a.prefillLog.length} steps</span>
-              </summary>
-              <div className="max-h-52 overflow-y-auto border-t border-border px-3 py-2">
-                <ol className="space-y-0.5 font-mono text-[11px] leading-relaxed text-muted">
-                  {a.prefillLog.map((l, i) => (
-                    <li key={i} className={l.startsWith("✗") ? "text-amber-600 dark:text-amber-400" : ""}>
-                      {l}
-                    </li>
-                  ))}
-                  {prefilling && <li className="text-faint">…</li>}
-                </ol>
-              </div>
-            </details>
+            <Md3Collapse
+              className="mb-4"
+              title={
+                <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--md-sys-color-on-surface-variant)]">
+                  <MaterialSymbol name="terminal" size={14} /> Pre-fill diagnostics
+                  {prefilling && <MaterialSymbol name="progress_activity" size={12} className="animate-spin text-[var(--md-sys-color-primary)]" />}
+                  <span className="ml-auto text-[var(--md-sys-color-outline)]">{a.prefillLog.length} steps</span>
+                </span>
+              }
+            >
+              <ol className="space-y-0.5 font-mono text-[11px] leading-relaxed text-[var(--md-sys-color-on-surface-variant)]">
+                {a.prefillLog.map((l, i) => (
+                  <li key={i} className={l.startsWith("✗") ? "text-[var(--md-sys-color-on-tertiary-container)]" : ""}>
+                    {l}
+                  </li>
+                ))}
+                {prefilling && <li className="text-[var(--md-sys-color-outline)]">…</li>}
+              </ol>
+            </Md3Collapse>
           )}
 
-          {/* the questions — float on the blurred form image, cascade in, each
-              flashes brand-orange the instant its drafted answer lands */}
-          <div className="space-y-1 rounded-2xl border border-border/70 bg-surface/80 p-2 shadow-2xl shadow-black/10 backdrop-blur-md sm:p-3">
+          <div className="space-y-1 rounded-2xl border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] p-2 shadow-2xl shadow-black/10 backdrop-blur-md sm:p-3">
             {a.fields.map((f, i) => (
               <div key={f.id} className="co-rise rounded-xl px-3 py-2.5" style={{ animationDelay: `${Math.min(i * 45, 700)}ms` }}>
                 <FieldRow
@@ -176,54 +169,54 @@ export function ApplyView() {
           </div>
 
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <button
-              onClick={a.fill}
-              disabled={filling || prefilling}
-              className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-brand-foreground shadow-lg shadow-brand/25 transition-all hover:bg-brand-200 hover:shadow-brand/40 disabled:opacity-50"
-            >
-              {filling ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpRight className="size-4" />}
+            <Md3ActionButton variant="filled" onClick={a.fill} disabled={filling || prefilling} loading={filling} icon={filling ? undefined : "arrow_outward"}>
               {filling ? "Filling the real form…" : "Fill the real form & review"}
-            </button>
-            <button
+            </Md3ActionButton>
+            <Md3ActionButton
               onClick={a.agentFill}
               disabled={filling || prefilling}
+              icon="touch_app"
               title="Let the AI drive the real form and fill it field-by-field (for tricky / multi-step forms). It never submits."
-              className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand disabled:opacity-50"
             >
-              <MousePointerClick className="size-4" /> Let the AI fill it
-            </button>
-            <p className="inline-flex items-center gap-1.5 text-xs text-muted">
-              <ShieldCheck className="size-3.5 text-emerald-500" /> Never submits — you click Submit yourself.
+              Let the AI fill it
+            </Md3ActionButton>
+            <p className="inline-flex items-center gap-1.5 text-xs text-[var(--md-sys-color-on-surface-variant)]">
+              <MaterialSymbol name="verified_user" size={14} className="text-[var(--md-sys-color-tertiary)]" /> Never submits — you click Submit yourself.
             </p>
           </div>
 
-          {/* agent filling the form live (full-agent escalation) */}
-          {filling && a.driveSteps.length > 0 && <div className="mt-6"><DrivePanel steps={a.driveSteps} filling /></div>}
+          {filling && a.driveSteps.length > 0 && (
+            <div className="mt-6">
+              <DrivePanel steps={a.driveSteps} filling />
+            </div>
+          )}
 
           {(filling || done) && a.steps.length > 0 && (
             <div className="co-rise mt-6">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-faint">Behind the scenes</div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--md-sys-color-outline)]">Behind the scenes</div>
               <div className="flex gap-2 overflow-x-auto pb-2">
                 {a.steps.map((s, i) => (
                   <figure key={i} className="shrink-0">
                     {s.thumb ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={s.thumb} alt="" className="h-24 w-36 rounded-md border border-border object-cover" />
+                      <img src={s.thumb} alt="" className="h-24 w-36 rounded-md border border-[var(--md-sys-color-outline-variant)] object-cover" />
                     ) : (
-                      <div className="flex h-24 w-36 items-center justify-center rounded-md border border-dashed border-border text-faint">…</div>
+                      <div className="flex h-24 w-36 items-center justify-center rounded-md border border-dashed border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-outline)]">…</div>
                     )}
-                    <figcaption className={cn("mt-1 w-36 truncate text-[10px]", s.ok ? "text-faint" : "text-amber-500")}>{s.label || "field"}</figcaption>
+                    <figcaption className={cn("mt-1 w-36 truncate text-[10px]", s.ok ? "text-[var(--md-sys-color-outline)]" : "text-[var(--md-sys-color-error)]")}>{s.label || "field"}</figcaption>
                   </figure>
                 ))}
               </div>
             </div>
           )}
           {done && (
-            <div className="co-rise mt-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm backdrop-blur-sm">
-              <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-500" />
-              <div>
-                <span className="font-medium text-emerald-700 dark:text-emerald-400">The real form is now in front, pre-filled.</span>{" "}
-                <span className="text-muted">Review it and click Submit yourself — career-ops never submits for you.</span>
+            <div className="co-rise md3-alert md3-alert--success mt-4 flex-col items-stretch">
+              <div className="flex items-start gap-2.5">
+                <MaterialSymbol name="check_circle" size={20} className="mt-0.5 shrink-0" />
+                <div>
+                  <span className="font-medium">The real form is now in front, pre-filled.</span>{" "}
+                  <span className="text-[var(--md-sys-color-on-surface-variant)]">Review it and click Submit yourself — career-ops never submits for you.</span>
+                </div>
               </div>
             </div>
           )}
@@ -233,35 +226,39 @@ export function ApplyView() {
   );
 }
 
-// ── Watch the agent reach the form live (it navigates, never submits) ───────
 const DRIVE_VERB: Record<string, string> = { click: "Clicked", type: "Typed into", select: "Selected", scroll: "Scrolled", "parse-error": "Thinking…", stuck: "Stuck", reached_form: "Reached the form" };
+
 function DrivePanel({ steps, filling }: { steps: DriveStep[]; filling?: boolean }) {
   const last = steps[steps.length - 1];
   return (
     <div className="co-rise">
       <div className="flex flex-col items-center gap-3 py-7 text-center">
         <span className="relative grid size-14 place-items-center">
-          <span className="co-orb absolute inset-0 rounded-full bg-brand/30 blur-lg" />
-          <span className="co-ring absolute inset-0 rounded-full border-2 border-brand/30 border-t-brand" />
-          <MousePointerClick className="size-6 text-brand" />
+          <span className="co-orb absolute inset-0 rounded-full bg-[color-mix(in_srgb,var(--md-sys-color-primary)_30%,transparent)] blur-lg" />
+          <span className="co-ring absolute inset-0 rounded-full border-2 border-[color-mix(in_srgb,var(--md-sys-color-primary)_30%,transparent)] border-t-[var(--md-sys-color-primary)]" />
+          <MaterialSymbol name="touch_app" size={24} className="text-[var(--md-sys-color-primary)]" />
         </span>
-        <div className="font-display text-2xl text-landing">{filling ? "AI is filling the form…" : "Reaching your form…"}</div>
-        <p className="max-w-sm text-sm text-muted">{filling ? "The AI is driving the real form field-by-field on your machine — it never submits; you review and submit." : "The AI is navigating the real application on your machine to reach the form — it never submits."}</p>
+        <div className="font-display text-2xl text-[var(--md-sys-color-on-surface)]">{filling ? "AI is filling the form…" : "Reaching your form…"}</div>
+        <p className="max-w-sm text-sm text-[var(--md-sys-color-on-surface-variant)]">
+          {filling
+            ? "The AI is driving the real form field-by-field on your machine — it never submits; you review and submit."
+            : "The AI is navigating the real application on your machine to reach the form — it never submits."}
+        </p>
       </div>
       {last?.thumb ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={last.thumb} alt="" className="w-full rounded-xl border border-border shadow-xl shadow-black/10" />
+        <img src={last.thumb} alt="" className="w-full rounded-xl border border-[var(--md-sys-color-outline-variant)] shadow-xl shadow-black/10" />
       ) : (
         <div className="co-skel h-56 w-full rounded-xl" />
       )}
       {steps.length > 0 && (
-        <ol className="mt-3 space-y-1.5 rounded-xl border border-border/70 bg-surface/70 p-3 backdrop-blur-sm">
+        <ol className="mt-3 space-y-1.5 rounded-xl border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] p-3 backdrop-blur-sm">
           {steps.map((s, i) => (
-            <li key={i} className={cn("flex items-center gap-2 text-xs", i === steps.length - 1 ? "text-foreground" : "text-muted")}>
-              <span className="grid size-5 shrink-0 place-items-center rounded-full bg-brand-soft text-[10px] font-semibold text-brand">{s.turn}</span>
+            <li key={i} className={cn("flex items-center gap-2 text-xs", i === steps.length - 1 ? "text-[var(--md-sys-color-on-surface)]" : "text-[var(--md-sys-color-on-surface-variant)]")}>
+              <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[var(--md-sys-color-primary-container)] text-[10px] font-semibold text-[var(--md-sys-color-on-primary-container)]">{s.turn}</span>
               <span className="shrink-0 font-medium">{DRIVE_VERB[s.action] ?? s.action}</span>
-              <span className="truncate text-faint">{s.detail}</span>
-              {s.note && <span className="shrink-0 text-amber-500">· {s.note}</span>}
+              <span className="truncate text-[var(--md-sys-color-outline)]">{s.detail}</span>
+              {s.note && <span className="shrink-0 text-[var(--md-sys-color-error)]">· {s.note}</span>}
             </li>
           ))}
         </ol>
@@ -270,7 +267,6 @@ function DrivePanel({ steps, filling }: { steps: DriveStep[]; filling?: boolean 
   );
 }
 
-// ── Issues the interpreter surfaced — never fail mute ───────────────────────
 function ApplyIssues({ issues }: { issues: ApplyIssue[] }) {
   if (!issues.length) return null;
   const warns = issues.filter((i) => i.level === "warn" || i.level === "block");
@@ -278,39 +274,37 @@ function ApplyIssues({ issues }: { issues: ApplyIssue[] }) {
   return (
     <div className="mb-4 space-y-2">
       {warns.length > 0 && (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 backdrop-blur-sm">
-          <div className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-400">
-            <AlertTriangle className="size-4" /> A few things to check
+        <div className="md3-alert md3-alert--warning flex-col items-stretch">
+          <div className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">
+            <MaterialSymbol name="warning" size={18} /> A few things to check
           </div>
-          <ul className="space-y-1 text-xs text-amber-800/90 dark:text-amber-300/90">
+          <ul className="space-y-1 text-xs">
             {warns.map((i, k) => (
               <li key={k} className="flex gap-1.5">
-                <span className="mt-px text-amber-500">•</span> {i.message}
+                <span className="mt-px">•</span> {i.message}
               </li>
             ))}
           </ul>
         </div>
       )}
       {infos.map((i, k) => (
-        <div key={k} className="flex items-center gap-1.5 text-xs text-muted">
-          <Info className="size-3.5 shrink-0 text-faint" /> {i.message}
+        <div key={k} className="flex items-center gap-1.5 text-xs text-[var(--md-sys-color-on-surface-variant)]">
+          <MaterialSymbol name="info" size={14} className="shrink-0 text-[var(--md-sys-color-outline)]" /> {i.message}
         </div>
       ))}
     </div>
   );
 }
 
-// ── Journey rail: Reading → Drafting → Review ───────────────────────────────
 function PhaseRail({ phase }: { phase: number }) {
   const steps = [
-    { label: "Reading form", icon: ScanLine },
-    { label: "Drafting answers", icon: PenLine },
-    { label: "Review & submit", icon: CheckCircle2 },
-  ];
+    { label: "Reading form", icon: "document_scanner" },
+    { label: "Drafting answers", icon: "edit" },
+    { label: "Review & submit", icon: "check_circle" },
+  ] as const;
   return (
     <div className="mb-6 flex items-center gap-2.5">
       {steps.map((s, i) => {
-        const Icon = s.icon;
         const state = i < phase ? "done" : i === phase ? "active" : "todo";
         return (
           <Fragment key={i}>
@@ -318,19 +312,19 @@ function PhaseRail({ phase }: { phase: number }) {
               <span
                 className={cn(
                   "relative grid size-6 place-items-center rounded-full border transition-colors",
-                  state === "done" && "border-brand bg-brand text-brand-foreground",
-                  state === "active" && "border-brand text-brand",
-                  state === "todo" && "border-border text-faint",
+                  state === "done" && "border-[var(--md-sys-color-primary)] bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)]",
+                  state === "active" && "border-[var(--md-sys-color-primary)] text-[var(--md-sys-color-primary)]",
+                  state === "todo" && "border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-outline)]",
                 )}
               >
-                {state === "done" ? <Check className="size-3.5" /> : <Icon className="size-3.5" />}
-                {state === "active" && <span className="absolute inset-0 -z-10 animate-ping rounded-full bg-brand/30" />}
+                {state === "done" ? <MaterialSymbol name="check" size={14} /> : <MaterialSymbol name={s.icon} size={14} />}
+                {state === "active" && <span className="absolute inset-0 -z-10 animate-ping rounded-full bg-[color-mix(in_srgb,var(--md-sys-color-primary)_30%,transparent)]" />}
               </span>
-              <span className={cn("hidden text-xs font-medium sm:inline", i <= phase ? "text-foreground" : "text-faint")}>{s.label}</span>
+              <span className={cn("hidden text-xs font-medium sm:inline", i <= phase ? "text-[var(--md-sys-color-on-surface)]" : "text-[var(--md-sys-color-outline)]")}>{s.label}</span>
             </div>
             {i < steps.length - 1 && (
-              <span className="relative h-px flex-1 overflow-hidden rounded bg-border">
-                <span className={cn("absolute inset-y-0 left-0 bg-brand transition-all duration-700", i < phase ? "w-full" : "w-0")} />
+              <span className="relative h-px flex-1 overflow-hidden rounded bg-[var(--md-sys-color-outline-variant)]">
+                <span className={cn("absolute inset-y-0 left-0 bg-[var(--md-sys-color-primary)] transition-all duration-700", i < phase ? "w-full" : "w-0")} />
               </span>
             )}
           </Fragment>
@@ -340,8 +334,6 @@ function PhaseRail({ phase }: { phase: number }) {
   );
 }
 
-// Honest, calming rotation of what the planner is actually doing, so the (~1-2min)
-// draft doesn't feel stalled. Crossfades every ~2.8s.
 const DRAFT_MSGS = [
   "Reading your CV…",
   "Reading the role and company…",
@@ -349,6 +341,7 @@ const DRAFT_MSGS = [
   "Writing every answer in your own voice…",
   "Flagging anything that needs your call…",
 ];
+
 function RotatingStatus() {
   const [i, setI] = useState(0);
   useEffect(() => {
@@ -356,7 +349,7 @@ function RotatingStatus() {
     return () => clearInterval(t);
   }, []);
   return (
-    <div key={i} className="co-rise truncate text-xs text-muted">
+    <div key={i} className="co-rise truncate text-xs text-[var(--md-sys-color-on-surface-variant)]">
       {DRAFT_MSGS[i]}
     </div>
   );
@@ -366,19 +359,19 @@ function ProcessingHero({ title, subtitle }: { title: string; subtitle: string }
   return (
     <div className="co-rise flex flex-col items-center gap-3 py-14 text-center">
       <span className="relative grid size-16 place-items-center">
-        <span className="co-orb absolute inset-0 rounded-full bg-brand/30 blur-lg" />
-        <span className="co-ring absolute inset-0 rounded-full border-2 border-brand/30 border-t-brand" />
-        <Sparkles className="size-7 text-brand" />
+        <span className="co-orb absolute inset-0 rounded-full bg-[color-mix(in_srgb,var(--md-sys-color-primary)_30%,transparent)] blur-lg" />
+        <span className="co-ring absolute inset-0 rounded-full border-2 border-[color-mix(in_srgb,var(--md-sys-color-primary)_30%,transparent)] border-t-[var(--md-sys-color-primary)]" />
+        <MaterialSymbol name="auto_awesome" size={28} className="text-[var(--md-sys-color-primary)]" />
       </span>
-      <div className="font-display text-3xl text-landing">{title}</div>
-      <p className="max-w-sm text-sm text-muted">{subtitle}</p>
+      <div className="font-display text-3xl text-[var(--md-sys-color-on-surface)]">{title}</div>
+      <p className="max-w-sm text-sm text-[var(--md-sys-color-on-surface-variant)]">{subtitle}</p>
     </div>
   );
 }
 
 function FieldSkeleton() {
   return (
-    <div className="co-rise space-y-3 rounded-2xl border border-border/70 bg-surface/70 p-5 backdrop-blur-md" style={{ animationDelay: "120ms" }}>
+    <div className="co-rise space-y-3 rounded-2xl border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] p-5 backdrop-blur-md" style={{ animationDelay: "120ms" }}>
       {[64, 80, 48, 72, 56].map((w, i) => (
         <div key={i} className="space-y-2">
           <div className="co-skel h-3" style={{ width: `${w}px` }} />
@@ -404,13 +397,11 @@ function FieldRow({
   drafting: boolean;
   onChange: (v: string) => void;
 }) {
-  // Flash brand-orange the moment a drafted answer first lands (empty → value).
   const prev = useRef(value);
   const [flash, setFlash] = useState(false);
   useEffect(() => {
     if (!prev.current && value) {
       setFlash(true);
-      // outlast the staggered animation-delay (≤900ms) + the 1.15s flash
       const t = setTimeout(() => setFlash(false), 2300);
       prev.current = value;
       return () => clearTimeout(t);
@@ -419,18 +410,20 @@ function FieldRow({
   }, [value]);
 
   const base = cn(
-    "w-full rounded-lg border bg-surface/60 px-3 py-2 text-sm outline-none transition focus:border-brand/60 focus:ring-2 focus:ring-brand/20",
-    needs ? "border-amber-500/50" : "border-border",
+    "w-full rounded-lg border bg-[var(--md-sys-color-surface-container-low)] px-3 py-2 text-sm outline-none transition focus:border-[color-mix(in_srgb,var(--md-sys-color-primary)_60%,transparent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--md-sys-color-primary)_20%,transparent)]",
+    needs ? "border-[color-mix(in_srgb,var(--md-sys-color-tertiary)_50%,transparent)]" : "border-[var(--md-sys-color-outline-variant)]",
   );
-  // While the planner is drafting, an empty answer shimmers like it's being
-  // written; it flashes into the real value the instant the draft lands.
   const writing = drafting && !value && f.type !== "file";
   return (
     <div className={flash ? "co-flash" : ""} style={flash ? { animationDelay: `${Math.min(index * 70, 900)}ms` } : undefined}>
       <label className="mb-1.5 flex items-center gap-1 text-sm font-medium">
-        {f.label || <span className="text-faint">Untitled field</span>}
-        {f.required && <Asterisk className="size-3 text-brand" />}
-        {needs && <span className="ml-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">you confirm</span>}
+        {f.label || <span className="text-[var(--md-sys-color-outline)]">Untitled field</span>}
+        {f.required && <MaterialSymbol name="emergency" size={12} className="text-[var(--md-sys-color-primary)]" />}
+        {needs && (
+          <span className="ml-1 rounded bg-[var(--md-sys-color-tertiary-container)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--md-sys-color-on-tertiary-container)]">
+            you confirm
+          </span>
+        )}
       </label>
       {writing ? (
         <div className={cn("co-skel", f.type === "textarea" ? "h-[68px]" : "h-9")} />
@@ -446,17 +439,17 @@ function FieldRow({
           ))}
         </select>
       ) : f.type === "checkbox" ? (
-        <label className="flex items-center gap-2 text-sm text-muted">
-          <input type="checkbox" checked={value === "true" || value === "yes"} onChange={(e) => onChange(e.target.checked ? "true" : "")} className="size-4 accent-brand" /> {f.label || "Yes"}
+        <label className="flex items-center gap-2 text-sm text-[var(--md-sys-color-on-surface-variant)]">
+          <input type="checkbox" checked={value === "true" || value === "yes"} onChange={(e) => onChange(e.target.checked ? "true" : "")} className="size-4 accent-[var(--md-sys-color-primary)]" /> {f.label || "Yes"}
         </label>
       ) : f.type === "file" ? (
         /resume|résumé|\bcv\b|curriculum|currículum|lebenslauf/i.test(f.label || "") ? (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400">
-            <FileCheck2 className="size-4 shrink-0" /> Your tailored CV (PDF) will be attached automatically — you can swap it on the real form.
+          <div className="flex items-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--md-sys-color-tertiary)_40%,transparent)] bg-[var(--md-sys-color-tertiary-container)] px-3 py-2 text-sm text-[var(--md-sys-color-on-tertiary-container)]">
+            <MaterialSymbol name="fact_check" size={18} className="shrink-0" /> Your tailored CV (PDF) will be attached automatically — you can swap it on the real form.
           </div>
         ) : (
-          <div className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted">
-            <Paperclip className="size-4 shrink-0" /> Attach this file yourself on the real form at the handoff.
+          <div className="flex items-center gap-2 rounded-lg border border-dashed border-[var(--md-sys-color-outline-variant)] px-3 py-2 text-sm text-[var(--md-sys-color-on-surface-variant)]">
+            <MaterialSymbol name="attach_file" size={18} className="shrink-0" /> Attach this file yourself on the real form at the handoff.
           </div>
         )
       ) : (

@@ -1,25 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeftOutlined, ExportOutlined, FileTextOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import {
-  Alert,
-  Button,
-  Card,
-  Collapse,
-  Empty,
-  Progress,
-  Space,
-  Tag,
-  Typography,
-} from "antd";
-import {
-  FileSearchOutlined,
-  EditOutlined,
-  CodeOutlined,
-} from "@ant-design/icons";
 import type { Application } from "@/lib/career-ops";
 import { scoreTone, scoreNum, legitimacyTone, parseReport } from "@/lib/format";
 import { StatusSelect } from "@/components/status-select";
@@ -27,14 +10,17 @@ import { CompanyLogo } from "@/components/company-logo";
 import { ScoreMethodology } from "@/components/score-methodology";
 import { PipelineActions } from "@/components/pipeline/pipeline-actions";
 import { DeleteFromTracker } from "@/components/delete-from-tracker";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { PageShell } from "@/components/dossier/page-shell";
 import { DossierStack } from "@/components/dossier/dossier-stack";
-import { HeroGlow } from "@/components/hero-glow";
+import { Md3Card } from "@/components/ui/md3-card";
+import { Md3Collapse } from "@/components/ui/md3-collapse";
+import { Md3Empty } from "@/components/ui/md3-empty";
 import { cn } from "@/lib/cn";
 
-const { Text, Paragraph } = Typography;
-
 type Section = { heading: string; letter: string | null; content: string };
+
+type AlertTone = "success" | "warning" | "error" | "info";
 
 const TONE_TEXT = {
   good: "text-emerald-500",
@@ -42,6 +28,20 @@ const TONE_TEXT = {
   bad: "text-red-500",
   muted: "text-foreground",
 } as const;
+
+const SCORE_BAR = {
+  good: "bg-emerald-500",
+  warn: "bg-amber-500",
+  bad: "bg-red-500",
+  muted: "bg-[var(--md-sys-color-primary)]",
+} as const;
+
+const ALERT_CLASS: Record<AlertTone, string> = {
+  success: "md3-alert--success",
+  warning: "md3-alert--warning",
+  error: "md3-alert--error",
+  info: "md3-alert--info",
+};
 
 function cleanHeading(h: string): string {
   const stripped = h
@@ -129,6 +129,31 @@ function splitSections(body: string): { intro: string; sections: Section[] } {
   return { intro: intro.join("\n").trim(), sections };
 }
 
+function SectionCollapse({ section, compact = false }: { section: Section; compact?: boolean }) {
+  return (
+    <Md3Collapse
+      className="report-section-collapse"
+      title={
+        compact ? (
+          <code className="text-xs">{cleanHeading(section.heading)}</code>
+        ) : (
+          <div className="flex min-w-0 items-start gap-2.5 pr-2">
+            {section.letter && <span className="report-letter-badge">{section.letter}</span>}
+            <div className="min-w-0">
+              <strong className="text-sm">{cleanHeading(section.heading)}</strong>
+              <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">{preview(section.content)}</p>
+            </div>
+          </div>
+        )
+      }
+    >
+      <article className={cn("report-prose-compact", compact && "opacity-80")}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+      </article>
+    </Md3Collapse>
+  );
+}
+
 function ReportBody({
   body,
   score,
@@ -160,7 +185,7 @@ function ReportBody({
     verdict?.content ??
     (notes?.trim() ? notes.trim() : buildFallbackRecommendation(sections, score, applies));
 
-  const alertType = (() => {
+  const alertTone: AlertTone = (() => {
     if (applies === true) return "success";
     if (applies === false) return "warning";
     const t = score ? scoreTone(score) : "muted";
@@ -170,34 +195,6 @@ function ReportBody({
     return "info";
   })();
 
-  const sectionItems = (items: Section[]) =>
-    items.map((s) => ({
-      key: s.heading,
-      label: (
-        <div className="flex min-w-0 items-start gap-2.5 pr-2">
-          {s.letter && <span className="report-letter-badge">{s.letter}</span>}
-          <div className="min-w-0">
-            <Text strong className="text-sm">
-              {cleanHeading(s.heading)}
-            </Text>
-            <div>
-              <Text type="secondary" className="text-xs">
-                {preview(s.content)}
-              </Text>
-            </div>
-          </div>
-        </div>
-      ),
-      children: (
-        <article className="report-prose-compact">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{s.content}</ReactMarkdown>
-        </article>
-      ),
-    }));
-
-  const evidenceItems = sectionItems(evidence);
-  const draftItems = sectionItems(drafts);
-
   return (
     <div className="dossier-inset-stack">
       {intro && (
@@ -206,110 +203,84 @@ function ReportBody({
         </article>
       )}
 
-      <Alert
-        type={alertType}
-        showIcon
-        className="report-verdict-alert"
-        message="Recommendation"
-        description={
-          <article className="report-prose-compact [&_p:last-child]:mb-0">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{recommendationMd}</ReactMarkdown>
-          </article>
-        }
-      />
+      <div
+        className={cn(
+          "md3-alert report-verdict-alert flex-col items-stretch border-none bg-[var(--md-sys-color-primary-container)]",
+          ALERT_CLASS[alertTone],
+        )}
+      >
+        <span className="md-title-medium text-[var(--md-sys-color-on-primary-container)]">Recommendation</span>
+        <article className="report-prose-compact [&_p:last-child]:mb-0">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{recommendationMd}</ReactMarkdown>
+        </article>
+      </div>
 
-      {evidenceItems.length > 0 && (
-        <Collapse
+      {evidence.length > 0 && (
+        <Md3Collapse
           className="report-toplevel-collapse"
-          items={[
-            {
-              key: "evidence",
-              label: (
-                <Space size={10}>
-                  <span className="report-section-icon">
-                    <FileSearchOutlined />
-                  </span>
-                  <span>
-                    <Text strong className="text-sm">
-                      Full evaluation
-                    </Text>{" "}
-                    <Text type="secondary" className="text-xs">
-                      · {evidenceItems.length} sections
-                    </Text>
-                  </span>
-                </Space>
-              ),
-              children: (
-                <Collapse
-                  ghost
-                  className="report-section-collapse -mx-1"
-                  items={evidenceItems}
-                />
-              ),
-            },
-          ]}
-        />
+          title={
+            <div className="flex items-center gap-2.5">
+              <span className="report-section-icon">
+                <MaterialSymbol name="manage_search" size={16} />
+              </span>
+              <span>
+                <strong className="text-sm">Full evaluation</strong>{" "}
+                <span className="text-xs text-[var(--md-sys-color-on-surface-variant)]">
+                  · {evidence.length} sections
+                </span>
+              </span>
+            </div>
+          }
+        >
+          <div className="-mx-1 space-y-2">
+            {evidence.map((s) => (
+              <SectionCollapse key={s.heading} section={s} />
+            ))}
+          </div>
+        </Md3Collapse>
       )}
 
-      {draftItems.length > 0 && (
-        <Collapse
+      {drafts.length > 0 && (
+        <Md3Collapse
           className="report-toplevel-collapse"
-          items={[
-            {
-              key: "drafts",
-              label: (
-                <Space size={10}>
-                  <span className="report-section-icon">
-                    <EditOutlined />
-                  </span>
-                  <Text strong className="text-sm">
-                    Drafts & keywords
-                  </Text>{" "}
-                  <Text type="secondary" className="text-xs">
-                    · {draftItems.length}
-                  </Text>
-                </Space>
-              ),
-              children: <Collapse ghost className="report-section-collapse -mx-1" items={draftItems} />,
-            },
-          ]}
-        />
+          title={
+            <div className="flex items-center gap-2.5">
+              <span className="report-section-icon">
+                <MaterialSymbol name="edit_note" size={16} />
+              </span>
+              <span>
+                <strong className="text-sm">Drafts & keywords</strong>{" "}
+                <span className="text-xs text-[var(--md-sys-color-on-surface-variant)]">· {drafts.length}</span>
+              </span>
+            </div>
+          }
+        >
+          <div className="-mx-1 space-y-2">
+            {drafts.map((s) => (
+              <SectionCollapse key={s.heading} section={s} />
+            ))}
+          </div>
+        </Md3Collapse>
       )}
 
       {machine.length > 0 && (
-        <Collapse
+        <Md3Collapse
           className="report-toplevel-collapse"
-          items={[
-            {
-              key: "technical",
-              label: (
-                <Space size={10}>
-                  <span className="report-section-icon">
-                    <CodeOutlined />
-                  </span>
-                  <Text strong className="text-sm">
-                    Technical details
-                  </Text>
-                </Space>
-              ),
-              children: (
-                <Collapse
-                  ghost
-                  size="small"
-                  items={machine.map((s) => ({
-                    key: s.heading,
-                    label: <Text code className="text-xs">{cleanHeading(s.heading)}</Text>,
-                    children: (
-                      <article className="report-prose-compact opacity-80">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{s.content}</ReactMarkdown>
-                      </article>
-                    ),
-                  }))}
-                />
-              ),
-            },
-          ]}
-        />
+          title={
+            <div className="flex items-center gap-2.5">
+              <span className="report-section-icon">
+                <MaterialSymbol name="code" size={16} />
+              </span>
+              <strong className="text-sm">Technical details</strong>
+            </div>
+          }
+        >
+          <div className="-mx-1 space-y-2">
+            {machine.map((s) => (
+              <SectionCollapse key={s.heading} section={s} compact />
+            ))}
+          </div>
+        </Md3Collapse>
       )}
     </div>
   );
@@ -342,59 +313,34 @@ export function ReportView({
   return (
     <PageShell width="wide" className="report-page">
       <DossierStack>
-        <Space size={8} className="text-sm">
-          <Link href="/pipeline">
-            <Button type="text" size="small" icon={<ArrowLeftOutlined />} className="px-0">
-              Pipeline
-            </Button>
+        <nav className="flex items-center gap-2 md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
+          <Link href="/pipeline" className="inline-flex items-center gap-1 hover:text-[var(--md-sys-color-primary)]">
+            <MaterialSymbol name="arrow_back" size={18} />
+            Pipeline
           </Link>
-          <Text type="secondary">/</Text>
-          <Text type="secondary" className="text-xs">
-            #{id}
-          </Text>
-        </Space>
+          <span>/</span>
+          <span className="font-mono md-body-small">#{id}</span>
+        </nav>
 
-        <header className="report-hero dot-bg relative overflow-hidden rounded-2xl border border-border bg-surface/50">
-          <HeroGlow />
-          <div className="relative z-10 flex flex-wrap items-center gap-4 p-5 sm:p-6">
-            <CompanyLogo name={company} size={48} />
-            <div className="min-w-0 flex-1">
-              <Text type="secondary" className="font-mono text-[11px] uppercase tracking-[0.2em]">
-                Report #{id}
-              </Text>
-              <Typography.Title level={2} className="mb-0! mt-1! truncate font-display!">
-                {company}
-              </Typography.Title>
-              {app?.role && (
-                <Paragraph type="secondary" className="mb-0! mt-0.5! truncate text-sm">
-                  {app.role}
-                </Paragraph>
-              )}
-            </div>
-            {score && (
-              <div
-                className={cn(
-                  "report-score-badge shrink-0",
-                  tone === "good" && "report-score-badge--good",
-                  tone === "warn" && "report-score-badge--warn",
-                  tone === "bad" && "report-score-badge--bad",
-                )}
-              >
-                <span className={cn("report-score-num", TONE_TEXT[tone])}>{formatScoreDisplay(score)}</span>
-                <span className="report-score-max">/5</span>
-              </div>
+        <header className="flex flex-wrap items-start gap-5">
+          <CompanyLogo name={company} size={64} className="rounded-[var(--md-sys-shape-corner-large-increased)]" />
+          <div className="min-w-0 flex-1">
+            <h1 className="md-display-small-emphasized truncate text-[var(--md-sys-color-on-surface)]">{company}</h1>
+            {app?.role && (
+              <p className="mt-1 truncate md-title-large text-[var(--md-sys-color-on-surface-variant)]">{app.role}</p>
             )}
           </div>
-          {applies != null && (
-            <div className="relative z-10 border-t border-border/60 px-5 py-3 sm:px-6">
-              <Tag color={applies ? "success" : "default"} className="m-0">
-                {applies ? "Worth applying" : "Below apply line"}
-              </Tag>
+          {score && (
+            <div className="shrink-0 text-right">
+              <span className="block text-[64px] font-bold leading-none text-[var(--md-sys-color-primary)] tabular-nums">
+                {formatScoreDisplay(score)}
+              </span>
+              <span className="md-body-small text-[var(--md-sys-color-outline)]">/5</span>
             </div>
           )}
         </header>
 
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-8">
+        <div className="grid grid-cols-1 items-start gap-7 lg:grid-cols-[minmax(0,1fr)_380px]">
           <main className="min-w-0">
             {report ? (
               <ReportBody
@@ -404,11 +350,11 @@ export function ReportView({
                 notes={app?.notes}
               />
             ) : (
-              <Empty
-                image={<FileTextOutlined className="text-3xl text-[var(--ant-color-text-secondary)]" />}
+              <Md3Empty
+                icon="description"
                 description={
                   <>
-                    No report file found for #{id} in <Text code>reports/</Text>.
+                    No report file found for #{id} in <code>reports/</code>.
                   </>
                 }
               />
@@ -416,7 +362,7 @@ export function ReportView({
           </main>
 
           <aside className="dossier-stack lg:sticky lg:top-6">
-            <Card size="small" title="Next steps" className="report-meta-card">
+            <Md3Card title={<span className="md-title-small">Act on it</span>} className="report-meta-card">
               <PipelineActions
                 n={id}
                 company={company}
@@ -426,51 +372,37 @@ export function ReportView({
                 variant="rail"
               />
               {url && url.startsWith("http") && (
-                <Button
-                  block
-                  size="small"
-                  className="mt-2"
-                  icon={<ExportOutlined />}
+                <a
                   href={url}
                   target="_blank"
                   rel="noreferrer"
+                  className="md3-btn-outlined mt-2 flex w-full"
                 >
+                  <MaterialSymbol name="open_in_new" size={18} />
                   View posting
-                </Button>
+                </a>
               )}
-            </Card>
+            </Md3Card>
 
-            <Card size="small" title="At a glance" className="report-meta-card">
+            <Md3Card title={<span className="md-title-small">Decision</span>} className="report-meta-card">
               {score ? (
                 <div className="mb-3">
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <Text type="secondary" className="text-xs">
-                      Fit score
-                    </Text>
-                    <Text strong className={cn("tabular-nums", TONE_TEXT[tone])}>
-                      {formatScoreDisplay(score)}
-                    </Text>
+                    <span className="text-xs text-[var(--md-sys-color-on-surface-variant)]">Fit score</span>
+                    <strong className={cn("tabular-nums", TONE_TEXT[tone])}>{formatScoreDisplay(score)}</strong>
                   </div>
                   {!Number.isNaN(n) && (
                     <>
                       <div className="report-score-track relative">
-                        <Progress
-                          percent={Math.min(Math.max(n / 5, 0), 1) * 100}
-                          showInfo={false}
-                          size="small"
-                          strokeColor={
-                            tone === "good"
-                              ? "var(--ant-color-success)"
-                              : tone === "warn"
-                                ? "var(--ant-color-warning)"
-                                : tone === "bad"
-                                  ? "var(--ant-color-error)"
-                                  : undefined
-                          }
-                        />
+                        <div className="h-1.5 overflow-hidden rounded-full bg-[var(--md-sys-color-surface-container-highest)]">
+                          <div
+                            className={cn("h-full rounded-full transition-[width]", SCORE_BAR[tone])}
+                            style={{ width: `${Math.min(Math.max(n / 5, 0), 1) * 100}%` }}
+                          />
+                        </div>
                         <div className="report-apply-line" style={{ left: "80%" }} aria-hidden />
                       </div>
-                      <div className="relative mt-1 h-3 text-[10px] text-[var(--ant-color-text-secondary)]">
+                      <div className="relative mt-1 h-3 text-[10px] text-[var(--md-sys-color-on-surface-variant)]">
                         <span className="absolute left-0">1.0</span>
                         <span className="absolute" style={{ left: "80%", transform: "translateX(-50%)" }}>
                           4.0 apply
@@ -481,9 +413,7 @@ export function ReportView({
                   )}
                 </div>
               ) : (
-                <Text type="secondary" className="text-xs">
-                  No score on record.
-                </Text>
+                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">No score on record.</p>
               )}
 
               <div className="mt-1">
@@ -518,11 +448,11 @@ export function ReportView({
               </div>
 
               {app && canDelete && (
-                <div className="mt-3 border-t border-[var(--ant-color-border)] pt-3">
+                <div className="mt-3 border-t border-[var(--md-sys-color-outline-variant)] pt-3">
                   <DeleteFromTracker n={id} />
                 </div>
               )}
-            </Card>
+            </Md3Card>
 
             <ScoreMethodology />
           </aside>

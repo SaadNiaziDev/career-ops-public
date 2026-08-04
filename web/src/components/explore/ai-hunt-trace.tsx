@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { AiTraceChunk } from "@/lib/explore-ai";
+import { MaterialSymbol } from "@/components/material-symbol";
 
 // The live reasoning panel — a CONTAINED, polished card (apply-mode vocabulary)
 // rather than raw text on the backdrop. The narration arrives as arbitrary stream
@@ -61,7 +61,7 @@ export function AiHuntTrace({ trace }: { trace: AiTraceChunk[] }) {
       <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">
         <span className="co-reason__dot" />
         <span className="text-[12px] font-medium text-foreground">Reasoning live</span>
-        <Sparkles className="ml-auto size-3.5 text-brand/70" />
+        <MaterialSymbol name="auto_awesome" size={16} className="ml-auto text-brand/70" />
       </div>
       <div ref={bodyRef} className="co-reason__body flex max-h-52 flex-col gap-2 overflow-y-auto px-4 py-3">
         {sentences.map((s, i) => (

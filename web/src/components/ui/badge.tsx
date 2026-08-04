@@ -1,29 +1,30 @@
 import { cn } from "@/lib/cn";
 
-// Score / status pill. No brand tone — orange is reserved for "active/selected"
-// (active tab, nav, focus ring), never for a score. Grades route through the
-// good/warn/bad scale so the table stays legible.
 export function Badge({
   className,
   tone = "muted",
+  children,
   ...props
 }: React.HTMLAttributes<HTMLSpanElement> & {
   tone?: "good" | "warn" | "bad" | "muted";
 }) {
   const tones = {
-    good: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-    warn: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-    bad: "bg-red-500/15 text-red-700 dark:text-red-400",
-    muted: "bg-surface-hover text-muted",
+    good: "bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)]",
+    warn: "bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)]",
+    bad: "bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)]",
+    muted: "bg-[var(--md-sys-color-surface-container-highest)] text-[var(--md-sys-color-on-surface-variant)]",
   } as const;
+
   return (
     <span
       className={cn(
-        "inline-block rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums",
+        "inline-flex min-h-[24px] items-center justify-center rounded-[var(--md-sys-shape-corner-small)] px-2 md-label-medium tabular-nums",
         tones[tone],
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+    </span>
   );
 }

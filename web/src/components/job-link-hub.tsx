@@ -3,16 +3,10 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, Input, Space, Typography, message, Card } from "antd";
-import {
-  LinkOutlined,
-  ThunderboltOutlined,
-  InboxOutlined,
-  CompassOutlined,
-  ExportOutlined,
-} from "@ant-design/icons";
+import { Md3ActionButton } from "@/components/ui/md3-action-button";
+import { Md3Input } from "@/components/ui/md3-input";
+import { Md3Card } from "@/components/ui/md3-card";
 import { useJobs } from "@/components/jobs/job-store";
-import { CostBadge } from "@/components/cost/cost-badge";
 import { aiToParams } from "@/lib/explore";
 import { cn } from "@/lib/cn";
 
@@ -40,7 +34,6 @@ function normalizeUrl(raw: string): string | null {
 
 type Props = {
   compact?: boolean;
-  /** Where workers were launched from (for job store page field). */
   origin?: string;
   className?: string;
 };
@@ -49,13 +42,19 @@ export function JobLinkHub({ compact = false, origin = "/add", className }: Prop
   const router = useRouter();
   const { startJob } = useJobs();
   const [raw, setRaw] = useState("");
-  const [busy, setBusy] = useState<"" | "inbox">("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ tone: "info" | "error" | "success"; text: string } | null>(null);
 
   const url = normalizeUrl(raw);
 
+  const flash = (tone: "info" | "error" | "success", text: string) => {
+    setNotice({ tone, text });
+    window.setTimeout(() => setNotice(null), 4000);
+  };
+
   const evaluate = useCallback(() => {
     if (!url) {
-      message.warning("Paste a full job URL (https://…).");
+      flash("error", "Paste a full job URL (https://…).");
       return;
     }
     startJob({
@@ -65,52 +64,42 @@ export function JobLinkHub({ compact = false, origin = "/add", className }: Prop
       input: url,
       page: origin,
     });
-    message.info("Evaluation started — track progress in Workers.");
+    flash("info", "Evaluation started — track progress in Workers.");
     setRaw("");
   }, [url, startJob, origin]);
 
   const addInbox = useCallback(async () => {
     if (!url) {
-      message.warning("Paste a full job URL (https://…).");
+      flash("error", "Paste a full job URL (https://…).");
       return;
     }
-    setBusy("inbox");
+    setBusy(true);
     const { company, title } = guessFromUrl(url);
     try {
       const res = await fetch("/api/explore/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          offers: [
-            {
-              url,
-              company,
-              title,
-              location: "",
-              postedAt: "",
-              ats: "other",
-              source: "manual",
-            },
-          ],
+          offers: [{ url, company, title, location: "", postedAt: "", ats: "other", source: "manual" }],
         }),
       });
       const data = (await res.json()) as { added?: number; error?: string };
       if (data.error || !data.added) {
         throw new Error(data.error || "Could not add to inbox");
       }
-      message.success("Added to pipeline inbox");
+      flash("success", "Added to pipeline inbox");
       setRaw("");
       router.refresh();
     } catch (e) {
-      message.error(e instanceof Error ? e.message : "Failed to add");
+      flash("error", e instanceof Error ? e.message : "Failed to add");
     } finally {
-      setBusy("");
+      setBusy(false);
     }
   }, [url, router]);
 
   const aiSearchSimilar = useCallback(() => {
     if (!url) {
-      message.warning("Paste a full job URL (https://…).");
+      flash("error", "Paste a full job URL (https://…).");
       return;
     }
     const intent = `Find open job postings similar to this role (same seniority and stack where possible): ${url}`;
@@ -124,58 +113,64 @@ export function JobLinkHub({ compact = false, origin = "/add", className }: Prop
 
   const body = (
     <>
-      <Input
-        size={compact ? "middle" : "large"}
-        prefix={<LinkOutlined className="text-faint" />}
+      {notice ? (
+        <p className={cn("md3-alert mb-3", `md3-alert--${notice.tone === "info" ? "info" : notice.tone}`)}>{notice.text}</p>
+      ) : null}
+      <Md3Input
+        icon="link"
+        type="url"
         placeholder="https://company.com/careers/…"
         value={raw}
         onChange={(e) => setRaw(e.target.value)}
-        onPressEnter={evaluate}
-        allowClear
+        onKeyDown={(e) => e.key === "Enter" && evaluate()}
       />
-      <Space wrap className={cn("mt-4 gap-2!", compact && "mt-3")}>
-        <Button type="primary" icon={<ThunderboltOutlined />} disabled={!url} onClick={evaluate}>
+      <div className={cn("md3-actions-row mt-4", compact && "mt-3")}>
+        <Md3ActionButton variant="filled" icon="bolt" cost="spend" disabled={!url} onClick={evaluate}>
           Evaluate
-        </Button>
-        <CostBadge kind="spend" size="xs" />
-        <Button icon={<InboxOutlined />} disabled={!url} loading={busy === "inbox"} onClick={() => void addInbox()}>
+        </Md3ActionButton>
+        <Md3ActionButton variant="outlined" icon="inbox" cost="free-network" disabled={!url} loading={busy} onClick={() => void addInbox()}>
           Add to inbox
-        </Button>
-        <CostBadge kind="free-network" size="xs" />
-        <Button icon={<CompassOutlined />} disabled={!url} onClick={aiSearchSimilar}>
+        </Md3ActionButton>
+        <Md3ActionButton variant="outlined" icon="explore" disabled={!url} onClick={aiSearchSimilar}>
           AI search similar
-        </Button>
-        <Button type="text" icon={<ExportOutlined />} disabled={!url} onClick={openExternal}>
+        </Md3ActionButton>
+        <Md3ActionButton variant="text" icon="open_in_new" disabled={!url} onClick={openExternal}>
           Open posting
-        </Button>
-      </Space>
+        </Md3ActionButton>
+      </div>
       {!compact && (
-        <Typography.Paragraph type="secondary" className="mb-0! mt-4 text-xs leading-relaxed">
-          <strong>Evaluate</strong> runs the full A–F report and tracker row. <strong>Add to inbox</strong> queues the URL
-          for triage without spending tokens. <strong>AI search similar</strong> opens Explore with a hunt for like roles.
-        </Typography.Paragraph>
+        <p className="mb-0 mt-4 md-body-small leading-relaxed text-[var(--md-sys-color-on-surface-variant)]">
+          <strong className="text-[var(--md-sys-color-on-surface)]">Evaluate</strong> runs the full A–F report and tracker row.{" "}
+          <strong className="text-[var(--md-sys-color-on-surface)]">Add to inbox</strong> queues the URL for triage without spending tokens.{" "}
+          <strong className="text-[var(--md-sys-color-on-surface)]">AI search similar</strong> opens Explore with a hunt for like roles.
+        </p>
       )}
     </>
   );
 
   if (compact) {
     return (
-      <div className={cn("rounded-2xl border border-border bg-surface/50 p-5 sm:p-6", className)}>
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-faint">Quick add</p>
-        <p className="mt-1 text-sm font-medium text-foreground">Paste a job URL</p>
+      <div
+        className={cn(
+          "rounded-[var(--md-sys-shape-corner-extra-large)] border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] p-5 sm:p-6",
+          className,
+        )}
+      >
+        <p className="md-eyebrow">Quick add</p>
+        <p className="mt-1 md-title-medium text-[var(--md-sys-color-on-surface)]">Paste a job URL</p>
         {body}
       </div>
     );
   }
 
   return (
-    <Card className={className} title="Paste a job link">
+    <Md3Card className={className} title={<span className="md-title-medium">Paste a job link</span>}>
       {body}
       <div className="mt-3">
-        <Link href="/pipeline?tab=INBOX" className="text-xs text-brand hover:underline">
+        <Link href="/pipeline?tab=INBOX" className="md-body-small text-[var(--md-sys-color-primary)] hover:underline">
           View pipeline inbox →
         </Link>
       </div>
-    </Card>
+    </Md3Card>
   );
 }

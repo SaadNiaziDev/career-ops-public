@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { LockOutlined, SendOutlined } from "@ant-design/icons";
-import { Button, Tooltip } from "antd";
+import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { useJobs } from "@/components/jobs/job-store";
 import { useApply } from "@/components/apply/apply-provider";
+import { cn } from "@/lib/cn";
 
 export function ApplyButton({
   n,
@@ -30,26 +30,23 @@ export function ApplyButton({
   if (!ready) {
     const reason = !hasUrl ? "No application URL on this report" : "Generate the tailored CV first";
     return (
-      <Tooltip title={reason}>
-        <Button block={rail} disabled icon={<LockOutlined />}>
-          Apply
-        </Button>
-      </Tooltip>
+      <Md3ActionButton variant="outlined" disabled className={cn(rail && "w-full")} title={reason} icon="lock">
+        Apply
+      </Md3ActionButton>
     );
   }
 
   return (
-    <Button
-      block={rail}
-      type="primary"
-      icon={<SendOutlined />}
-      className="bg-[var(--brand)] hover:opacity-90"
+    <Md3ActionButton
+      variant="filled"
+      icon="send"
+      className={cn(rail && "w-full")}
       onClick={() => {
         apply.open(url!, { prefill: true, company });
         router.push("/apply");
       }}
     >
       Apply
-    </Button>
+    </Md3ActionButton>
   );
 }

@@ -1,11 +1,12 @@
 "use client";
 
-import { CompassOutlined, ThunderboltOutlined } from "@ant-design/icons";
-import { Segmented, Space, Typography } from "antd";
+import type { ReactNode } from "react";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { CostBadge } from "@/components/cost/cost-badge";
-import type { ExploreMode } from "@/lib/explore";
+import type { CostClass } from "@/lib/explore-cost";
+import { cn } from "@/lib/cn";
 
-const { Text } = Typography;
+type ExploreMode = "scan" | "ai";
 
 export function ExploreModeToggle({
   mode,
@@ -16,41 +17,35 @@ export function ExploreModeToggle({
   onChange: (m: ExploreMode) => void;
   cliConfigured: boolean;
 }) {
+  const items: { value: ExploreMode; label: string; icon: string; cost: CostClass }[] = [
+    { value: "scan", label: "Scan", icon: "explore", cost: "free-network" },
+    { value: "ai", label: "AI search", icon: "bolt", cost: "spend" },
+  ];
+
   return (
-    <Space direction="vertical" size={4} className="w-full sm:w-auto">
-      <Segmented
-        value={mode}
-        onChange={(v) => onChange(v as ExploreMode)}
-        options={[
-          {
-            label: (
-              <Space size={6}>
-                <CompassOutlined />
-                <span>Scan</span>
-                <CostBadge kind="free-network" size="xs" />
-              </Space>
-            ),
-            value: "scan",
-          },
-          {
-            label: (
-              <Space size={6}>
-                <ThunderboltOutlined />
-                <span>AI search</span>
-                <CostBadge kind="spend" size="xs" />
-              </Space>
-            ),
-            value: "ai",
-          },
-        ]}
-        block
-        className="sm:!inline-flex sm:!w-auto"
-      />
+    <div className="flex w-full flex-col gap-1 sm:w-auto">
+      <div className="md3-segmented w-full sm:w-auto" role="group" aria-label="Explore mode">
+        {items.map((item) => {
+          const active = mode === item.value;
+          return (
+            <button
+              key={item.value}
+              type="button"
+              className="md3-segmented-btn min-h-[44px]"
+              data-active={active ? "true" : "false"}
+              aria-pressed={active}
+              onClick={() => onChange(item.value)}
+            >
+              <MaterialSymbol name={item.icon} size={18} filled={active} />
+              <span className="md-label-large">{item.label}</span>
+              <CostBadge kind={item.cost} size="xs" />
+            </button>
+          );
+        })}
+      </div>
       {!cliConfigured && mode === "ai" && (
-        <Text type="secondary" className="text-xs">
-          needs a CLI
-        </Text>
+        <p className="md-body-small text-[var(--md-sys-color-on-surface-variant)]">needs a CLI</p>
       )}
-    </Space>
+    </div>
   );
 }

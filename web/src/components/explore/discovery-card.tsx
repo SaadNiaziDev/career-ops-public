@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ExternalLink, Plus, Check, Loader2, ShieldQuestion, Sparkles, Coins } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { instrumentSerif } from "@/lib/fonts";
 import { ATS_LABEL, type AtsSource, type DiscoveredOffer } from "@/lib/explore";
 import { useJobs } from "@/components/jobs/job-store";
+import { MaterialSymbol } from "@/components/material-symbol";
+import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { useExplore } from "./explore-provider";
 
 function freshness(postedAt: string): string {
@@ -81,7 +82,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
           aria-label="Open the posting"
           className="-m-1 inline-flex shrink-0 items-center justify-center rounded p-1 text-faint transition-colors hover:text-foreground max-sm:min-h-[44px] max-sm:min-w-[44px]"
         >
-          <ExternalLink className="size-4" />
+          <MaterialSymbol name="open_in_new" size={18} />
         </a>
       </div>
 
@@ -93,7 +94,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
             className="inline-flex items-center gap-1 rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-600 dark:text-amber-300"
             title="Found by AI on the public web — we can't confirm it's still live without opening it. Evaluating runs a real browser check and sets the verdict."
           >
-            <ShieldQuestion className="size-3" /> unverified
+            <MaterialSymbol name="help" size={14} /> unverified
           </span>
         )}
         {offer.matchedKeyword && (
@@ -105,7 +106,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
 
       {offer.why && (
         <p className="flex items-start gap-1.5 text-[12px] leading-snug text-brand/80">
-          <Sparkles className="mt-0.5 size-3 shrink-0" />
+          <MaterialSymbol name="auto_awesome" size={14} className="mt-0.5 shrink-0" />
           {offer.why}
         </p>
       )}
@@ -116,36 +117,36 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
             href={evaluatedN ? `/pipeline/${evaluatedN}` : job ? `/jobs/${job.id}` : "/pipeline"}
             className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-soft px-2.5 py-2 text-xs font-medium text-brand max-sm:min-h-[44px]"
           >
-            <Check className="size-3.5" /> Evaluated · view report
+            <MaterialSymbol name="check" size={16} /> Evaluated · view report
           </a>
         ) : working ? (
           <div className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-brand/30 bg-brand-soft/60 px-2.5 py-2 text-xs font-medium text-brand">
-            <Loader2 className="size-3.5 animate-spin" />
+            <MaterialSymbol name="progress_activity" size={16} className="animate-spin" />
             {statusLabel}
             <span className="text-brand/60">· in pipeline</span>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
+          <div className="md3-actions-row">
+            <Md3ActionButton
+              variant={isAdded ? "filled" : "outlined"}
+              icon={isAdding ? undefined : isAdded ? "check" : "add"}
+              loading={isAdding}
               disabled={isAdded || isAdding}
               onClick={() => addToPipeline([offer])}
-              className={cn(
-                "inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-2 text-xs font-medium transition-colors max-sm:min-h-[44px]",
-                isAdded ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-surface-hover text-foreground hover:bg-brand-soft hover:text-brand",
-              )}
+              className={cn("flex-1", isAdded && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400")}
             >
-              {isAdding ? <Loader2 className="size-3.5 animate-spin" /> : isAdded ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
               {isAdded ? "In pipeline" : "Add to pipeline"}
-            </button>
-            <button
-              type="button"
+            </Md3ActionButton>
+            <Md3ActionButton
+              variant="outlined"
+              icon="bolt"
+              cost="spend"
               onClick={evaluate}
               title={unverified ? "Runs a real evaluation — and verifies the posting is live. Uses tokens." : "Runs a real A–F evaluation. Uses tokens."}
-              className="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-brand/30 px-2.5 py-2 text-xs font-medium text-brand transition-colors hover:bg-brand-soft max-sm:min-h-[44px]"
+              className="flex-1"
             >
-              Evaluate <Coins className="size-3.5 opacity-80" />
-            </button>
+              Evaluate
+            </Md3ActionButton>
           </div>
         )}
       </div>

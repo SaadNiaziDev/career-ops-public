@@ -1670,6 +1670,96 @@ tracked_companies:
     notes: "Major Islamabad software, data, AI, and SDET employer."
     enabled: true
 
+  - name: Educative
+    careers_url: https://www.educative.io/careers
+    api: https://api.lever.co/v0/postings/educative
+    notes: "Lahore-founded interactive learning platform for developers; scanned via Lever."
+    enabled: true
+
+  - name: Programmers Force
+    careers_url: https://pf.com.pk/careers
+    scan_method: websearch
+    scan_query: 'site:pf.com.pk/join-us React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based software development company."
+    enabled: true
+
+  - name: Cubix
+    careers_url: https://www.cubix.co/careers/
+    scan_method: websearch
+    scan_query: 'site:cubix.co/careers React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Karachi-based mobile and software product development company."
+    enabled: true
+
+  - name: DevBatch
+    careers_url: https://www.devbatch.com/careers/
+    scan_method: websearch
+    scan_query: 'site:devbatch.com/jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based software development company."
+    enabled: true
+
+  - name: Strategic Systems Intl (SSI)
+    careers_url: https://www.ssi-net.com/careers/
+    scan_method: websearch
+    scan_query: 'site:ssi-net.com/jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based enterprise software and IT services company."
+    enabled: true
+
+  - name: TPS Worldwide
+    careers_url: https://tpsworldwide.com/careers/
+    scan_method: websearch
+    scan_query: 'site:tpsworldwide.com/job-openings React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Karachi-based payments technology company."
+    enabled: true
+
+  - name: Mindstorm Studios
+    careers_url: https://www.mindstormstudios.com/careers
+    scan_method: websearch
+    scan_query: 'site:mindstormstudios.com/jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based game and software development studio."
+    enabled: true
+
+  - name: Inbox Business Tech
+    careers_url: https://www.inboxbiz.com/
+    scan_method: websearch
+    scan_query: 'site:rozee.pk/company/inbox-business-technologies React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Karachi, Islamabad. Alt: https://www.rozee.pk/company/inbox-business-technologies"
+    enabled: true
+
+  - name: Sofizar
+    careers_url: https://www.sofizar.com/
+    scan_method: websearch
+    scan_query: '"sofizar" careers jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based e-commerce and digital marketing technology company. Alt: https://www.linkedin.com/company/sofizar/"
+    enabled: true
+
+  - name: Alpha Bold
+    careers_url: https://www.alphabold.com/careers/
+    scan_method: websearch
+    scan_query: 'site:alphabold.com/job-openings React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based data and software engineering company."
+    enabled: true
+
+  - name: Whizpool
+    careers_url: https://whizpool.com/careers
+    scan_method: websearch
+    scan_query: 'site:whizpool.com/jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Islamabad-based software development company."
+    enabled: true
+
+  - name: GeniTeam
+    careers_url: https://www.geniteam.com/careers
+    scan_method: websearch
+    scan_query: 'site:geniteam.com/openings React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based software development company."
+    enabled: true
+
+  - name: Xavor Corporation
+    careers_url: https://www.xavor.com/careers/
+    scan_method: websearch
+    scan_query: 'site:xavor.com/join-our-team React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based software product and services company."
+    enabled: true
+
   # ============================================================
   # -- Türkiye / Turkey market
   # ============================================================

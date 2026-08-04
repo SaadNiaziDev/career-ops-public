@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Space, Typography } from "antd";
-import { CheckOutlined, ClockCircleOutlined, FileTextOutlined, LoadingOutlined } from "@ant-design/icons";
+import Link from "next/link";
+import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { CompanyLogo } from "@/components/company-logo";
 
 export type FollowUp = {
@@ -40,38 +40,35 @@ export function FollowUpCard({
   };
 
   return (
-    <div className="dossier-followup flex w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-surface/40 px-3.5 py-3">
+    <div className="dossier-followup flex w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--md-sys-shape-corner-large-increased)] border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-high)] px-4 py-3">
       <div className="flex min-w-0 flex-[1_1_55%] items-center gap-3">
         <CompanyLogo name={followup.company} size={22} />
         <div className="min-w-0 flex-1">
-          <Typography.Text className="block truncate text-sm">
+          <p className="truncate md-body-medium text-[var(--md-sys-color-on-surface)]">
             <span className="font-medium">{followup.company}</span>
             {followup.role && (
-              <Typography.Text type="secondary"> · {followup.role}</Typography.Text>
+              <span className="text-[var(--md-sys-color-on-surface-variant)]"> · {followup.role}</span>
             )}
-          </Typography.Text>
-          <Typography.Text type="secondary" className="flex items-center gap-1 text-xs">
-            <ClockCircleOutlined />
+          </p>
+          <p className="flex items-center gap-1 md-body-small text-[var(--md-sys-color-on-surface-variant)]">
+            <span className="material-symbols-outlined text-[14px] leading-none">schedule</span>
             {followup.appliedDate ? `Applied ${followup.appliedDate}` : "Follow-up due"}
-          </Typography.Text>
+          </p>
         </div>
       </div>
-      <Space wrap className="ml-auto">
-        <Button
-          size="small"
-          loading={state === "logging"}
-          icon={state !== "logging" ? <CheckOutlined /> : undefined}
-          onClick={log}
-        >
+      <div className="md3-actions-row ml-auto">
+        <Md3ActionButton variant="filled" icon="check" loading={state === "logging"} onClick={log}>
           Mark followed up
-        </Button>
+        </Md3ActionButton>
         {followup.num != null && (
-          <Button type="text" size="small" href={`/pipeline/${followup.num}`} icon={<FileTextOutlined />} />
+          <Link href={`/pipeline/${followup.num}`} className="md3-action-btn md3-action-btn--text" aria-label="Open report">
+            <span className="material-symbols-outlined text-[18px] leading-none">description</span>
+          </Link>
         )}
-        <Button type="link" size="small" onClick={() => setState("snoozed")}>
+        <Md3ActionButton variant="text" onClick={() => setState("snoozed")}>
           Snooze
-        </Button>
-      </Space>
+        </Md3ActionButton>
+      </div>
     </div>
   );
 }

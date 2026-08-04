@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, X } from "lucide-react";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { PageShell } from "@/components/dossier/page-shell";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
 
 type Doctor = { available: boolean; onboardingNeeded: boolean; missing: string[]; warnings: string[] };
 
@@ -39,25 +41,29 @@ export function OnboardingBanner() {
   return (
     <PageShell width="default" className="pb-0!">
       <div className="dot-bg relative overflow-hidden rounded-2xl border border-brand/30 bg-gradient-to-br from-brand/10 via-surface/40 to-transparent p-5">
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
+          type="button"
           onClick={() => setDismissed(true)}
-          className="absolute right-3 top-3 text-faint transition-colors hover:text-foreground"
+          className="absolute right-3 top-3 text-[var(--md-sys-color-outline)] hover:text-[var(--md-sys-color-on-surface)]"
           aria-label="Dismiss"
         >
-          <X className="size-4" />
-        </button>
+          <MaterialSymbol name="close" size={18} />
+        </Button>
         <h2 className="font-display text-xl text-landing">Let&apos;s finish setting you up</h2>
         <p className="mt-1.5 max-w-xl text-sm text-muted">
           career-ops works best when it knows you. We still need {items.join(", ")}.
         </p>
-        {primary && (
+        {primary ? (
           <Link
             href={primary.href}
-            className="mt-4 inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-medium text-brand-foreground transition-colors hover:bg-brand-200"
+            className={cn(buttonVariants({ variant: "primary", size: "sm" }), "mt-4 inline-flex")}
           >
-            {primary.label} <ArrowRight className="size-4" />
+            {primary.label}
+            <MaterialSymbol name="arrow_forward" size={18} />
           </Link>
-        )}
+        ) : null}
       </div>
     </PageShell>
   );

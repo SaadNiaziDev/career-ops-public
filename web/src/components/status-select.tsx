@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckOutlined } from "@ant-design/icons";
-import { Select, Space, Typography } from "antd";
+import { MaterialSymbol } from "@/components/material-symbol";
+import { Md3Select } from "@/components/ui/md3-select";
 import { CANONICAL_STATES } from "@/lib/format";
-
-const { Text } = Typography;
 
 export function StatusSelect({ n, current }: { n: string; current: string }) {
   const [status, setStatus] = useState(current);
@@ -42,20 +40,21 @@ export function StatusSelect({ n, current }: { n: string; current: string }) {
   ];
 
   return (
-    <Space size={8}>
-      <Select
+    <div className="flex items-center gap-2">
+      <Md3Select
         value={status}
-        onChange={onChange}
-        disabled={busy}
+        onChange={(next) => void onChange(next)}
         options={options}
-        size="small"
-        style={{ minWidth: 120 }}
+        disabled={busy}
+        className="min-w-[120px]"
+        aria-label="Application status"
       />
-      {saved && (
-        <Text type="success" className="text-xs">
-          <CheckOutlined /> saved
-        </Text>
-      )}
-    </Space>
+      {saved ? (
+        <span className="inline-flex items-center gap-1 text-xs text-[var(--md-sys-color-tertiary)]">
+          <MaterialSymbol name="check" size={14} />
+          saved
+        </span>
+      ) : null}
+    </div>
   );
 }

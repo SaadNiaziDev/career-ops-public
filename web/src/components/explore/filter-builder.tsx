@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { X, Ban, Clock, MapPin, ChevronDown, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { ATS_LABEL, ATS_SOURCES, cleanChips, type AtsSource, type ExploreFilters } from "@/lib/explore";
+import { MaterialSymbol } from "@/components/material-symbol";
+import { Md3Chip } from "@/components/ui/md3-chip";
+import { Md3Segmented } from "@/components/ui/md3-segmented";
 
 const RECENCY = [
   { label: "24h", days: 1 },
@@ -12,18 +14,6 @@ const RECENCY = [
   { label: "14d", days: 14 },
   { label: "30d", days: 30 },
 ];
-
-const STYLE = `
-.co-fb__chip{display:inline-flex;align-items:center;gap:.3rem;border-radius:999px;padding:.2rem .5rem .2rem .6rem;font-size:12.5px;line-height:1.2;border:1px solid transparent}
-.co-fb__chip button{display:inline-flex;opacity:.6;transition:opacity .15s}
-.co-fb__chip button:hover{opacity:1}
-.co-fb__chip.inc{color:hsl(26 78% 42%);background:hsl(26 73% 51% / .11);border-color:hsl(26 73% 51% / .26)}
-html.dark .co-fb__chip.inc{color:hsl(26 86% 70%);background:hsl(26 80% 55% / .14);border-color:hsl(26 80% 55% / .28)}
-.co-fb__field{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;min-height:2.6rem;padding:.45rem .55rem;border-radius:.7rem}
-.co-fb__field input{flex:1;min-width:7rem;background:transparent;border:none;outline:none;font-size:13.5px;color:inherit}
-.co-fb__field input::placeholder{color:var(--co-faint,hsl(0 0% 60%))}
-@media (max-width:639px){.co-fb__chip button{min-width:44px;min-height:44px;justify-content:center}.co-fb__chip{min-height:44px}.co-fb__field{min-height:44px}.co-fb__field input{min-height:32px}}
-`;
 
 function KeywordField({
   values,
@@ -37,7 +27,7 @@ function KeywordField({
   onChange: (v: string[]) => void;
 }) {
   const [draft, setDraft] = useState("");
-  // Split only on UNAMBIGUOUS item separators (comma / newline / semicolon) — never
+  // Split only on UNAMIGUOUS item separators (comma / newline / semicolon) — never
   // bare spaces, which are legitimate inside multi-word entries ("AI platform",
   // "New York", "Costa Rica"). A space-only paste stays one chip on purpose (#1147).
   const commit = (text: string) => {
@@ -47,13 +37,22 @@ function KeywordField({
     setDraft("");
   };
   return (
-    <div className={cn("co-fb__field border border-border bg-surface/40 focus-within:border-brand/40 transition-colors")}>
+    <div className="md3-field h-auto min-h-[48px] flex-wrap items-center gap-1 py-2">
       {values.map((v) => (
-        <span key={v} className={cn("co-fb__chip", tone === "inc" ? "inc" : "border-border bg-surface-hover text-muted")}>
-          {tone === "exc" && <Ban className="size-3 opacity-70" />}
+        <span
+          key={v}
+          className="md3-chip inline-flex min-h-[32px] cursor-default items-center gap-1"
+          data-active={tone === "inc" ? "true" : "false"}
+        >
+          {tone === "exc" && <MaterialSymbol name="block" size={14} className="opacity-70" />}
           {v}
-          <button type="button" aria-label={`Remove ${v}`} onClick={() => onChange(values.filter((x) => x !== v))}>
-            <X className="size-3" />
+          <button
+            type="button"
+            aria-label={`Remove ${v}`}
+            onClick={() => onChange(values.filter((x) => x !== v))}
+            className="inline-flex opacity-60 transition-opacity hover:opacity-100 max-sm:min-h-[44px] max-sm:min-w-[44px] max-sm:items-center max-sm:justify-center"
+          >
+            <MaterialSymbol name="close" size={14} />
           </button>
         </span>
       ))}
@@ -84,6 +83,7 @@ function KeywordField({
         }}
         onBlur={() => draft.trim() && commit(draft)}
         placeholder={values.length ? "" : placeholder}
+        className="md3-field__input min-w-[7rem] flex-1 text-[13.5px]"
       />
     </div>
   );
@@ -117,8 +117,6 @@ export function FilterBuilder({
 
   return (
     <div className="space-y-4">
-      <style>{STYLE}</style>
-
       <div>
         <Label hint={filters.positive.length === 0 ? "empty = every fresh posting" : undefined}>Roles to find</Label>
         <KeywordField values={filters.positive} tone="inc" placeholder="AI platform, ML infrastructure, staff engineer…" onChange={(v) => set({ positive: v })} />
@@ -136,24 +134,15 @@ export function FilterBuilder({
         <div>
           <Label hint="postings published in this window">
             <span className="inline-flex items-center gap-1.5">
-              <Clock className="size-3.5 text-muted" /> Posted within
+              <MaterialSymbol name="schedule" size={16} className="text-muted" /> Posted within
             </span>
           </Label>
-          <div className="inline-flex rounded-lg border border-border bg-surface/40 p-0.5">
-            {RECENCY.map((r) => (
-              <button
-                key={r.days}
-                type="button"
-                onClick={() => set({ sinceDays: r.days })}
-                className={cn(
-                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors max-sm:min-h-[44px]",
-                  filters.sinceDays === r.days ? "bg-brand-soft text-brand" : "text-muted hover:text-foreground",
-                )}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
+          <Md3Segmented
+            value={String(filters.sinceDays)}
+            onChange={(v) => set({ sinceDays: Number(v) })}
+            aria-label="Posted within"
+            options={RECENCY.map((r) => ({ value: String(r.days), label: r.label }))}
+          />
         </div>
 
         <div>
@@ -162,17 +151,9 @@ export function FilterBuilder({
             {ATS_SOURCES.map((a) => {
               const on = filters.ats.includes(a);
               return (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => toggleAts(a)}
-                  className={cn(
-                    "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors max-sm:min-h-[44px]",
-                    on ? "border-brand/40 bg-brand-soft text-brand" : "border-border text-muted hover:text-foreground",
-                  )}
-                >
+                <Md3Chip key={a} active={on} onClick={() => toggleAts(a)}>
                   {ATS_LABEL[a]}
-                </button>
+                </Md3Chip>
               );
             })}
           </div>
@@ -182,17 +163,17 @@ export function FilterBuilder({
       <button
         type="button"
         onClick={() => setAdvanced((v) => !v)}
-        className="inline-flex items-center gap-1.5 text-[12px] text-muted hover:text-foreground transition-colors max-sm:min-h-[44px]"
+        className="inline-flex items-center gap-1.5 text-[12px] text-muted transition-colors hover:text-foreground max-sm:min-h-[44px]"
       >
-        <SlidersHorizontal className="size-3.5" />
+        <MaterialSymbol name="tune" size={16} />
         Location &amp; scope
-        <ChevronDown className={cn("size-3.5 transition-transform", advanced && "rotate-180")} />
+        <MaterialSymbol name="expand_more" size={16} className={cn("transition-transform", advanced && "rotate-180")} />
       </button>
 
       {advanced && (
         <div className="space-y-3 rounded-xl border border-border bg-surface/30 p-3">
           <div className="flex items-center gap-1.5 text-[12px] text-muted">
-            <MapPin className="size-3.5" /> Location
+            <MaterialSymbol name="location_on" size={16} /> Location
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <div>

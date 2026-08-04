@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Bookmark, BookmarkCheck, ExternalLink, Loader2, X } from "lucide-react";
 import type { InboxJob } from "@/lib/career-ops";
 import type { AtsSource } from "@/lib/explore";
 import { ATS_LABEL } from "@/lib/explore";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Md3ActionButton } from "@/components/ui/md3-action-button";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { CompanyLogo } from "@/components/company-logo";
 import { cn } from "@/lib/cn";
 
@@ -76,7 +76,7 @@ export function TriageRow({
             >
               {scored!.running ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand">
-                  <Loader2 className="size-3.5 animate-spin" />
+                  <MaterialSymbol name="progress_activity" size={14} className="animate-spin" />
                   Scoring
                 </span>
               ) : (
@@ -113,25 +113,22 @@ export function TriageRow({
             className="inline-flex items-center gap-1 text-xs text-muted transition-colors hover:text-brand"
           >
             View posting
-            <ExternalLink className="size-3" />
+            <MaterialSymbol name="open_in_new" size={14} />
           </a>
           {!evaluated && (
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant={shortlisted ? "secondary" : "outline"}
-                size="sm"
+            <div className="md3-actions-row ml-auto">
+              <Md3ActionButton
+                variant={shortlisted ? "filled" : "outlined"}
+                icon={shortlisted ? "bookmark" : "bookmark_border"}
                 onClick={onSave}
                 aria-pressed={shortlisted}
                 className={cn(shortlisted && "border-brand/40 text-brand")}
               >
-                {shortlisted ? <BookmarkCheck className="size-3.5" /> : <Bookmark className="size-3.5" />}
                 {shortlisted ? "Saved" : "Save"}
-              </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={onSkip} aria-label={`Skip ${job.company}`}>
-                <X className="size-3.5" />
+              </Md3ActionButton>
+              <Md3ActionButton variant="text" icon="close" onClick={onSkip} aria-label={`Skip ${job.company}`}>
                 Skip
-              </Button>
+              </Md3ActionButton>
             </div>
           )}
         </div>
