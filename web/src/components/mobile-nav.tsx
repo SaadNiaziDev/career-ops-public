@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { cn } from "@/lib/cn";
 import { CoMark } from "@/components/co-mark";
-import { WorkerPills } from "@/components/jobs/worker-pills";
+import { WorkerTray } from "@/components/jobs/worker-sheet";
 import { UsageMeter } from "@/components/usage-meter";
 import { NAV_ITEMS, isActivePath } from "@/lib/nav-items";
 import { useJobs } from "@/components/jobs/job-store";
@@ -112,8 +112,8 @@ export function MobileNav() {
           })}
         </nav>
 
-        <div className="px-3">
-          <WorkerPills />
+        <div className="border-t border-[var(--md-sys-color-outline-variant)] px-3 pt-3">
+          <WorkerTray />
         </div>
 
         <div className="mt-auto space-y-3 border-t border-[var(--md-sys-color-outline-variant)] px-4 py-4">

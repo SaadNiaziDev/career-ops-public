@@ -256,7 +256,7 @@ html {
 }
 .animate-terminal-popup { animation: terminal-popup-in 300ms ease both; }
 
-/* Worker-pill indeterminate progress bar — a brand sweep (hero aesthetic). */
+/* Worker indeterminate progress — primary sweep. */
 @keyframes job-progress {
   0% { transform: translateX(-110%); }
   100% { transform: translateX(320%); }
@@ -267,7 +267,7 @@ html {
   position: absolute;
   inset: 0 auto 0 0;
   width: 35%;
-  background: linear-gradient(90deg, transparent, var(--color-brand), transparent);
+  background: linear-gradient(90deg, transparent, var(--md-sys-color-primary), transparent);
   animation: job-progress 1.3s ease-in-out infinite;
 }
 
@@ -796,16 +796,19 @@ html.dark .dossier-hero-scrim {
 
 /* ── MD3 navigation rail ─────────────────────────────────────────────────── */
 .md3-rail {
+  display: none;
   width: 96px;
   flex: none;
   align-self: stretch;
   background: var(--md-sys-color-surface-container);
   border-radius: 0 var(--md-sys-shape-corner-extra-large) var(--md-sys-shape-corner-extra-large) 0;
-  display: flex;
   flex-direction: column;
   align-items: center;
   padding: var(--md-sys-spacing-4) 0 var(--md-sys-spacing-5);
   gap: 2px;
+}
+@media (min-width: 1280px) {
+  .md3-rail { display: flex; }
 }
 .md3-rail-mark {
   width: 64px;
@@ -826,6 +829,12 @@ html.dark .dossier-hero-scrim {
   min-width: 48px;
   min-height: 48px;
   justify-content: center;
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
 }
 .md3-rail-item:focus-visible {
   outline: 2px solid var(--md-sys-color-primary);
@@ -853,6 +862,114 @@ html.dark .dossier-hero-scrim {
 .md3-rail-item[data-active="true"] .md3-rail-label {
   font-weight: 700;
   color: var(--md-sys-color-on-surface);
+}
+.md3-rail-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.md3-rail-footer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding-bottom: 2.75rem; /* clear fixed beta chip at bottom-left */
+}
+.md3-rail-footer .md3-rail-item {
+  margin-bottom: 0;
+}
+.md3-rail-divider {
+  width: 40px;
+  height: 1px;
+  margin: var(--md-sys-spacing-2) 0 var(--md-sys-spacing-3);
+  background: var(--md-sys-color-outline-variant);
+  flex: none;
+}
+.md3-rail-badge {
+  position: absolute;
+  top: -2px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  font: var(--md-sys-typescale-label-small);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ── Workers side sheet + ambient bar ────────────────────────────────────── */
+.md3-worker-ambient {
+  display: block;
+  width: 100%;
+  height: 4px;
+  padding: 0;
+  border: none;
+  background: var(--md-sys-color-surface-container-high);
+  cursor: pointer;
+  flex: none;
+}
+.md3-worker-ambient:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+.md3-worker-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 54;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 55%, rgba(0, 0, 0, 0.45));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard);
+}
+.md3-worker-scrim.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.md3-worker-sheet {
+  flex: none;
+  width: 0;
+  overflow: hidden;
+  background: var(--md-sys-color-surface-container);
+  border-left: 0 solid var(--md-sys-color-outline-variant);
+  transition: width var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-emphasized);
+}
+.md3-worker-sheet.open {
+  width: min(400px, 86vw);
+  border-left-width: 1px;
+}
+@media (max-width: 1279px) {
+  .md3-worker-sheet {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 55;
+    width: min(400px, 86vw);
+    transform: translateX(102%);
+    border-left-color: var(--md-sys-color-outline-variant);
+    transition: transform var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-emphasized);
+  }
+  .md3-worker-sheet.open {
+    transform: translateX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .md3-worker-sheet,
+  .md3-worker-scrim {
+    transition: none;
+  }
 }
 
 /* ── MD3 buttons & controls ──────────────────────────────────────────────── */

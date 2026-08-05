@@ -6,10 +6,26 @@ import { cn } from "@/lib/cn";
 import { fmtElapsed, fmtTokens, humanizeStep, isAuthError, useElapsed } from "@/components/jobs/job-utils";
 
 export const TONE = {
-  good: { bar: "bg-emerald-500/70", chip: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400", icon: "text-emerald-500" },
-  warn: { bar: "bg-amber-500/70", chip: "bg-amber-500/15 text-amber-700 dark:text-amber-400", icon: "text-amber-500" },
-  bad: { bar: "bg-red-400/70", chip: "bg-red-500/15 text-red-700 dark:text-red-400", icon: "text-red-400" },
-  muted: { bar: "bg-zinc-400/50", chip: "bg-surface-hover text-muted", icon: "text-zinc-400" },
+  good: {
+    bar: "bg-[var(--md-sys-color-tertiary)]",
+    chip: "bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)]",
+    icon: "text-[var(--md-sys-color-tertiary)]",
+  },
+  warn: {
+    bar: "bg-[var(--md-sys-color-primary)]",
+    chip: "bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)]",
+    icon: "text-[var(--md-sys-color-primary)]",
+  },
+  bad: {
+    bar: "bg-[var(--md-sys-color-error)]",
+    chip: "bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)]",
+    icon: "text-[var(--md-sys-color-error)]",
+  },
+  muted: {
+    bar: "bg-[var(--md-sys-color-outline-variant)]",
+    chip: "bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface-variant)]",
+    icon: "text-[var(--md-sys-color-outline)]",
+  },
 } as const;
 
 export function pillTone(j: Job): keyof typeof TONE {
@@ -77,7 +93,7 @@ export function WorkerCard({
         </div>
       )}
       {authError && (
-        <div className={cn("mt-1 text-amber-700 dark:text-amber-400", inline ? "text-xs" : "text-[10px]")}>
+        <div className={cn("mt-1 text-[var(--md-sys-color-primary)]", inline ? "text-xs" : "text-[10px]")}>
           Sign your CLI in from Config, then re-run.
         </div>
       )}
