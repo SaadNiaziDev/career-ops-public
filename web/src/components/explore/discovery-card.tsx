@@ -55,6 +55,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
 
   const isAdded = added.has(offer.url) || inPipeline || working || doneEval;
   const isAdding = adding.has(offer.url);
+  const live = offer.verification === "live";
   const unverified = offer.verification === "unconfirmed";
   const fresh = freshness(offer.postedAt) || offer.postedHint || "";
 
@@ -89,10 +90,18 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
       <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
         <span className="rounded border border-border px-1.5 py-0.5 font-medium text-muted">{ATS_LABEL[offer.ats as AtsSource] ?? offer.ats}</span>
         {fresh && <span className="text-faint">{fresh}</span>}
+        {live && (
+          <span
+            className="inline-flex items-center gap-1 rounded border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-700 dark:text-emerald-300"
+            title="Posting confirmed open via ATS API or browser check."
+          >
+            <MaterialSymbol name="verified" size={14} /> live
+          </span>
+        )}
         {unverified && (
           <span
             className="inline-flex items-center gap-1 rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-600 dark:text-amber-300"
-            title="Found by AI on the public web — we can't confirm it's still live without opening it. Evaluating runs a real browser check and sets the verdict."
+            title="Found by AI — liveness check was inconclusive (non-ATS page or blocked). Evaluating runs a fuller browser check."
           >
             <MaterialSymbol name="help" size={14} /> unverified
           </span>
@@ -142,7 +151,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
               icon="bolt"
               cost="spend"
               onClick={evaluate}
-              title={unverified ? "Runs a real evaluation — and verifies the posting is live. Uses tokens." : "Runs a real A–F evaluation. Uses tokens."}
+              title={unverified ? "Runs a real evaluation — and re-checks the posting is live. Uses tokens." : "Runs a real A–F evaluation. Uses tokens."}
               className="flex-1"
             >
               Evaluate

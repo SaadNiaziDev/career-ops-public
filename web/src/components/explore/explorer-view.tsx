@@ -73,22 +73,20 @@ export function ExplorerView({
   const { cliName, cliConfigured } = useCliConfig();
   const [firstRun, setFirstRun] = useState(false);
 
+  // AI URL hydration + auto-hunt lives in ExploreProvider (URL beats sessionStorage).
+  // Here we only seed Scan filters / optional ?run=1 — never touch AI intent, or we'd
+  // race the provider and abort a hunt that just started.
   useEffect(() => {
     if (inited.current) return;
     inited.current = true;
     const sp = new URLSearchParams(window.location.search);
-    const ai = paramsToAi(sp);
-    if (ai !== null) {
-      setMode("ai");
-      setAiIntent(ai);
-    } else {
-      initFilters(sp.toString() ? paramsToFilters(sp) : seed.filters);
-      if (sp.get("run") === "1") {
-        setFirstRun(true);
-        void discover();
-      }
+    if (paramsToAi(sp) !== null) return;
+    initFilters(sp.toString() ? paramsToFilters(sp) : seed.filters);
+    if (sp.get("run") === "1") {
+      setFirstRun(true);
+      void discover();
     }
-  }, [seed.filters, initFilters, setMode, setAiIntent, discover]);
+  }, [seed.filters, initFilters, discover]);
 
   const inboxUrls = useMemo(() => new Set(inboxSnapshot.map((j) => j.url)), [inboxSnapshot]);
   const enriched: EnrichedOffer[] = useMemo(
@@ -157,7 +155,7 @@ export function ExplorerView({
               <AiSearchBox
                 intent={aiIntent}
                 onIntent={setAiIntent}
-                onSubmit={() => void discoverAI()}
+                onSubmit={() => void discoverAI(aiIntent)}
                 cliConfigured={cliConfigured}
                 cliName={cliName}
                 onRunScan={() => setMode("scan")}

@@ -20,9 +20,17 @@ const STYLE = `
 `;
 
 export function AiHuntView({ cliName }: { cliName?: string }) {
-  const { phase, matchCount, aiTrace, aiCost, offers } = useExplore();
+  const { phase, matchCount, aiTrace, aiCost, offers, status, aiIntent } = useExplore();
   const shown = useCountUp(matchCount);
   const revealing = phase === "revealing";
+  const verifying = /check(ing)?|verify|still open/i.test(status);
+  const subtitle = revealing
+    ? "found — review them below"
+    : verifying
+      ? status
+      : matchCount > 0
+        ? "found so far · verifying before showing"
+        : status || "casting across the public web…";
 
   return (
     <>
@@ -40,14 +48,17 @@ export function AiHuntView({ cliName }: { cliName?: string }) {
           <h2 className={`${instrumentSerif.className} text-3xl leading-tight text-[var(--md-sys-color-on-surface)]`}>
             {matchCount > 0 ? `${shown} candidate${shown === 1 ? "" : "s"}` : "Hunting the open web"}
           </h2>
-          <p className="mt-1 text-sm text-[var(--md-sys-color-on-surface-variant)]">
-            {revealing ? "found — review them below" : matchCount > 0 ? "found so far · streaming in" : "casting across the public web…"}
-          </p>
+          <p className="mt-1 text-sm text-[var(--md-sys-color-on-surface-variant)]">{subtitle}</p>
+          {aiIntent.trim() && (
+            <p className="mx-auto mt-2 max-w-xl truncate text-xs text-[var(--md-sys-color-on-surface-variant)]/80" title={aiIntent}>
+              Intent: {aiIntent}
+            </p>
+          )}
         </div>
 
         <div className="co-ailedger">
           <MaterialSymbol name="auto_awesome" size={14} />
-          {cliName || "your CLI"} · searching the open web
+          {cliName || "your CLI"} · {verifying ? "verifying postings" : "searching the open web"}
           {aiCost.searches > 0 && <span className="opacity-75">· {aiCost.searches} searches</span>}
           {matchCount > 0 && <span className="opacity-75">· {matchCount} found</span>}
         </div>

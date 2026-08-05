@@ -1,13 +1,14 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   DEFAULT_FILTERS,
   ATS_LABEL,
   filtersToParams,
   aiToParams,
   isBroadSearch,
+  paramsToAi,
   parseExplorePatch,
   type AtsSource,
   type DiscoveredOffer,
@@ -69,7 +70,8 @@ type ExploreCtx = {
   setMode: (m: ExploreMode) => void;
   aiIntent: string;
   setAiIntent: (s: string) => void;
-  discoverAI: () => Promise<void>;
+  /** Optional intent override — use when starting from a URL before state flushes. */
+  discoverAI: (intentOverride?: string) => Promise<void>;
   aiTrace: AiTraceChunk[];
   aiCost: AiCost;
 };
@@ -105,8 +107,31 @@ type ResultSnapshot = {
   aiIntent: string;
 };
 
+const SETTLED = new Set<Phase>(["results", "empty-current", "empty-loose", "failed", "degraded"]);
+const RUNNING = new Set<Phase>(["casting", "scanning", "revealing", "hunting"]);
+
+function clearSnap() {
+  try {
+    sessionStorage.removeItem(RESULTS_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function readSnap(): ResultSnapshot | null {
+  try {
+    const snap = JSON.parse(sessionStorage.getItem(RESULTS_KEY) || "null") as ResultSnapshot | null;
+    if (!snap || snap.v !== 1 || !Array.isArray(snap.offers)) return null;
+    return snap;
+  } catch {
+    return null;
+  }
+}
+
 export function ExploreProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [filters, setFiltersState] = useState<ExploreFilters>({ ...DEFAULT_FILTERS, ats: [...DEFAULT_FILTERS.ats] });
   const touched = useRef(false);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -114,8 +139,6 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   const [sources, setSources] = useState<Partial<Record<AtsSource, SourceState>>>({});
   const [matchCount, setMatchCount] = useState(0);
   const [companiesScanned, setCompaniesScanned] = useState(0);
-  // Authoritative scan-health signals (scanner --json mode, #1199): tell a capped /
-  // degraded scan from a genuinely empty one, and power a "scanned X of Y" banner.
   const [companiesAvailable, setCompaniesAvailable] = useState(0);
   const [capHit, setCapHit] = useState(false);
   const [droppedNoDate, setDroppedNoDate] = useState(0);
@@ -125,7 +148,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState<Set<string>>(new Set());
   const [mode, setModeState] = useState<ExploreMode>("scan");
-  const [aiIntent, setAiIntent] = useState("");
+  const [aiIntent, setAiIntentState] = useState("");
   const [aiTrace, setAiTrace] = useState<AiTraceChunk[]>([]);
   const [aiCost, setAiCost] = useState<AiCost>({ searches: 0, candidates: 0, fetches: 0 });
   const runningRef = useRef(false);
@@ -133,6 +156,18 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   aiIntentRef.current = aiIntent;
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
+  // Abort + generation: a new search must cancel the previous one, and a late
+  // completion from an aborted run must never overwrite fresher results.
+  const abortRef = useRef<AbortController | null>(null);
+  const runIdRef = useRef(0);
+  const sessionRestoredRef = useRef(false);
+  /** Last AI intent we applied from the URL (or started via Search) — blocks double-hunts. */
+  const appliedAiIntentRef = useRef<string | null>(null);
+
+  const setAiIntent = useCallback((s: string) => {
+    aiIntentRef.current = s;
+    setAiIntentState(s);
+  }, []);
 
   const setFilters = useCallback((f: ExploreFilters) => {
     touched.current = true;
@@ -145,10 +180,26 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     setFiltersState(f);
   }, []);
 
-  const discover = useCallback(async () => {
-    if (runningRef.current) return;
-    const f = filtersRef.current;
+  const beginRun = useCallback(() => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    const runId = ++runIdRef.current;
     runningRef.current = true;
+    clearSnap();
+    return { ac, runId, isCurrent: () => runId === runIdRef.current && !ac.signal.aborted };
+  }, []);
+
+  const endRun = useCallback((runId: number) => {
+    if (runId === runIdRef.current) {
+      runningRef.current = false;
+    }
+  }, []);
+
+  const discover = useCallback(async () => {
+    const f = filtersRef.current;
+    const { ac, runId, isCurrent } = beginRun();
+    setModeState("scan");
     setPhase("casting");
     setOffers([]);
     setMatchCount(0);
@@ -158,6 +209,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     setDroppedNoDate(0);
     setPartial(false);
     setError("");
+    setAiTrace([]);
     setStatus("Casting the net across the ATS network…");
     const init: Partial<Record<AtsSource, SourceState>> = {};
     for (const a of f.ats) init[a] = { state: "queued" };
@@ -169,16 +221,18 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
 
     const acc: DiscoveredOffer[] = [];
     let sawError = "";
-    let companiesScannedAcc = 0; // 0 at the end = the directories never downloaded → degraded, not empty
-    let capHitAcc = false; // scan was capped (only a slice of the universe searched)
-    let datasetIssueAcc = false; // some ATS dataset was stale/empty/unreachable
-    let droppedNoDateAcc = 0; // postings dropped for lacking a publish date
+    let companiesScannedAcc = 0;
+    let capHitAcc = false;
+    let datasetIssueAcc = false;
+    let droppedNoDateAcc = 0;
     try {
       const r = await fetch("/api/explore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(f),
+        signal: ac.signal,
       });
+      if (!isCurrent()) return;
       if (r.status === 400) {
         const d = await r.json().catch(() => ({}));
         sawError = d.error || "The scanner isn't available.";
@@ -189,6 +243,14 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         const dec = new TextDecoder();
         let buf = "";
         for (;;) {
+          if (!isCurrent()) {
+            try {
+              await reader.cancel();
+            } catch {
+              /* ignore */
+            }
+            return;
+          }
           const { value, done } = await reader.read();
           if (done) break;
           buf += dec.decode(value, { stream: true });
@@ -205,24 +267,27 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
             }
             switch (ev.kind) {
               case "atsStart":
+                if (!isCurrent()) break;
                 setPhase("scanning");
                 setStatus(`Walking ${ATS_LABEL[ev.ats as AtsSource] ?? ev.ats} — ${ev.companies.toLocaleString()} companies`);
                 setSources((s) => ({ ...s, [ev.ats]: { ...s[ev.ats as AtsSource], state: "active", companies: ev.companies } }));
                 break;
               case "progress":
-                // `matches` is the GLOBAL running total (the engine batches the
-                // offer list to the very end), so it drives the live hero counter.
+                if (!isCurrent()) break;
                 setMatchCount((m) => Math.max(m, ev.matches));
                 setSources((s) => ({ ...s, [ev.ats]: { ...s[ev.ats as AtsSource], state: "active", done: ev.scanned, total: ev.total } }));
                 break;
               case "atsDone":
+                if (!isCurrent()) break;
                 setSources((s) => ({ ...s, [ev.ats]: { ...s[ev.ats as AtsSource], state: ev.unreachable > 0 ? "noisy" : "swept", unreachable: ev.unreachable } }));
                 break;
               case "offer":
+                if (!isCurrent()) break;
                 acc.push(ev.offer);
                 setOffers((o) => [...o, ev.offer]);
                 break;
               case "summary": {
+                if (!isCurrent()) break;
                 companiesScannedAcc = ev.companiesScanned;
                 setCompaniesScanned(ev.companiesScanned);
                 if (typeof ev.companiesAvailable === "number") setCompaniesAvailable(ev.companiesAvailable);
@@ -249,35 +314,35 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (e) {
+      if (ac.signal.aborted || !isCurrent()) return;
       sawError = e instanceof Error ? e.message : "stream error";
     }
 
-    // Mark any still-active sources as swept (stream ended).
+    if (!isCurrent()) return;
+
     setSources((s) => {
       const next = { ...s };
       for (const k of Object.keys(next) as AtsSource[]) if (next[k]?.state === "active" || next[k]?.state === "queued") next[k] = { ...next[k]!, state: "swept" };
       return next;
     });
 
-    runningRef.current = false;
+    endRun(runId);
     if (acc.length > 0) {
       setMatchCount(acc.length);
       setPhase("revealing");
       setStatus(`${acc.length} fresh role${acc.length === 1 ? "" : "s"} found — free.`);
-      window.setTimeout(() => setPhase("results"), 850);
+      window.setTimeout(() => {
+        if (runId === runIdRef.current) setPhase("results");
+      }, 850);
     } else if (sawError) {
       setError(sawError);
       setPhase("failed");
     } else if (capHitAcc || datasetIssueAcc || droppedNoDateAcc > 0 || companiesScannedAcc === 0) {
-      // Maintainer's RULE (#1199): it is NOT "all caught up" if the scan was capped,
-      // a dataset was stale/unreachable, postings were dropped for missing a date, OR
-      // nothing was searched at all (legacy 0-companies fallback when --json is absent).
-      // Truly-empty is only when live datasets were fully searched and found nothing.
       setPhase("degraded");
     } else {
       setPhase(isBroadSearch(f) ? "empty-current" : "empty-loose");
     }
-  }, []);
+  }, [beginRun, endRun]);
 
   const addToPipeline = useCallback(async (list: DiscoveredOffer[]) => {
     const fresh = list.filter((o) => !added.has(o.url));
@@ -292,10 +357,6 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       const d = (await r.json()) as { added?: number };
       if (d.added && d.added > 0) {
         setAdded((s) => new Set([...s, ...fresh.map((o) => o.url)]));
-        // The new inbox rows were written server-side. Invalidate the Next router
-        // cache so the (server-rendered) Pipeline view shows them instead of a stale
-        // snapshot, and ping live listeners (today's dashboard, pipeline provider) —
-        // otherwise the user adds a job, opens Pipeline, and sees it empty (disc#5).
         router.refresh();
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("co-job-done", { detail: { kind: "explore-add" } }));
@@ -318,65 +379,77 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     setFilters(next);
     filtersRef.current = next;
     if (opts?.run) void discover();
-  }, [discover]);
+  }, [discover, setFilters]);
 
   const reset = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    runIdRef.current += 1;
     runningRef.current = false;
+    appliedAiIntentRef.current = null;
     setPhase("idle");
     setOffers([]);
     setSources({});
     setMatchCount(0);
     setCompaniesScanned(0);
+    setCompaniesAvailable(0);
+    setCapHit(false);
+    setDroppedNoDate(0);
     setStatus("");
     setPartial(false);
     setError("");
     setAiTrace([]);
     setAiCost({ searches: 0, candidates: 0, fetches: 0 });
-    try {
-      sessionStorage.removeItem(RESULTS_KEY);
-    } catch {
-      /* ignore */
-    }
+    clearSnap();
   }, []);
 
-  // AI search — orchestrate modes/discover.md via the user's CLI, streamed.
-  const discoverAI = useCallback(async () => {
-    if (runningRef.current) return;
-    const intent = aiIntentRef.current.trim();
+  const discoverAI = useCallback(async (intentOverride?: string) => {
+    const intent = (intentOverride ?? aiIntentRef.current).trim();
     if (!intent) return;
+    // Keep ref + state in lockstep when launched from a URL before React re-renders.
+    aiIntentRef.current = intent;
+    setAiIntentState(intent);
+
     const cliId = await resolveCliIdForRun();
     if (!cliId) {
+      setModeState("ai");
       setPhase("blocked");
       return;
     }
-    runningRef.current = true;
+
+    const { ac, runId, isCurrent } = beginRun();
+    appliedAiIntentRef.current = intent;
+    setModeState("ai");
     setPhase("casting");
     setOffers([]);
     setMatchCount(0);
     setAiTrace([]);
     setAiCost({ searches: 0, candidates: 0, fetches: 0 });
     setError("");
+    setSources({});
     setStatus("Casting across the open web…");
     if (typeof window !== "undefined") window.history.replaceState(null, "", `/explore?${aiToParams(intent)}`);
 
     let knownUrls = new Set<string>();
     try {
-      const k = await fetch("/api/explore/ai/known").then((r) => r.json());
+      const k = await fetch("/api/explore/ai/known", { signal: ac.signal }).then((r) => r.json());
+      if (!isCurrent()) return;
       knownUrls = new Set<string>(Array.isArray(k.urls) ? k.urls : []);
     } catch {
-      /* best-effort dedup */
+      if (ac.signal.aborted || !isCurrent()) return;
     }
     const parser = makeAiStreamParser({ knownUrls });
 
-    const acc: DiscoveredOffer[] = [];
+    const pending: DiscoveredOffer[] = [];
     let sawError = "";
     const handle = (chunks: AiTraceChunk[]) => {
+      if (!isCurrent()) return;
       for (const ch of chunks) {
         if (ch.kind === "offer") {
-          acc.push(ch.offer);
-          setOffers((o) => [...o, ch.offer]);
-          setMatchCount(acc.length);
-          setAiCost((c) => ({ ...c, candidates: acc.length }));
+          pending.push(ch.offer);
+          setMatchCount(pending.length);
+          setAiCost((c) => ({ ...c, candidates: pending.length }));
+          setStatus(`Found ${pending.length} candidate${pending.length === 1 ? "" : "s"}… will verify before showing`);
           setPhase("hunting");
         } else {
           setAiTrace((t) => [...t, ch]);
@@ -395,9 +468,11 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: intent, cliId }),
+        signal: ac.signal,
       });
+      if (!isCurrent()) return;
       if (r.status === 404) {
-        runningRef.current = false;
+        endRun(runId);
         setPhase("blocked");
         return;
       }
@@ -410,6 +485,14 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         const reader = r.body.getReader();
         const dec = new TextDecoder();
         for (;;) {
+          if (!isCurrent()) {
+            try {
+              await reader.cancel();
+            } catch {
+              /* ignore */
+            }
+            return;
+          }
           const { value, done } = await reader.read();
           if (done) break;
           handle(parser.feed(dec.decode(value, { stream: true })));
@@ -417,43 +500,92 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         handle(parser.flush());
       }
     } catch (e) {
+      if (ac.signal.aborted || !isCurrent()) return;
       sawError = e instanceof Error ? e.message : "stream error";
     }
 
-    runningRef.current = false;
+    if (!isCurrent()) return;
+
+    const acc: DiscoveredOffer[] = [];
+    let expiredDropped = 0;
+    if (pending.length > 0 && !sawError) {
+      setStatus(`Checking ${pending.length} posting${pending.length === 1 ? "" : "s"} ${pending.length === 1 ? "is" : "are"} still open…`);
+      setPhase("hunting");
+      try {
+        const lr = await fetch("/api/explore/liveness", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls: pending.map((o) => o.url) }),
+          signal: ac.signal,
+        });
+        if (!isCurrent()) return;
+        const data = (await lr.json().catch(() => ({}))) as {
+          results?: { url: string; result: string; reason?: string }[];
+        };
+        const byUrl = new Map((data.results || []).map((x) => [x.url, x]));
+        for (const offer of pending) {
+          const hit = byUrl.get(offer.url);
+          if (hit?.result === "expired") {
+            expiredDropped++;
+            setAiTrace((t) => [
+              ...t,
+              {
+                kind: "narration",
+                text: `Dropped expired: ${offer.title || "role"} @ ${offer.company || "company"}${hit.reason ? ` (${hit.reason})` : ""}`,
+              },
+            ]);
+            continue;
+          }
+          acc.push({
+            ...offer,
+            verification: hit?.result === "active" ? "live" : "unconfirmed",
+          });
+        }
+      } catch {
+        if (ac.signal.aborted || !isCurrent()) return;
+        acc.push(...pending);
+      }
+      if (!isCurrent()) return;
+      setOffers(acc);
+      setMatchCount(acc.length);
+      setAiCost((c) => ({ ...c, candidates: acc.length }));
+    }
+
+    if (!isCurrent()) return;
+    endRun(runId);
     if (acc.length > 0) {
       setMatchCount(acc.length);
       setPhase("revealing");
-      setStatus(`${acc.length} candidate${acc.length === 1 ? "" : "s"} found.`);
-      window.setTimeout(() => setPhase("results"), 850);
+      const dropped = expiredDropped > 0 ? ` · filtered ${expiredDropped} expired` : "";
+      setStatus(`${acc.length} candidate${acc.length === 1 ? "" : "s"} found${dropped}.`);
+      window.setTimeout(() => {
+        if (runId === runIdRef.current) setPhase("results");
+      }, 850);
     } else if (sawError) {
       setError(sawError);
       setPhase("failed");
+    } else if (expiredDropped > 0) {
+      setStatus(`All ${expiredDropped} candidate${expiredDropped === 1 ? "" : "s"} were expired — try a fresher search.`);
+      setPhase("empty-loose");
     } else {
       setPhase("empty-loose");
     }
-  }, []);
+  }, [beginRun, endRun]);
 
-  // Switch surface but PRESERVE the current results + filters — toggling scan↔AI must
-  // not throw away a completed search (disc#5). A new search (discover/discoverAI)
-  // clears + repopulates; an explicit reset() clears. Just stop any half-run.
   const setMode = useCallback((m: ExploreMode) => {
-    runningRef.current = false;
-    setModeState(m);
+    setModeState((prev) => {
+      if (prev === m) return prev; // same surface — don't abort an in-flight hunt
+      // Stop any in-flight hunt/scan so a mode toggle can't leave a zombie
+      // that later writes stale offers into the new surface.
+      abortRef.current?.abort();
+      abortRef.current = null;
+      runIdRef.current += 1;
+      runningRef.current = false;
+      return m;
+    });
   }, []);
 
-  // Rehydrate the last settled result set on mount (per-tab sessionStorage), unless a
-  // search is already running. Done in an effect (not a useState initializer) to avoid
-  // an SSR hydration mismatch.
-  useEffect(() => {
-    if (runningRef.current) return;
-    let snap: ResultSnapshot | null = null;
-    try {
-      snap = JSON.parse(sessionStorage.getItem(RESULTS_KEY) || "null") as ResultSnapshot | null;
-    } catch {
-      snap = null;
-    }
-    if (!snap || snap.v !== 1 || !Array.isArray(snap.offers)) return;
+  const restoreSnap = useCallback((snap: ResultSnapshot) => {
     setModeState(snap.mode === "ai" ? "ai" : "scan");
     setOffers(snap.offers);
     setMatchCount(typeof snap.matchCount === "number" ? snap.matchCount : snap.offers.length);
@@ -469,14 +601,56 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     setAiTrace(Array.isArray(snap.aiTrace) ? snap.aiTrace : []);
     setAiCost(snap.aiCost ?? { searches: 0, candidates: 0, fetches: 0 });
     if (typeof snap.aiIntent === "string") setAiIntent(snap.aiIntent);
-    // Never rehydrate INTO a running phase — no live stream backs it.
-    const RUNNING = new Set<Phase>(["casting", "scanning", "revealing", "hunting"]);
     let nextPhase = RUNNING.has(snap.phase) ? (snap.offers.length ? "results" : "idle") : snap.phase;
     if (nextPhase === "blocked" && readCliConfig().cliId) {
       nextPhase = snap.offers.length ? "results" : "idle";
     }
     setPhase(nextPhase);
-  }, []);
+  }, [setAiIntent]);
+
+  // Provider stays mounted across the app shell — so a NEW /explore?mode=ai&intent=…
+  // navigation must beat sessionStorage and abort any prior hunt. Same intent we
+  // already applied (Search click / replaceState) is a no-op.
+  useEffect(() => {
+    if (pathname !== "/explore") return;
+
+    const urlAi = paramsToAi(searchParams);
+
+    if (urlAi !== null) {
+      const intent = urlAi.trim();
+      setModeState("ai");
+      setAiIntent(intent);
+
+      if (appliedAiIntentRef.current === intent) return;
+
+      const snap = readSnap();
+      const sameSnap = !!snap && snap.mode === "ai" && (snap.aiIntent || "").trim() === intent;
+      if (sameSnap && snap && !sessionRestoredRef.current) {
+        sessionRestoredRef.current = true;
+        appliedAiIntentRef.current = intent;
+        restoreSnap(snap);
+        return;
+      }
+
+      appliedAiIntentRef.current = intent;
+      sessionRestoredRef.current = true;
+      clearSnap();
+      setOffers([]);
+      setMatchCount(0);
+      setAiTrace([]);
+      setAiCost({ searches: 0, candidates: 0, fetches: 0 });
+      setStatus("");
+      setError("");
+      if (intent) void discoverAI(intent);
+      return;
+    }
+
+    // Bare /explore or scan query — restore last settled snapshot once.
+    if (sessionRestoredRef.current) return;
+    sessionRestoredRef.current = true;
+    const snap = readSnap();
+    if (snap) restoreSnap(snap);
+  }, [pathname, searchParams, discoverAI, setAiIntent, restoreSnap]);
 
   useEffect(() => {
     const onConfig = () => {
@@ -489,7 +663,6 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("co-config-changed", onConfig);
   }, [phase]);
 
-  // Recover from stale "blocked" when a CLI is installed but was never saved.
   useEffect(() => {
     if (phase !== "blocked") return;
     void resolveCliIdForRun().then((id) => {
@@ -500,9 +673,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     });
   }, [phase]);
 
-  // Persist only SETTLED states (never mid-stream or blocked — blocked is recoverable).
   useEffect(() => {
-    const SETTLED = new Set<Phase>(["results", "empty-current", "empty-loose", "failed", "degraded"]);
     if (!SETTLED.has(phase)) return;
     try {
       const snap: ResultSnapshot = {
@@ -523,7 +694,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       discover, addToPipeline, applyPatch, reset,
       mode, setMode, aiIntent, setAiIntent, discoverAI, aiTrace, aiCost,
     }),
-    [filters, setFilters, initFilters, phase, offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, discover, addToPipeline, applyPatch, reset, mode, setMode, aiIntent, discoverAI, aiTrace, aiCost],
+    [filters, setFilters, initFilters, phase, offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, discover, addToPipeline, applyPatch, reset, mode, setMode, aiIntent, setAiIntent, discoverAI, aiTrace, aiCost],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
