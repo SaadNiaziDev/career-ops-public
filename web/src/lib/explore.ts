@@ -55,9 +55,10 @@ export type DiscoveredOffer = {
   note?: string;
   // ── AI-search (modes/discover.md) additions — all optional, so the
   //    deterministic scan offer is unaffected (fields simply absent). ──
-  /** present ONLY on AI offers → drives the "unverified" badge. AI finds can't be
-   *  liveness-confirmed (AGENTS.md); the scan hits a live ATS API so it omits this. */
-  verification?: "unconfirmed";
+  /** present ONLY on AI offers. "live" = ATS API / Playwright confirmed open;
+   *  "unconfirmed" = check inconclusive (non-ATS / blocked). Expired are dropped
+   *  before they reach the UI — they never appear with a verification tag. */
+  verification?: "unconfirmed" | "live";
   /** one-line "why it matched" judgment (the thing a deterministic scan can't give) */
   why?: string;
   /** human freshness ("~5d ago", "unknown") shown when postedAt is "" */

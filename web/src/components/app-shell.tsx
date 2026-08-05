@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { JobsProvider } from "@/components/jobs/job-store";
 import { PipelineProvider } from "@/components/pipeline/pipeline-provider";
 import { ApplyProvider } from "@/components/apply/apply-provider";
@@ -14,15 +15,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <JobsProvider>
       <PipelineProvider>
         <ApplyProvider>
-          <ExploreProvider>
-            <ScrollProgress />
-            <div className="flex min-h-screen bg-background">
-              <NavigationRail />
-              <main className="min-w-0 flex-1 overflow-x-hidden">{children}</main>
-              <FirstScoreView />
-              <BetaBanner />
-            </div>
-          </ExploreProvider>
+          {/* ExploreProvider reads useSearchParams — Next requires a Suspense boundary. */}
+          <Suspense fallback={null}>
+            <ExploreProvider>
+              <ScrollProgress />
+              <div className="flex min-h-screen bg-background">
+                <NavigationRail />
+                <main className="min-w-0 flex-1 overflow-x-hidden">{children}</main>
+                <FirstScoreView />
+                <BetaBanner />
+              </div>
+            </ExploreProvider>
+          </Suspense>
         </ApplyProvider>
       </PipelineProvider>
     </JobsProvider>

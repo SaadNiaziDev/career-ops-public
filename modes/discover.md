@@ -2,7 +2,7 @@
 
 Propose job postings from the **open web** based on natural-language intent. This is the token-spending complement to the free deterministic **Scan** (`scan.mjs` / Explore → Scan tab).
 
-You are a **proposer**, not a writer: never edit files, never merge into the tracker, never submit applications. The web UI parses your stream and shows candidates as **unverified** until the user evaluates one.
+You are a **proposer**, not a writer: never edit files, never merge into the tracker, never submit applications. The web UI parses your stream, **liveness-checks each URL** (ATS API, then Playwright when needed), drops expired postings, and shows survivors as **live** or **unverified**.
 
 ## When to use
 
@@ -33,7 +33,9 @@ The prompt also includes an **ALREADY KNOWN** block (companies/roles/URL count f
 - When seniority or company stage can't be confirmed from shallow signals, **include** the candidate and flag uncertainty in `why` — don't silently discard.
 - Location is the one filter you enforce hard (see Search strategy step 6) — `portals.yml` `location_filter` exists because generic global postings rarely sponsor PK candidates, and silently including them defeats the point of this mode.
 - Never invent URLs. Every `url` must be a real `https://` link you found via search or fetch.
-- Never score fit (no X/5). Never claim a posting is "verified live" — all offers are `verification: unconfirmed`.
+- Prefer **direct ATS posting URLs** (Greenhouse, Lever, Ashby, Workday board links) over aggregator mirrors — the web UI can confirm those are still open via the ATS API.
+- Prefer fresher search hits when snippets show ages; do not emit a URL you already saw 404 / "no longer available" on via WebFetch.
+- Never score fit (no X/5). Emit `verification: unconfirmed` always — the web UI upgrades to `live` or drops expired after its own check.
 
 ## Search strategy
 
@@ -71,7 +73,7 @@ Emit each candidate as **one line**, never inside a markdown code fence:
 | `why` | yes | One line: why this matches intent + CV; note uncertainty if any |
 | `postedHint` | no | Human freshness (`"~3d ago"`, `"unknown"`) — never fabricate ISO dates |
 | `ats` | no | `greenhouse`, `lever`, `ashby`, `workday`, or `other` |
-| `verification` | yes | Always `"unconfirmed"` |
+| `verification` | yes | Always `"unconfirmed"` in the envelope — the web UI rewrites to `live` or drops expired |
 | `confidence` | no | `low` / `medium` / `high` for how sure you are this is a real open role |
 
 - Valid JSON, one envelope per line.
@@ -89,8 +91,9 @@ Skip proposing when:
 - Company is in the ALREADY KNOWN list
 - URL is clearly not a job posting (blog, login wall with no role, generic careers homepage with no role)
 - Title is obviously spam or unrelated to intent AND CV
+- WebFetch (or the search snippet) clearly shows the posting is closed / 404 / "no longer available"
 
-When borderline, **include** with `confidence: "low"` and explain in `why`.
+When borderline, **include** with `confidence: "low"` and explain in `why`. The web UI still drops anything its liveness check marks expired.
 
 ## Ethical constraints
 

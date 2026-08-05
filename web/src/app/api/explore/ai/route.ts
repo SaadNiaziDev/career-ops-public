@@ -22,7 +22,7 @@ Follow modes/discover.md exactly. You are running headless for the web:
   <<offer:{"url":"…","title":"…","company":"…","location":"…","source":"ai-search","why":"…","postedHint":"…","ats":"…","verification":"unconfirmed"}>>
   Valid JSON, one per line, the moment you're confident — stream them as you go.
 - Between envelopes, narrate briefly (plain text) what you're searching — shown live as your reasoning.
-- Be frugal (~3–6 searches, stop at a strong set). EVERY candidate is UNVERIFIED.
+- Be frugal (~3–6 searches, stop at a strong set). Prefer direct ATS URLs over aggregator mirrors. EVERY envelope starts as UNVERIFIED — the web UI then liveness-checks and drops expired links before showing them.
 - Be a GENEROUS FINDER, not a judge: when a constraint (location, seniority, stage) can't be confirmed from the shallow signal, INCLUDE + flag the uncertainty in "why" — don't discard. NEVER score or judge fit; the A–F evaluation does that later, with the full JD.
 - DEDUP: skip anything already known below; don't re-propose the user's existing companies.
 `;
