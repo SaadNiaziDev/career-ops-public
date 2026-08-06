@@ -336,6 +336,18 @@ search_queries:
     query: 'Pakistan ("Software Engineer" OR "Frontend" OR "Full Stack" OR TypeScript OR React) (Karachi OR Lahore OR Islamabad OR Remote)'
     enabled: true
 
+  - name: Pakistan — Product / Fintech Engineering
+    query: '("SadaPay" OR Careem OR "Bazaar Technologies" OR Bykea OR Daraz OR Foodpanda OR Securiti OR Finja OR Retailo OR Abhi) ("Software Engineer" OR Frontend OR "Full Stack" OR Backend) (Pakistan OR Karachi OR Lahore OR Islamabad)'
+    enabled: true
+
+  - name: Rozee.pk — Software Engineering
+    query: 'site:rozee.pk ("Software Engineer" OR "Frontend Developer" OR "Full Stack" OR "React" OR "Node.js") (Lahore OR Karachi OR Islamabad)'
+    enabled: true
+
+  - name: LinkedIn — Pakistan Software
+    query: '"Software Engineer" OR "Full Stack" OR Frontend OR React (Lahore OR Karachi OR Islamabad) Pakistan'
+    enabled: true
+
   # -- No-Code / Low-Code / Automation --
   - name: Ashby — No-Code & Automation
     query: 'site:jobs.ashbyhq.com "no-code" OR "low-code" OR "automation engineer" OR "n8n" OR "Make" OR "Airtable" remote senior'
@@ -1758,6 +1770,84 @@ tracked_companies:
     scan_method: websearch
     scan_query: 'site:xavor.com/join-our-team React OR Frontend OR "Full Stack" OR TypeScript OR Node'
     notes: "Lahore-based software product and services company."
+    enabled: true
+
+  # -- Pakistan product / fintech / marketplace --
+
+  - name: Careem
+    careers_url: https://jobs.careem.com/
+    api: https://boards-api.greenhouse.io/v1/boards/careem/jobs
+    notes: "Super-app with major engineering hubs in Karachi, Lahore, and Islamabad; scanned via Greenhouse."
+    enabled: true
+
+  - name: SadaPay
+    careers_url: https://sadapay.pk/careers
+    scan_method: websearch
+    scan_query: 'site:sadapay.pk/careers OR site:sadapay.pk/jobs-listing React OR Frontend OR "Full Stack" OR Backend OR TypeScript OR Node'
+    notes: "Islamabad-headquartered digital bank / fintech; hybrid + remote engineering roles."
+    enabled: true
+
+  - name: Bazaar Technologies
+    careers_url: https://careers-page.com/bazaar-technologies
+    scan_method: websearch
+    scan_query: 'site:careers-page.com/bazaar-technologies OR site:bazaartech.com/careers Engineer OR Frontend OR Backend OR "Full Stack"'
+    notes: "Karachi B2B commerce / retail-tech product company."
+    enabled: true
+
+  - name: Securiti
+    careers_url: https://securiti.freshteam.com/jobs
+    scan_method: websearch
+    scan_query: 'site:securiti.freshteam.com/jobs OR site:securiti.ai/careers Pakistan OR Karachi React OR Frontend OR Backend OR "Full Stack"'
+    notes: "Pakistan-founded data privacy / security SaaS with a large Karachi engineering team."
+    enabled: true
+
+  - name: Finja
+    careers_url: https://www.finja.pk/careers
+    scan_method: websearch
+    scan_query: 'site:finja.pk/careers OR "Finja" careers (Pakistan OR Lahore OR Karachi) (Engineer OR Frontend OR Backend)'
+    notes: "Pakistan fintech / digital payments company."
+    enabled: true
+
+  - name: Daraz
+    careers_url: https://www.daraz.pk/careers
+    scan_method: websearch
+    scan_query: 'site:daraz.pk/careers OR "Daraz" (Pakistan OR Karachi OR Lahore) ("Software Engineer" OR Frontend OR Backend OR "Full Stack")'
+    notes: "Pakistan e-commerce platform (Alibaba group); product + engineering roles."
+    enabled: true
+
+  - name: Delivery Hero / Foodpanda
+    careers_url: https://careers.deliveryhero.com
+    scan_method: websearch
+    scan_query: 'site:careers.deliveryhero.com Pakistan OR "Foodpanda" ("Software Engineer" OR Frontend OR Backend OR "Full Stack")'
+    notes: "Foodpanda Pakistan engineering via Delivery Hero careers board."
+    enabled: true
+
+  - name: ibex
+    careers_url: https://www.ibex.co/careers
+    scan_method: websearch
+    scan_query: 'site:ibex.co/careers Pakistan OR Lahore OR Karachi OR Islamabad (Engineer OR Developer OR Frontend OR Backend)'
+    notes: "CX / digital technology employer with large Pakistan tech centers."
+    enabled: true
+
+  - name: Abhi
+    careers_url: https://abhi.com.pk/
+    scan_method: websearch
+    scan_query: '"Abhi" OR abhi.com.pk careers (Pakistan OR Karachi OR Lahore) (Engineer OR Frontend OR Backend OR "Full Stack")'
+    notes: "Pakistan earned-wage access / fintech product company."
+    enabled: true
+
+  - name: Retailo
+    careers_url: https://retailo.co/
+    scan_method: websearch
+    scan_query: '"Retailo" careers (Pakistan OR Lahore OR Karachi OR Islamabad) (Engineer OR Frontend OR Backend OR "Full Stack")'
+    notes: "Pakistan B2B commerce / retail-tech startup with engineering in major cities."
+    enabled: true
+
+  - name: Bykea
+    careers_url: https://bykea.com/
+    scan_method: websearch
+    scan_query: '"Bykea" careers (Pakistan OR Karachi OR Lahore) (Engineer OR Frontend OR Backend OR "Full Stack" OR Mobile)'
+    notes: "Karachi mobility / logistics super-app; careers page may block bots — websearch discovery."
     enabled: true
 
   # ============================================================
