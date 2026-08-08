@@ -6,19 +6,18 @@ import { CompanyLogo } from "@/components/company-logo";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { Md3Card } from "@/components/ui/md3-card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
 import { useJobs, type Job } from "@/components/jobs/job-store";
 import { AddCompanyCard } from "@/components/portals/add-company-card";
 
 type Company = { name: string; status: string; detail: string };
 type Result = { available: boolean; configured: boolean; companies: Company[] };
 
-const TONE: Record<string, { tone: "good" | "warn" | "bad" | "muted"; label: string }> = {
-  live: { tone: "good", label: "live" },
-  empty: { tone: "warn", label: "live · empty" },
-  broken: { tone: "bad", label: "broken" },
-  skipped: { tone: "muted", label: "no ATS" },
+const TONE: Record<string, { className: string; label: string }> = {
+  live: { className: "bg-[var(--md-sys-color-tertiary)] text-[var(--md-sys-color-on-tertiary)]", label: "live" },
+  empty: { className: "bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)]", label: "live · empty" },
+  broken: { className: "bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)]", label: "broken" },
+  skipped: { className: "bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface-variant)]", label: "no ATS" },
 };
 const ORDER: Record<string, number> = { broken: 0, empty: 1, live: 2, skipped: 3 };
 
@@ -94,8 +93,8 @@ export function PortalsView() {
               {sorted.map((c) => {
                 const t = TONE[c.status] ?? TONE.skipped;
                 return (
-                  <li key={c.name} className="flex flex-wrap items-center gap-3 px-[var(--card-pad-x)] py-3">
-                    <CompanyLogo name={c.name} size={24} />
+                  <li key={c.name} className="flex min-h-16 flex-wrap items-center gap-3 px-[var(--card-pad-x)]">
+                    <CompanyLogo name={c.name} size={32} />
                     <div className="min-w-0 flex-1">
                       <div className="font-medium text-[var(--md-sys-color-on-surface)]">{c.name}</div>
                       <code className="text-xs text-[var(--md-sys-color-on-surface-variant)]">{c.detail}</code>
@@ -115,7 +114,9 @@ export function PortalsView() {
                           }
                         />
                       ) : null}
-                      <Badge tone={t.tone}>{t.label}</Badge>
+                      <span className={cn("inline-flex min-h-7 items-center rounded-[var(--md-sys-shape-corner-small)] px-2.5 text-xs font-semibold", t.className)}>
+                        {t.label}
+                      </span>
                     </div>
                   </li>
                 );
@@ -131,27 +132,22 @@ export function PortalsView() {
 function FixAffordance({ job, onFix }: { job?: Job; onFix: () => void }) {
   if (job?.status === "running") {
     return (
-      <Link href={`/jobs/${job.id}`}>
-        <Button variant="text" size="sm">
-          <MaterialSymbol name="progress_activity" size={16} className="animate-spin" />
-          Fixing…
-        </Button>
+      <Link href={`/jobs/${job.id}`} className="md3-btn-text min-h-10 text-sm">
+        <MaterialSymbol name="progress_activity" size={16} className="animate-spin" />
+        Fixing…
       </Link>
     );
   }
   if (job?.status === "done") {
     return (
-      <Link href={`/jobs/${job.id}`}>
-        <Button variant="text" size="sm" className="text-emerald-600">
-          repaired · re-check
-        </Button>
+      <Link href={`/jobs/${job.id}`} className="md3-btn-text min-h-10 text-sm text-[var(--md-sys-color-tertiary)]">
+        repaired · re-check
       </Link>
     );
   }
   return (
-    <Button variant="outline" size="sm" onClick={onFix}>
-      <MaterialSymbol name="build" size={16} />
+    <Md3ActionButton variant="outlined" icon="build" onClick={onFix}>
       Fix
-    </Button>
+    </Md3ActionButton>
   );
 }

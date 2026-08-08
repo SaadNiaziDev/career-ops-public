@@ -28,6 +28,7 @@ export function FacetChips({
   totalCount,
   anyActive,
   onClear,
+  layout = "stack",
 }: {
   within: number | null;
   setWithin: (d: number | null) => void;
@@ -45,26 +46,27 @@ export function FacetChips({
   totalCount: number;
   anyActive: boolean;
   onClear: () => void;
+  layout?: "stack" | "row";
 }) {
   return (
-    <div className="space-y-2.5">
-      {/* keyword search + live count */}
-      <div className="flex items-center gap-3">
-        <Md3Input
-          icon="search"
-          value={kw}
-          onChange={(e) => setKw(e.target.value)}
-          placeholder="Filter by company or role…"
-          className="flex-1"
-        />
-        <span className="shrink-0 text-xs text-muted">
-          <span className="tabular-nums text-foreground">{resultCount}</span>
-          <span className="text-faint">/{totalCount}</span>
-        </span>
-      </div>
+    <div className={layout === "row" ? "flex min-w-0 flex-1 flex-wrap items-center gap-2" : "space-y-2.5"}>
+      {layout === "stack" && (
+        <div className="flex items-center gap-3">
+          <Md3Input
+            icon="search"
+            value={kw}
+            onChange={(e) => setKw(e.target.value)}
+            placeholder="Filter by company or role…"
+            className="flex-1"
+          />
+          <span className="shrink-0 text-xs text-muted">
+            <span className="tabular-nums text-foreground">{resultCount}</span>
+            <span className="text-faint">/{totalCount}</span>
+          </span>
+        </div>
+      )}
 
-      {/* chip row — desktop wraps, mobile scrolls inside the container */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+      <div className={layout === "row" ? "flex min-w-0 flex-1 flex-wrap items-center gap-2" : "flex items-center gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0"}>
         {/* freshness (single-select segmented; click active to clear) */}
         <div className="md3-segmented inline-flex shrink-0">
           {FRESHNESS_WINDOWS.map((w) => (
@@ -114,12 +116,12 @@ export function FacetChips({
         )}
       </div>
 
-      {/* Token-honesty is bidirectional: the "free" reassurance is as always-visible
-          as the tray's "spend" cue (mobile + desktop) — never desktop-only. */}
-      <div className="flex items-center gap-1.5">
-        <CostBadge kind="free" size="xs" />
-        <span className="text-[11px] text-faint">Filtering is free — only scoring uses tokens.</span>
-      </div>
+      {layout === "stack" && (
+        <div className="flex items-center gap-1.5">
+          <CostBadge kind="free" size="xs" />
+          <span className="text-[11px] text-faint">Filtering is free — only scoring uses tokens.</span>
+        </div>
+      )}
     </div>
   );
 }

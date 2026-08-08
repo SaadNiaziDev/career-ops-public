@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes } from "react";
+import type { InputHTMLAttributes, Ref, TextareaHTMLAttributes } from "react";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { cn } from "@/lib/cn";
 
@@ -23,8 +23,9 @@ export function Md3Textarea({
   icon,
   className,
   ...props
-}: React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & {
   icon?: string;
+  ref?: Ref<HTMLTextAreaElement>;
 }) {
   return (
     <label className={cn("md3-field md3-field--textarea", className)}>

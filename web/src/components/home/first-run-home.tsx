@@ -1,37 +1,111 @@
 "use client";
 
-import { instrumentSerif } from "@/lib/fonts";
-import { HeroGlow } from "@/components/hero-glow";
-import { CvIngest } from "@/components/cv/cv-ingest";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { PageShell } from "@/components/dossier/page-shell";
+import { cliDisplayName, readCliConfig } from "@/lib/cli-config";
 
-// The first-run takeover: when cv.md is missing, the CV-upload hero IS the home.
-// One input, value-coming framing (not a form), the same product chrome (HeroGlow
-// + dot-bg) so it feels like the app, not a gate. The whole aha (CV → free matches
-// → first score) flows from here.
 export function FirstRunHome() {
+  const [cliLine, setCliLine] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/clis")
+      .then((r) => r.json())
+      .then((d) => {
+        const cfg = readCliConfig();
+        const list: { id: string; installed: boolean; path: string | null; name: string }[] = d.clis ?? [];
+        const active = list.find((c) => c.id === cfg.cliId && c.installed) ?? list.find((c) => c.installed);
+        if (active) setCliLine(`${cliDisplayName(active.id) ?? active.name} detected at ${active.path ?? active.id}`);
+      })
+      .catch(() => undefined);
+  }, []);
+
   return (
-    <PageShell width="narrow">
-      <section className="dot-bg relative overflow-hidden rounded-2xl border border-border bg-surface/40 px-7 py-10 md:px-10 md:py-12">
-        <HeroGlow />
-        <div aria-hidden className="pointer-events-none absolute inset-0 z-[1] bg-surface/55 backdrop-blur-[2px] dark:bg-background/45" />
-        <div className="relative z-10">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted">
-            <span className="text-faint">//</span> local-first · your machine
-          </p>
-          <h1 className={`${instrumentSerif.className} mt-3 text-4xl leading-[1.05] text-landing md:text-5xl`}>
-            Drop your CV. See who&apos;s hiring you in 60 seconds.
-          </h1>
-          <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-muted">
-            No account. No setup. Your CV is parsed once on your own AI, then we scan the live job market for roles
-            that fit you — <span className="text-foreground">that part&apos;s free</span>. You only spend tokens again
-            when you choose to score a role.
-          </p>
-          <div className="mt-7">
-            <CvIngest />
+    <PageShell width="default">
+      <p className="md-eyebrow">Welcome</p>
+      <h1 className="md-display-small-emphasized mt-2">Nothing tracked yet</h1>
+      <p className="mt-2.5 max-w-[620px] text-[17px] leading-relaxed text-[var(--md-sys-color-on-surface-variant)]">
+        Three ways in. Everything here is free until you ask for a score — that is the only step that spends tokens.
+      </p>
+
+      <div className="mt-7 grid gap-4 md:grid-cols-3">
+        <EntryCard
+          icon="link"
+          title="Paste a job URL"
+          body="The fastest start. Drops one role into the inbox, parsed but unscored."
+          href="/add"
+          cta="Paste a link"
+          filled
+        />
+        <EntryCard
+          icon="radar"
+          title="Scan the portals"
+          body="Six ATS boards, no API keys, results stream in as they are found."
+          href="/explore"
+          cta="Run a scan"
+          badge="FREE"
+        />
+        <EntryCard
+          icon="description"
+          title="Add your CV first"
+          body="Scores and application drafts are only as good as what it knows about you."
+          href="/cv"
+          cta="Upload a CV"
+        />
+      </div>
+
+      {cliLine && (
+        <div className="mt-auto flex flex-wrap items-center gap-4 rounded-[var(--md-sys-shape-corner-extra-large)] bg-[var(--md-sys-color-surface-container-high)] px-5 py-4">
+          <MaterialSymbol name="terminal" size={24} className="text-[var(--md-sys-color-primary)]" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{cliLine}</p>
+            <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">Set as the default agent. Change it any time in Config.</p>
           </div>
+          <Link href="/config" className="md3-btn-text text-sm">
+            Open Config
+          </Link>
         </div>
-      </section>
+      )}
     </PageShell>
+  );
+}
+
+function EntryCard({
+  icon,
+  title,
+  body,
+  href,
+  cta,
+  filled,
+  badge,
+}: {
+  icon: string;
+  title: string;
+  body: string;
+  href: string;
+  cta: string;
+  filled?: boolean;
+  badge?: string;
+}) {
+  return (
+    <div className="flex flex-col rounded-[var(--md-sys-shape-corner-extra-large)] bg-[var(--md-sys-color-surface-container)] p-6">
+      <span className="grid size-14 place-items-center rounded-[18px] bg-[var(--md-sys-color-secondary-container)]">
+        <MaterialSymbol name={icon} size={28} className="text-[var(--md-sys-color-on-secondary-container)]" />
+      </span>
+      <p className="mt-4 text-[19px] font-semibold leading-snug">{title}</p>
+      <p className="mt-1.5 text-sm leading-relaxed text-[var(--md-sys-color-outline)]">{body}</p>
+      <Link
+        href={href}
+        className={`mt-auto inline-flex min-h-12 items-center justify-center gap-2 pt-5 ${filled ? "md3-btn-filled w-full" : "md3-btn-outlined w-full"}`}
+      >
+        {cta}
+        {badge && (
+          <span className="rounded-[var(--md-sys-shape-corner-full)] bg-[var(--md-sys-color-tertiary-container)] px-2 py-0.5 text-[11px] font-semibold text-[var(--md-sys-color-on-tertiary-container)]">
+            {badge}
+          </span>
+        )}
+      </Link>
+    </div>
   );
 }

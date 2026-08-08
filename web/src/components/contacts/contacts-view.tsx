@@ -8,7 +8,6 @@ import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
 import { Md3Empty } from "@/components/ui/md3-empty";
 import { Md3Input } from "@/components/ui/md3-input";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 export type ContactRow = {
   date: string;
@@ -76,67 +75,55 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
         </Md3Empty>
       ) : (
         <>
-          <div className="md3-table-wrap">
-            <table className="md3-table">
-              <thead>
-                <tr>
-                  <th>Role</th>
-                  <th>Contact</th>
-                  <th>Reach</th>
-                  <th className="hidden md:table-cell">Date</th>
-                  <th className="hidden lg:table-cell">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paged.map((r) => (
-                  <tr key={`${r.trackerNum}-${r.name}-${r.email}-${r.date}`}>
-                    <td>
-                      <Link href={`/pipeline/${r.trackerNum}`} className="font-medium text-brand-text hover:underline">
-                        {r.company}
-                      </Link>
-                      <div className="text-xs text-muted">{r.role}</div>
-                      <Badge tone="muted" className="mt-1">
-                        #{r.trackerNum}
-                      </Badge>
-                    </td>
-                    <td>
-                      <div className="font-medium">{r.name || "—"}</div>
-                      <div className="text-xs text-muted">{r.title || r.channel}</div>
-                    </td>
-                    <td>
-                      <div className="flex flex-col gap-0.5">
-                        {r.email ? (
-                          <a href={`mailto:${r.email}`} className="text-sm">
-                            {r.email}
-                          </a>
-                        ) : (
-                          <span className="text-xs text-faint">No email found</span>
-                        )}
-                        {r.linkedin?.startsWith("http") && (
-                          <a
-                            href={r.linkedin}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-brand-text"
-                          >
-                            LinkedIn <MaterialSymbol name="open_in_new" size={14} />
-                          </a>
-                        )}
-                        {r.verified ? (
-                          <Badge tone={r.verified === "yes" ? "good" : "muted"} className="mt-1 w-fit">
-                            {r.verified}
-                          </Badge>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="hidden md:table-cell">{r.date}</td>
-                    <td className="hidden lg:table-cell">
-                      <span className="text-xs text-muted">{r.notes}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="md3-pipeline-list-panel">
+            <div className="hidden min-h-12 items-center gap-4 border-b border-[var(--md-sys-color-outline-variant)] px-6 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--md-sys-color-outline)] xl:grid xl:grid-cols-[260px_220px_260px_120px_1fr]">
+              <span>Role</span>
+              <span>Contact</span>
+              <span>Reach</span>
+              <span>Date</span>
+              <span>Notes</span>
+            </div>
+            {paged.map((r) => (
+              <div
+                key={`${r.trackerNum}-${r.name}-${r.email}-${r.date}`}
+                className="grid min-h-16 items-start gap-4 border-b border-[var(--md-sys-color-outline-variant)] px-6 py-4 last:border-b-0 xl:grid-cols-[260px_220px_260px_120px_1fr]"
+              >
+                <div className="min-w-0">
+                  <Link href={`/pipeline/${r.trackerNum}`} className="font-medium text-[var(--md-sys-color-primary)] hover:underline">
+                    {r.company}
+                  </Link>
+                  <div className="text-sm text-[var(--md-sys-color-on-surface-variant)]">{r.role}</div>
+                  <Badge tone="muted" className="mt-1">
+                    #{r.trackerNum}
+                  </Badge>
+                </div>
+                <div>
+                  <div className="font-medium">{r.name || "—"}</div>
+                  <div className="text-sm text-[var(--md-sys-color-on-surface-variant)]">{r.title || r.channel}</div>
+                </div>
+                <div className="min-w-0">
+                  {r.email ? (
+                    <a href={`mailto:${r.email}`} className="block truncate text-sm">
+                      {r.email}
+                    </a>
+                  ) : (
+                    <span className="text-xs text-[var(--md-sys-color-outline)]">No email found</span>
+                  )}
+                  {r.linkedin?.startsWith("http") && (
+                    <a
+                      href={r.linkedin}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-[var(--md-sys-color-primary)]"
+                    >
+                      LinkedIn <MaterialSymbol name="open_in_new" size={14} />
+                    </a>
+                  )}
+                </div>
+                <div className="text-sm text-[var(--md-sys-color-on-surface-variant)]">{r.date}</div>
+                <div className="text-sm text-[var(--md-sys-color-on-surface-variant)]">{r.notes || "—"}</div>
+              </div>
+            ))}
           </div>
 
           {pageCount > 1 && (
@@ -145,17 +132,17 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
                 {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
               </span>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={safePage === 0} onClick={() => setPage((p) => p - 1)}>
+                <button type="button" className="md3-btn-outlined min-h-10" disabled={safePage === 0} onClick={() => setPage((p) => p - 1)}>
                   Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
+                </button>
+                <button
+                  type="button"
+                  className="md3-btn-outlined min-h-10"
                   disabled={safePage >= pageCount - 1}
                   onClick={() => setPage((p) => p + 1)}
                 >
                   Next
-                </Button>
+                </button>
               </div>
             </div>
           )}

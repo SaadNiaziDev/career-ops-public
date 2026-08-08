@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MaterialSymbol } from "@/components/material-symbol";
@@ -18,6 +18,14 @@ export function CvEditor() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [content]);
 
   useEffect(() => {
     fetch("/api/cv")
@@ -82,6 +90,7 @@ export function CvEditor() {
         ) : (
           <div className="grid gap-5 lg:grid-cols-2">
             <Md3Textarea
+              ref={textareaRef}
               value={content}
               onChange={(e) => {
                 setContent(e.target.value);
@@ -89,8 +98,8 @@ export function CvEditor() {
               }}
               spellCheck={false}
               placeholder={"# Your Name\n\n## Summary\n..."}
-              rows={24}
               className="font-mono"
+              style={{ resize: "none", overflow: "hidden" }}
             />
             <Md3Card className="min-h-[60vh]">
               <article className="report-prose">

@@ -2,48 +2,11 @@
 @import "lenis/dist/lenis.css";
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ── Material Design 3 tokens (dark scheme, seed #dd7627) ─────────────────── */
-:root,
-.dark {
-  color-scheme: dark;
-
-  --md-sys-color-primary: #FFB68F;
-  --md-sys-color-on-primary: #4E2600;
-  --md-sys-color-primary-container: #6E3900;
-  --md-sys-color-on-primary-container: #FFDBC8;
-
-  --md-sys-color-secondary: #E4BFA8;
-  --md-sys-color-on-secondary: #422B1B;
-  --md-sys-color-secondary-container: #5A4130;
-  --md-sys-color-on-secondary-container: #FFDCC5;
-
-  --md-sys-color-tertiary: #CBCB94;
-  --md-sys-color-on-tertiary: #313200;
-  --md-sys-color-tertiary-container: #484A00;
-  --md-sys-color-on-tertiary-container: #E7E7AE;
-
-  --md-sys-color-error: #FFB4AB;
-  --md-sys-color-on-error: #690005;
-  --md-sys-color-error-container: #93000A;
-  --md-sys-color-on-error-container: #FFDAD6;
-
-  --md-sys-color-surface: #191211;
-  --md-sys-color-on-surface: #F0DFD8;
-  --md-sys-color-on-surface-variant: #D8C2B9;
-  --md-sys-color-surface-container-lowest: #130C0B;
-  --md-sys-color-surface-container-low: #1F1817;
-  --md-sys-color-surface-container: #221A18;
-  --md-sys-color-surface-container-high: #312825;
-  --md-sys-color-surface-container-highest: #3D3330;
-
-  --md-sys-color-outline: #A08D85;
-  --md-sys-color-outline-variant: #53433E;
-
+/* ── Material Design 3 — shared tokens (theme-agnostic) ───────────────────── */
+:root {
   --z-dropdown: 200;
   --z-overlay: 300;
   --z-toast: 400;
-  --md-sys-color-inverse-surface: #F0DFD8;
-  --md-sys-color-inverse-on-surface: #382E2B;
 
   --md-sys-shape-corner-none: 0;
   --md-sys-shape-corner-extra-small: 4px;
@@ -88,18 +51,6 @@
   --md-sys-spacing-6: 24px;
   --md-sys-spacing-8: 32px;
 
-  --bg: var(--md-sys-color-surface);
-  --surface: var(--md-sys-color-surface-container);
-  --surface-hover: var(--md-sys-color-surface-container-high);
-  --border: var(--md-sys-color-outline-variant);
-  --fg: var(--md-sys-color-on-surface);
-  --muted: var(--md-sys-color-on-surface-variant);
-  --faint: var(--md-sys-color-outline);
-  --landing: var(--md-sys-color-on-surface);
-  --brand-text: var(--md-sys-color-primary);
-  --dot: 30 10% 60% / 0.08;
-  --pre-bg: var(--md-sys-color-surface-container-low);
-
   --page-px: var(--md-sys-spacing-8);
   --page-py: var(--md-sys-spacing-8);
   --page-pb: var(--md-sys-spacing-8);
@@ -113,6 +64,111 @@
   --page-width-narrow: 48rem;
   --page-width-default: 72rem;
   --page-width-wide: 80rem;
+}
+
+/* ── Light scheme (seed #dd7627) ─────────────────────────────────────────── */
+:root.light,
+html.light {
+  color-scheme: light;
+
+  --md-sys-color-primary: #97490B;
+  --md-sys-color-on-primary: #FFFFFF;
+  --md-sys-color-primary-container: #FFDBC8;
+  --md-sys-color-on-primary-container: #341100;
+
+  --md-sys-color-secondary: #5F3A21;
+  --md-sys-color-on-secondary: #FFFFFF;
+  --md-sys-color-secondary-container: #FFDCC5;
+  --md-sys-color-on-secondary-container: #422B1B;
+
+  --md-sys-color-tertiary: #484A00;
+  --md-sys-color-on-tertiary: #FFFFFF;
+  --md-sys-color-tertiary-container: #E7E7AE;
+  --md-sys-color-on-tertiary-container: #313200;
+
+  --md-sys-color-error: #BA1A1A;
+  --md-sys-color-on-error: #FFFFFF;
+  --md-sys-color-error-container: #FFDAD6;
+  --md-sys-color-on-error-container: #410002;
+
+  --md-sys-color-surface: #FCEAE2;
+  --md-sys-color-on-surface: #221A18;
+  --md-sys-color-on-surface-variant: #53433E;
+  --md-sys-color-surface-container-lowest: #FFFFFF;
+  --md-sys-color-surface-container-low: #FFF0E8;
+  --md-sys-color-surface-container: #FFDBC8;
+  --md-sys-color-surface-container-high: #FFD0BC;
+  --md-sys-color-surface-container-highest: #FFC4AD;
+
+  --md-sys-color-outline: #85746C;
+  --md-sys-color-outline-variant: #D8C2B9;
+  --md-sys-color-inverse-surface: #382E2B;
+  --md-sys-color-inverse-on-surface: #F0DFD8;
+
+  --bg: var(--md-sys-color-surface);
+  --surface: var(--md-sys-color-surface-container);
+  --surface-hover: var(--md-sys-color-surface-container-high);
+  --border: var(--md-sys-color-outline-variant);
+  --fg: var(--md-sys-color-on-surface);
+  --muted: var(--md-sys-color-on-surface-variant);
+  --faint: var(--md-sys-color-outline);
+  --landing: var(--md-sys-color-on-surface);
+  --brand-text: var(--md-sys-color-primary);
+  --dot: 30 10% 40% / 0.08;
+  --pre-bg: var(--md-sys-color-surface-container-low);
+}
+
+/* ── Dark scheme (seed #dd7627) — also default before JS runs ────────────── */
+:root.dark,
+html.dark,
+:root:not(.light) {
+  color-scheme: dark;
+
+  --md-sys-color-primary: #FFB68F;
+  --md-sys-color-on-primary: #4E2600;
+  --md-sys-color-primary-container: #6E3900;
+  --md-sys-color-on-primary-container: #FFDBC8;
+
+  --md-sys-color-secondary: #E4BFA8;
+  --md-sys-color-on-secondary: #422B1B;
+  --md-sys-color-secondary-container: #5A4130;
+  --md-sys-color-on-secondary-container: #FFDCC5;
+
+  --md-sys-color-tertiary: #CBCB94;
+  --md-sys-color-on-tertiary: #313200;
+  --md-sys-color-tertiary-container: #484A00;
+  --md-sys-color-on-tertiary-container: #E7E7AE;
+
+  --md-sys-color-error: #FFB4AB;
+  --md-sys-color-on-error: #690005;
+  --md-sys-color-error-container: #93000A;
+  --md-sys-color-on-error-container: #FFDAD6;
+
+  --md-sys-color-surface: #191211;
+  --md-sys-color-on-surface: #F0DFD8;
+  --md-sys-color-on-surface-variant: #D8C2B9;
+  --md-sys-color-surface-container-lowest: #130C0B;
+  --md-sys-color-surface-container-low: #1F1817;
+  --md-sys-color-surface-container: #221A18;
+  --md-sys-color-surface-container-high: #312825;
+  --md-sys-color-surface-container-highest: #3D3330;
+
+  --md-sys-color-outline: #A08D85;
+  --md-sys-color-outline-variant: #53433E;
+  --md-sys-color-inverse-surface: #F0DFD8;
+  --md-sys-color-inverse-on-surface: #382E2B;
+
+  --bg: var(--md-sys-color-surface);
+  --surface: var(--md-sys-color-surface-container);
+  --surface-hover: var(--md-sys-color-surface-container-high);
+  --border: var(--md-sys-color-outline-variant);
+  --fg: var(--md-sys-color-on-surface);
+  --muted: var(--md-sys-color-on-surface-variant);
+  --faint: var(--md-sys-color-outline);
+  --landing: var(--md-sys-color-on-surface);
+  --brand-text: var(--md-sys-color-primary);
+  --dot: 30 10% 60% / 0.08;
+  --pre-bg: var(--md-sys-color-surface-container-low);
 }
 
 @theme {
