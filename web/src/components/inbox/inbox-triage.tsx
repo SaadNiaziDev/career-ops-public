@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { useJobs } from "@/components/jobs/job-store";
+import { useToast } from "@/components/providers/toast-provider";
 import type { InboxJob } from "@/lib/career-ops";
 import type { AtsSource } from "@/lib/explore";
 import { ATS_SOURCES } from "@/lib/explore";
@@ -23,6 +24,7 @@ const BATCH = 20;
 // role relevant — order is freshness with a single documented plug point.
 export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   const { jobs, startJob } = useJobs();
+  const { toast } = useToast();
 
   // facets
   const [within, setWithin] = useState<number | null>(null);
@@ -36,7 +38,6 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   const [shortlist, setShortlist] = useState<ShortItem[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
-  const [undo, setUndo] = useState<{ label: string; fn: () => void } | null>(null);
   const [hasCli, setHasCli] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -59,12 +60,6 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   useEffect(() => {
     if (loaded) try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden)); } catch { /* quota */ }
   }, [hidden, loaded]);
-  // auto-dismiss the undo toast
-  useEffect(() => {
-    if (!undo) return;
-    const t = setTimeout(() => setUndo(null), 5000);
-    return () => clearTimeout(t);
-  }, [undo]);
 
   // stable "now" for freshness (per mount)
   const now = useMemo(() => Date.now(), []);
@@ -141,7 +136,14 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   };
   const skip = (job: InboxJob) => {
     setHidden((h) => (h.includes(job.url) ? h : [...h, job.url]));
-    setUndo({ label: `Skipped ${job.company}`, fn: () => setHidden((h) => h.filter((u) => u !== job.url)) });
+    toast({
+      message: `Skipped ${job.company}`,
+      tone: "neutral",
+      action: {
+        label: "Undo",
+        onClick: () => setHidden((h) => h.filter((u) => u !== job.url)),
+      },
+    });
   };
   const toggleSelect = (url: string) =>
     setSelected((s) => {
@@ -179,75 +181,71 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   // have ≥1 raw posting.
   if (inbox.length === 0) return null;
 
-  return (
-    <div className={cn("pipeline-inbox mt-6", shortlist.length > 0 && "pb-28 sm:pb-24")}>
-      <div className="grid gap-6 xl:grid-cols-[minmax(280px,320px)_minmax(0,1fr)] xl:items-start">
-        <aside className="space-y-4 xl:sticky xl:top-6">
-          <div className="rounded-2xl border border-border bg-surface/50 p-4 sm:p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-faint">Refine</p>
-            <h2 className="mt-1 text-base font-semibold text-foreground">Filter inbox</h2>
-            <p className="mt-1 text-xs leading-relaxed text-muted">
-              Narrow the list before you save or score — filtering never uses tokens.
-            </p>
-            <div className="mt-4">
-              <FacetChips
-                within={within}
-                setWithin={setWithin}
-                sources={sources}
-                toggleSource={(s) => setSources((set) => { const n = new Set(set); n.has(s) ? n.delete(s) : n.add(s); return n; })}
-                seniorities={seniorities}
-                toggleSeniority={(s) => setSeniorities((set) => { const n = new Set(set); n.has(s) ? n.delete(s) : n.add(s); return n; })}
-                locQ={locQ}
-                setLocQ={setLocQ}
-                kw={kw}
-                setKw={setKw}
-                availSources={availSources}
-                availSeniorities={availSeniorities}
-                resultCount={filtered.length}
-                totalCount={enriched.length - hiddenCount}
-                anyActive={anyFacet}
-                onClear={() => { setWithin(null); setSources(new Set()); setSeniorities(new Set()); setLocQ(""); setKw(""); }}
-              />
-            </div>
-          </div>
-        </aside>
+  const activeFilterLabel =
+    within != null
+      ? `${within}d freshness`
+      : sources.size === 1
+        ? Array.from(sources)[0]
+        : seniorities.size === 1
+          ? Array.from(seniorities)[0]
+          : locQ.trim()
+            ? `location "${locQ.trim()}"`
+            : kw.trim()
+              ? `keyword "${kw.trim()}"`
+              : null;
 
-        <section className="min-w-0">
-      {/* batch header: fresh slice by default, or the full filtered set */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-faint">Queue</p>
-          <p className="mt-1 text-lg font-semibold text-foreground">
-            {capped ? "Fresh — worth a look" : anyFacet ? `${filtered.length} match${filtered.length === 1 ? "" : "es"}` : "All roles"}
-          </p>
-          <p className="mt-0.5 text-sm text-muted">
-            {visible.length} shown
-            {capped && ordered.length > BATCH ? ` · ${ordered.length} total in inbox` : ""}
-          </p>
-        </div>
-        {hiddenCount > 0 && (
-          <button type="button" onClick={() => setHidden([])} className="rounded-lg border border-border px-3 py-2 text-xs text-muted transition-colors hover:border-brand/40 hover:text-foreground">
-            Restore {hiddenCount} hidden
-          </button>
-        )}
+  return (
+    <div className={cn("pipeline-inbox mt-6", shortlist.length > 0 && "pb-28")}>
+      <div className="flex flex-wrap items-center gap-2">
+        <FacetChips
+          within={within}
+          setWithin={setWithin}
+          sources={sources}
+          toggleSource={(s) => setSources((set) => { const n = new Set(set); n.has(s) ? n.delete(s) : n.add(s); return n; })}
+          seniorities={seniorities}
+          toggleSeniority={(s) => setSeniorities((set) => { const n = new Set(set); n.has(s) ? n.delete(s) : n.add(s); return n; })}
+          locQ={locQ}
+          setLocQ={setLocQ}
+          kw={kw}
+          setKw={setKw}
+          availSources={availSources}
+          availSeniorities={availSeniorities}
+          resultCount={filtered.length}
+          totalCount={enriched.length - hiddenCount}
+          anyActive={anyFacet}
+          onClear={() => { setWithin(null); setSources(new Set()); setSeniorities(new Set()); setLocQ(""); setKw(""); }}
+          layout="row"
+        />
+        <span className="ml-auto text-[13px] text-[var(--md-sys-color-outline)]">
+          <span className="font-semibold tabular-nums text-[var(--md-sys-color-on-surface)]">{filtered.length}</span>/
+          {enriched.length - hiddenCount}
+        </span>
       </div>
 
-      {/* multi-select action bar */}
+      <p className="mt-2.5 text-xs text-[var(--md-sys-color-outline)]">
+        <span className="mr-2 rounded-[var(--md-sys-shape-corner-full)] bg-[var(--md-sys-color-tertiary-container)] px-2 py-0.5 text-[11px] font-semibold text-[var(--md-sys-color-on-tertiary-container)]">
+          FREE
+        </span>
+        Filtering is free — only scoring uses tokens.
+      </p>
+
       {selected.size > 0 && (
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-brand/30 bg-brand-soft px-4 py-3 text-sm">
-          <span className="font-medium text-brand tabular-nums">{selected.size} selected</span>
-          <button type="button" onClick={saveSelected} className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-brand-foreground transition hover:brightness-110">
-            Save to shortlist
+        <header className="mt-4 flex min-h-[72px] flex-wrap items-center gap-3 rounded-[var(--md-sys-shape-corner-extra-large)] bg-[var(--md-sys-color-secondary-container)] px-5">
+          <button type="button" onClick={() => setSelected(new Set())} aria-label="Clear selection" className="text-[var(--md-sys-color-on-secondary-container)]">
+            <MaterialSymbol name="close" size={24} />
           </button>
-          <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-muted hover:text-foreground">
-            Clear selection
-          </button>
-        </div>
+          <h2 className="text-xl font-medium tabular-nums text-[var(--md-sys-color-on-secondary-container)]">{selected.size} selected</h2>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button type="button" onClick={saveSelected} className="md3-btn-filled min-h-10 px-4 text-sm">
+              Save to shortlist
+            </button>
+          </div>
+        </header>
       )}
 
-      {visible.length > 0 ? (
-        <ul className="mt-5 grid list-none gap-4 p-0 sm:grid-cols-2 2xl:grid-cols-3">
-          {visible.map((e) => (
+      <div className="md3-pipeline-list-panel mt-4">
+        {visible.length > 0 ? (
+          visible.map((e) => (
             <TriageRow
               key={e.job.url}
               job={e.job}
@@ -260,43 +258,66 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
               onSave={() => save(e.job)}
               onSkip={() => skip(e.job)}
             />
-          ))}
-        </ul>
-      ) : (
-        <div className="mt-5 rounded-2xl border border-dashed border-border bg-surface/30 px-8 py-14 text-center">
-          <p className="font-display text-xl font-medium">No matches</p>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">Loosen the filters on the left to see more of your inbox.</p>
-        </div>
-      )}
+          ))
+        ) : (
+          <div className="px-6 py-14 text-center">
+            <p className="md-title-large text-[var(--md-sys-color-on-surface)]">No matches with current filters</p>
+            {activeFilterLabel && anyFacet ? (
+              <>
+                <p className="mx-auto mt-2 max-w-md text-sm text-[var(--md-sys-color-on-surface-variant)]">
+                  Drop <strong>{activeFilterLabel}</strong> to bring back {enriched.length - hiddenCount} roles.
+                </p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (within != null) setWithin(null);
+                      else if (sources.size) setSources(new Set());
+                      else if (seniorities.size) setSeniorities(new Set());
+                      else if (locQ.trim()) setLocQ("");
+                      else if (kw.trim()) setKw("");
+                    }}
+                    className="md3-btn-filled min-h-10"
+                  >
+                    Drop {activeFilterLabel}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setWithin(null); setSources(new Set()); setSeniorities(new Set()); setLocQ(""); setKw(""); }}
+                    className="md3-btn-outlined min-h-10"
+                  >
+                    Clear all filters
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="mx-auto mt-2 max-w-md text-sm text-[var(--md-sys-color-on-surface-variant)]">
+                Loosen the filters above to see more of your inbox.
+              </p>
+            )}
+          </div>
+        )}
 
-      {capped && ordered.length > BATCH && (
-        <button
-          type="button"
-          onClick={() => setShowAll(true)}
-          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface/60 py-3.5 text-sm font-medium text-muted transition-colors hover:border-brand/40 hover:bg-surface-hover hover:text-brand"
-        >
-          See all {ordered.length} in inbox
-        </button>
-      )}
-
-      {shortlist.length === 0 && (
-        <p className="mt-6 rounded-xl border border-border/60 bg-surface/30 px-4 py-3 text-center text-xs leading-relaxed text-faint">
-          Save roles worth a look, then score them together — one token spend.
-        </p>
-      )}
-        </section>
+        {visible.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--md-sys-color-outline-variant)] px-6 py-4">
+            <span className="text-[13px] text-[var(--md-sys-color-outline)]">
+              {shortlist.length > 0
+                ? `Not scored yet — scoring ${shortlist.length} saved spends tokens`
+                : "Save roles worth a look, then score them together — one token spend."}
+            </span>
+            {hiddenCount > 0 && (
+              <button type="button" onClick={() => setHidden([])} className="md3-btn-text text-sm">
+                Restore {hiddenCount} hidden
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* undo toast (sits above the tray) */}
-      {undo && (
-        <div className={cn("fixed inset-x-0 z-40 flex justify-center px-4", shortlist.length > 0 ? "bottom-24 sm:bottom-24" : "bottom-6")}>
-          <div className="inline-flex items-center gap-3 rounded-full border border-border bg-surface px-4 py-2 text-sm shadow-lg">
-            <span className="text-muted">{undo.label}</span>
-            <button type="button" onClick={() => { undo.fn(); setUndo(null); }} className="inline-flex items-center gap-1 font-medium text-brand max-sm:min-h-[44px]">
-              <MaterialSymbol name="undo" size={16} /> Undo
-            </button>
-          </div>
-        </div>
+      {capped && ordered.length > BATCH && (
+        <button type="button" onClick={() => setShowAll(true)} className="mt-4 w-full md3-btn-outlined min-h-11">
+          See all {ordered.length} in inbox
+        </button>
       )}
 
       <ShortlistTray

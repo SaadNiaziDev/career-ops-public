@@ -50,15 +50,15 @@ export function canonStatus(s: string): string {
   return STATUS_ALIAS[k] ?? s.toUpperCase();
 }
 
-/** Status dot colour, mirroring the Go TUI: green interview/offer, sky applied/
- *  responded, red skip/rejected, gray discarded, neutral evaluated. */
+/** Status dot colour — MD3 role mapping per design handoff. */
 export function statusDot(status: string): string {
   const c = canonStatus(status);
-  if (c.includes("INTERVIEW") || c.includes("OFFER")) return "bg-emerald-400";
-  if (c.includes("APPLIED") || c.includes("RESPONDED")) return "bg-sky-400";
-  if (c.includes("REJECTED") || c.includes("SKIP")) return "bg-red-400";
-  if (c.includes("DISCARDED")) return "bg-zinc-600";
-  return "bg-zinc-500"; // Evaluated / unknown
+  if (c.includes("OFFER")) return "bg-[var(--md-sys-color-primary)]";
+  if (c.includes("INTERVIEW")) return "bg-[var(--md-sys-color-tertiary)]";
+  if (c.includes("APPLIED") || c.includes("RESPONDED")) return "bg-[var(--md-sys-color-secondary)]";
+  if (c.includes("REJECTED") || c.includes("SKIP")) return "bg-[var(--md-sys-color-error)]";
+  if (c.includes("DISCARDED")) return "bg-[var(--md-sys-color-outline-variant)] opacity-60";
+  return "bg-[var(--md-sys-color-outline)]";
 }
 
 /** First number in a score string ("4.1/5", "B+", "3.0") → numeric, or NaN. */

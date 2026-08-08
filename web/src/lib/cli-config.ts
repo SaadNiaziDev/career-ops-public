@@ -9,6 +9,8 @@ export type CliConfig = {
   mode?: string;
   provider?: string;
   logos?: boolean;
+  runTimeout?: number;
+  maxWorkers?: number;
 };
 
 const CLI_NAMES: Record<string, string> = {
@@ -28,6 +30,8 @@ export function readCliConfig(): CliConfig {
       mode: typeof v.mode === "string" ? v.mode : undefined,
       provider: typeof v.provider === "string" ? v.provider : undefined,
       logos: typeof v.logos === "boolean" ? v.logos : undefined,
+      runTimeout: typeof v.runTimeout === "number" ? v.runTimeout : undefined,
+      maxWorkers: typeof v.maxWorkers === "number" ? v.maxWorkers : undefined,
     };
   } catch {
     return { cliId: null };
@@ -46,6 +50,8 @@ export function writeCliConfig(patch: Partial<CliConfig>): CliConfig {
         cliId: next.cliId ?? "",
         provider: next.provider ?? prev.provider ?? "anthropic",
         logos: next.logos ?? prev.logos ?? true,
+        runTimeout: next.runTimeout ?? prev.runTimeout ?? 230,
+        maxWorkers: next.maxWorkers ?? prev.maxWorkers ?? 3,
       }),
     );
     window.dispatchEvent(new CustomEvent("co-config-changed"));

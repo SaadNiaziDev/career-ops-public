@@ -46,7 +46,7 @@ export function ShortlistTray({
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 sm:bottom-4">
       <div className="mx-auto max-w-[var(--page-width-wide)] px-4 sm:px-6 lg:px-8">
-        <div className="border-t border-border bg-surface shadow-lg shadow-black/10 sm:rounded-2xl sm:border">
+        <div className="border-t border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] sm:rounded-[var(--md-sys-shape-corner-extra-large)] sm:border">
           {/* expandable saved-items list */}
           {open && (
             <ul className="max-h-64 divide-y divide-border overflow-y-auto px-3 py-1">
