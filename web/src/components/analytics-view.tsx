@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { Application } from "@/lib/career-ops";
+import type { Application, DimensionTrend } from "@/lib/career-ops";
 import { PageShell } from "@/components/dossier/page-shell";
 import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
 import { DossierSection } from "@/components/dossier/dossier-section";
@@ -57,7 +57,15 @@ function BarRow({
   );
 }
 
-export function AnalyticsView({ applications }: { applications: Application[] }) {
+export function AnalyticsView({
+  applications,
+  dimensionTrends = [],
+  rankingSignals = null,
+}: {
+  applications: Application[];
+  dimensionTrends?: DimensionTrend[];
+  rankingSignals?: { sample_size: number; insights: string[] } | null;
+}) {
   const total = applications.length;
 
   const stageCounts = STAGES.map((s) => ({
@@ -128,6 +136,33 @@ export function AnalyticsView({ applications }: { applications: Application[] })
             <BarRow key={b.label} label={b.label} value={b.n} pct={(b.n / maxBucket) * 100} total={scores.length} />
           ))}
         </DossierSection>
+
+        {dimensionTrends.length > 0 && (
+          <DossierSection title="Dimension trends (structured reports)">
+            {dimensionTrends.map((d) => (
+              <BarRow
+                key={d.key}
+                label={`${d.label} (n=${d.count})`}
+                value={Math.round(d.avg * 10) / 10}
+                pct={(d.avg / 5) * 100}
+              />
+            ))}
+          </DossierSection>
+        )}
+
+        {rankingSignals && rankingSignals.sample_size >= 5 && (
+          <Md3Card title="System learning">
+            <p className="mb-2 text-sm text-[var(--md-sys-color-on-surface-variant)]">
+              {rankingSignals.sample_size} tracked outcomes → scan ranking adjusts toward responding segments.
+            </p>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-[var(--md-sys-color-on-surface)]">
+              {rankingSignals.insights.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+            <p className="mt-3 text-xs text-[var(--md-sys-color-outline)]">Regenerate: node patterns-signals.mjs</p>
+          </Md3Card>
+        )}
 
         <DossierSection title="Top companies">
           {topCompanies.map(([name, n]) => (

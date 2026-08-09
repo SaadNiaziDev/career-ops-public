@@ -112,6 +112,23 @@ cv:
   # templates/cv-template.html. You can also pick per-generation just by asking
   # (e.g. "use the modern template").
   # template: modern
+  # source: cv.md   # or data/cv-sources/my-backup.md — which markdown file PDF mode reads
+  # style:
+  #   accent_color: "#2563eb"
+  #   heading_color: "#1a1a2e"
+  #   font_stack: "'Liberation Sans', Arial, sans-serif"
+  #   margin: "24px"
+  #   density: standard   # compact | standard | spacious
+
+# Optional per-dimension weights for global score (when Machine Summary includes scores: map).
+# Culture-cap rule in modes/_shared.md still applies before weighting.
+# scoring:
+#   weights:
+#     match: 1.0
+#     north_star: 1.0
+#     comp: 1.2
+#     culture: 0.8
+#     red_flags: 1.0
 
 # ── Culture Screen ───────────────────────────────────────────────────────────
 #

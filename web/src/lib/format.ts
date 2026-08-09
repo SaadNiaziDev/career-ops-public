@@ -151,3 +151,147 @@ export function parseReport(md: string): ReportMeta {
 
   return { title, fields, legitimacy, body: body || md };
 }
+
+export type DimensionScores = {
+  match?: number;
+  north_star?: number;
+  comp?: number;
+  culture?: number;
+  red_flags?: number;
+  global?: number;
+};
+
+export type MachineSummary = {
+  company?: string;
+  role?: string;
+  score?: number;
+  legitimacy_tier?: string;
+  archetype?: string;
+  final_decision?: string;
+  hard_stops?: string[];
+  soft_gaps?: string[];
+  top_strengths?: string[];
+  risk_level?: string;
+  confidence?: string;
+  next_action?: string;
+  discard_reasons?: string[];
+  advertised_comp?: string;
+  via?: string;
+  company_confidential?: boolean;
+  risk_summary?: Record<string, string>;
+  scores?: DimensionScores;
+};
+
+function parseYamlScalar(raw: string): string | number | boolean | null {
+  const s = raw.trim();
+  if (!s || s === "null" || s === "~") return null;
+  if (s === "true") return true;
+  if (s === "false") return false;
+  if (/^-?\d+(?:\.\d+)?$/.test(s)) return parseFloat(s);
+  const quoted = s.match(/^["'](.*)["']$/);
+  return quoted ? quoted[1] : s;
+}
+
+function parseInlineMap(raw: string): Record<string, unknown> {
+  const inner = raw.replace(/^\{|\}$/g, "").trim();
+  if (!inner) return {};
+  const out: Record<string, unknown> = {};
+  for (const part of inner.split(",")) {
+    const m = part.match(/^([a-z_]+)\s*:\s*(.+)$/i);
+    if (m) out[m[1].trim()] = parseYamlScalar(m[2]);
+  }
+  return out;
+}
+
+/** Tolerant Machine Summary YAML parser — degrades on older reports. */
+export function parseMachineSummary(md: string): MachineSummary | null {
+  const fenceMatch = md.match(/##\s*Machine Summary\s*\n+```(?:yaml|yml|json)?\s*\n([\s\S]*?)\n```/i);
+  if (!fenceMatch) return null;
+  const lines = fenceMatch[1].split("\n");
+  const out: MachineSummary = {};
+  let currentList: string[] | null = null;
+  let currentListKey: keyof MachineSummary | null = null;
+  let nestedKey: string | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const listItem = trimmed.match(/^-\s+(.+)$/);
+    if (listItem && currentList) {
+      currentList.push(parseYamlScalar(listItem[1]) as string);
+      continue;
+    }
+
+    // Nested keys must be indented — an unindented key ends the nested map
+    // and falls through to top-level handling below.
+    const nested = line.match(/^\s+([a-z_]+):\s*(.+)$/i);
+    if (nestedKey && nested) {
+      if (!out.risk_summary) out.risk_summary = {};
+      out.risk_summary[nested[1]] = String(parseYamlScalar(nested[2]) ?? "");
+      continue;
+    }
+
+    const kv = trimmed.match(/^([a-z_]+):\s*(.*)$/i);
+    if (!kv) continue;
+    const key = kv[1] as keyof MachineSummary;
+    const rest = kv[2].trim();
+
+    currentList = null;
+    currentListKey = null;
+    nestedKey = null;
+
+    if (rest === "" || rest === "|" || rest === ">") {
+      if (key === "hard_stops" || key === "soft_gaps" || key === "top_strengths" || key === "discard_reasons") {
+        currentList = [];
+        (out as Record<string, unknown>)[key] = currentList;
+        currentListKey = key;
+      } else if (key === "risk_summary") {
+        nestedKey = "risk_summary";
+        out.risk_summary = {};
+      }
+      continue;
+    }
+
+    if (key === "scores" && rest.startsWith("{")) {
+      const parsed = parseInlineMap(rest);
+      out.scores = {
+        match: typeof parsed.match === "number" ? parsed.match : undefined,
+        north_star: typeof parsed.north_star === "number" ? parsed.north_star : undefined,
+        comp: typeof parsed.comp === "number" ? parsed.comp : undefined,
+        culture: typeof parsed.culture === "number" ? parsed.culture : undefined,
+        red_flags: typeof parsed.red_flags === "number" ? parsed.red_flags : undefined,
+        global: typeof parsed.global === "number" ? parsed.global : undefined,
+      };
+      continue;
+    }
+
+    if (key === "hard_stops" || key === "soft_gaps" || key === "top_strengths" || key === "discard_reasons") {
+      out[key] = [String(parseYamlScalar(rest) ?? "")];
+      continue;
+    }
+
+    const val = parseYamlScalar(rest);
+    if (key === "score" && typeof val === "number") out.score = val;
+    else if (key === "company_confidential") out.company_confidential = val === true;
+    else if (key === "final_decision") out.final_decision = String(val ?? "");
+    else if (key === "legitimacy_tier") out.legitimacy_tier = String(val ?? "");
+    else if (key === "next_action") out.next_action = String(val ?? "");
+    else if (key === "risk_level") out.risk_level = String(val ?? "");
+    else if (key === "confidence") out.confidence = String(val ?? "");
+    else if (key === "archetype") out.archetype = String(val ?? "");
+    else if (key === "advertised_comp") out.advertised_comp = String(val ?? "");
+    else if (key === "via") out.via = String(val ?? "");
+    else if (key === "company") out.company = String(val ?? "");
+    else if (key === "role") out.role = String(val ?? "");
+  }
+
+  return Object.keys(out).length ? out : null;
+}
+
+/** Remove Machine Summary block from prose body (rendered natively in UI). */
+export function stripMachineSummary(body: string): string {
+  return body
+    .replace(/##\s*Machine Summary\s*\n+```(?:yaml|yml|json)?\s*\n[\s\S]*?\n```\s*/i, "")
+    .trim();
+}

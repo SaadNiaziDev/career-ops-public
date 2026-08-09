@@ -32,6 +32,14 @@ Execute:
 node analyze-patterns.mjs
 ```
 
+Optionally regenerate machine-readable ranking signals for scan fit-score (Phase 6):
+
+```bash
+node patterns-signals.mjs
+```
+
+Writes `data/ranking-signals.yml` — consumed by `fit-score.mjs` during portal/reverse-ATS scans.
+
 Parse the JSON output. It contains:
 
 | Key | Contents |

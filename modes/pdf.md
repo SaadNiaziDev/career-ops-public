@@ -105,6 +105,7 @@ Write a JSON file with this structure, then run `node build-cv-html.mjs <input.j
 {
   "lang": "en",
   "page_format": "letter",
+  "style": { "accent_color": "#2563eb", "heading_color": "#1a1a2e", "density": "standard" },
   "candidate": {
     "name": "Jane Smith",
     "headline": "Senior Software Engineer",
@@ -157,6 +158,7 @@ Write a JSON file with this structure, then run `node build-cv-html.mjs <input.j
 |-------|------|-------|
 | `lang` | string | CV language code (`en`, `es`, `ja`, `ar`). Drives language-specific CSS: `ja` enables a CJK font fallback so Japanese renders instead of tofu (□); `ar` enables RTL + Arabic fonts. Defaults to `en`. |
 | `page_format` | string | `letter` → `8.5in` page width, `a4` → `210mm`. Defaults to `letter`. Pass the SAME value to `generate-pdf.mjs --format`. |
+| `style` | object | Optional user style overrides. Copy `cv.style` from `config/profile.yml` **verbatim** when present; omit the key entirely when unset so each template keeps its native palette. Keys: `accent_color`, `heading_color`, `font_stack`, `margin`, `density` (`compact` / `standard` / `spacious`). Only keys the user set are applied. |
 | `candidate.name` | string | From `profile.yml`. |
 | `candidate.headline` | string | Tailored target role shown below the candidate's name when the selected template supports it. |
 | `candidate.phone` | string | Optional — **omit or leave empty** to drop the `tel:` link and its separator (no empty cell). |

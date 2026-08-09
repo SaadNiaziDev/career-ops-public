@@ -4,7 +4,9 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Application } from "@/lib/career-ops";
-import { scoreTone, scoreNum, legitimacyTone, parseReport } from "@/lib/format";
+import { scoreTone, scoreNum, legitimacyTone, parseReport, parseMachineSummary, stripMachineSummary } from "@/lib/format";
+import { VerdictCard } from "@/components/report/verdict-card";
+import { DimensionChart } from "@/components/report/dimension-chart";
 import { StatusSelect } from "@/components/status-select";
 import { CompanyLogo } from "@/components/company-logo";
 import { ScoreMethodology } from "@/components/score-methodology";
@@ -159,13 +161,18 @@ function ReportBody({
   score,
   applies,
   notes,
+  machineSummary,
+  legitimacy,
 }: {
   body: string;
   score?: string;
   applies: boolean | null;
   notes?: string;
+  machineSummary?: ReturnType<typeof parseMachineSummary>;
+  legitimacy?: string | null;
 }) {
-  const { intro, sections } = splitSections(body);
+  const proseBody = stripMachineSummary(body);
+  const { intro, sections } = splitSections(proseBody);
 
   if (sections.length === 0) {
     return (
@@ -197,6 +204,9 @@ function ReportBody({
 
   return (
     <div className="dossier-inset-stack">
+      {machineSummary && <VerdictCard summary={machineSummary} score={score} legitimacy={legitimacy} />}
+      <DimensionChart scores={machineSummary?.scores} globalScore={score} />
+
       {intro && (
         <article className="report-prose-compact">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{intro}</ReactMarkdown>
@@ -299,6 +309,7 @@ export function ReportView({
   canDelete?: boolean;
 }) {
   const meta = report ? parseReport(report) : null;
+  const machineSummary = report ? parseMachineSummary(report) : null;
   const field = (label: string) => meta?.fields.find((f) => f.label === label)?.value;
   const score = app?.score || field("Score");
   const date = app?.date || field("Date");
@@ -348,6 +359,8 @@ export function ReportView({
                 score={score}
                 applies={applies}
                 notes={app?.notes}
+                machineSummary={machineSummary}
+                legitimacy={meta?.legitimacy}
               />
             ) : (
               <Md3Empty

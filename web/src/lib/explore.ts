@@ -47,6 +47,10 @@ export type DiscoveredOffer = {
   postedAt: string;
   ats: string;
   source: string;
+  /** heuristic 0–100 fit score from scan.mjs fit-score.mjs (deterministic scan only) */
+  fitScore?: number;
+  /** human-readable ranking signal contributions (Phase 6) */
+  fitSignalReasons?: string[];
   /** which positive keyword matched the title (transparency, e.g. "ai" in "Nail") */
   matchedKeyword?: string;
   /** optional free-text ranking signal preserved to pipeline.md by the canonical

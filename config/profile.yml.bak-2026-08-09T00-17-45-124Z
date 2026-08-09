@@ -1,0 +1,53 @@
+candidate:
+  full_name: Saad Ali Khan
+  email: devsaadk@gmail.com
+  phone: +92 316 6423134
+  wechat: ''
+  location: Lahore, Pakistan
+  linkedin: linkedin.com/in/saad-ali-khan-043b021b1
+  portfolio_url: https://saadniazidev.netlify.app/
+  github: github.com/SaadNiaziDev
+  twitter: ''
+  photo: ''
+target_roles:
+  primary:
+    - Senior Full Stack Engineer
+    - Senior Backend Engineer (Node.js/Python)
+    - Senior Frontend Engineer (React/Next.js)
+    - Senior Fullstack Engineer (React/Next.js)
+  archetypes:
+    - name: Senior Full-Stack Engineer
+      level: Senior
+      fit: primary
+    - name: Senior Frontend Engineer
+      level: Senior
+      fit: primary
+narrative:
+  headline: >-
+    Full-stack engineer shipping production React/Next.js applications across AgTech, healthcare,
+    and marketplace products
+  exit_story: 4+ years shipping production web apps across AgTech ERP, healthcare, and marketplaces
+  superpowers:
+    - End-to-end feature ownership (UI to API to deployment)
+    - Production reliability (monitoring, postmortems, hotfixes)
+    - Fast delivery across varied stacks (React, Vue/Frappe, Flutter)
+  proof_points: []
+compensation:
+  target_range: Not specified — confirm with candidate before use
+  currency: PKR
+  minimum: Not specified — confirm with candidate before use
+  location_flexibility: Open to remote; based in Lahore, Pakistan
+location:
+  country: Pakistan
+  city: Lahore
+  timezone: PKT
+  visa_status: Not specified
+language:
+  output: en
+spend_tier: standard
+cv:
+  output_format: html
+  template: standard
+  style:
+    density: compact
+  source: cv.md

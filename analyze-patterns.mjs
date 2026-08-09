@@ -49,6 +49,7 @@ const MACHINE_SUMMARY_FIELDS = new Set([
   'via',
   'company_confidential',
   'risk_summary',
+  'scores',
 ]);
 
 // --- CLI args ---

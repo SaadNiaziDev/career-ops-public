@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import yaml from "js-yaml";
 import { atomicWrite } from "@/lib/core/safe-write";
 import { parseApplications } from "@/lib/tracker-table.mjs";
+import { parseMachineSummary } from "@/lib/format";
 
 /**
  * Resolve the career-ops "home" — the directory holding the user's sibling
@@ -45,7 +47,17 @@ function read(rel: string): string | null {
   }
 }
 
-export type InboxJob = { url: string; company: string; role: string; location?: string; compensation?: string; done: boolean; postedAt?: string };
+export type InboxJob = {
+  url: string;
+  company: string;
+  role: string;
+  location?: string;
+  compensation?: string;
+  done: boolean;
+  postedAt?: string;
+  /** `fit: NN` annotation the scanner appends (heuristic 0-100), when present. */
+  fitScore?: number;
+};
 
 /** Parse data/pipeline.md — `- [ ] URL | Company | Role [| Location [| Compensation]]`.
  *  Positional split (NOT a greedy trailing group): the optional 4th `location`
@@ -60,13 +72,22 @@ export function readInbox(): InboxJob[] {
     if (!m) continue;
     const parts = m[2].split("|").map((s) => s.trim());
     if (parts.length < 3 || !parts[0]) continue; // need at least url | company | role
+    // Trailing columns are positional (location, then compensation) EXCEPT the
+    // scanner's tagged annotations — `posted: 2026-08-08`, `fit: 62` — which it
+    // writes in whatever slot is next when a posting has no location. Without
+    // this, a location-less scan row renders "fit: 55" as its location.
+    const tail = parts.slice(3).filter(Boolean);
+    const extras = tail.filter((p) => !/^(fit|posted|score|via)\s*:/i.test(p));
+    const fit = tail.find((p) => /^fit\s*:/i.test(p));
+    const fitScore = fit ? Number(fit.split(":")[1]?.trim()) : NaN;
     jobs.push({
       done: m[1].toLowerCase() === "x",
       url: parts[0],
       company: parts[1],
       role: parts[2],
-      location: parts[3] || undefined, // optional 4th column (#1015)
-      compensation: parts[4] || undefined, // optional 5th column (#1017); 6th+ ignored
+      location: extras[0] || undefined, // optional 4th column (#1015)
+      compensation: extras[1] || undefined, // optional 5th column (#1017); 6th+ ignored
+      fitScore: Number.isFinite(fitScore) ? fitScore : undefined,
     });
   }
   return jobs;
@@ -96,6 +117,67 @@ export function readScanDates(): Map<string, string> {
     if (/^\d{4}-\d{2}-\d{2}$/.test(firstSeen) && !dates.has(url)) dates.set(url, firstSeen);
   }
   return dates;
+}
+
+export type ScanFind = InboxJob & { firstSeen: string; source: string };
+
+/** `workday-api` → `Workday`, `local-parser` → `Local parser`, else the raw label. */
+function scanSourceLabel(portal: string): string {
+  const p = portal.trim();
+  if (!p) return "Portal scan";
+  const api = p.match(/^([a-z0-9]+)-api$/i);
+  if (api) return api[1][0].toUpperCase() + api[1].slice(1);
+  if (p === "local-parser") return "Local parser";
+  // Query-name portals read like "WebSearch — PK tracked companies"; the card has
+  // room for the source, not the whole query.
+  return p.split(/\s+[—–-]\s+/)[0].slice(0, 24);
+}
+
+/** data/scan-history.tsv → Map<url, {firstSeen, portal}> (first row per url wins). */
+function readScanMeta(): Map<string, { firstSeen: string; portal: string }> {
+  const tsv = read("data/scan-history.tsv");
+  const meta = new Map<string, { firstSeen: string; portal: string }>();
+  if (!tsv) return meta;
+  const lines = tsv.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line || (i === 0 && line.startsWith("url\t"))) continue;
+    const cols = line.split("\t");
+    const [url, firstSeen, portal] = cols;
+    if (!url || !/^\d{4}-\d{2}-\d{2}$/.test(firstSeen ?? "") || meta.has(url)) continue;
+    meta.set(url, { firstSeen, portal: portal ?? "" });
+  }
+  return meta;
+}
+
+/**
+ * Pending inbox rows a scanner added within the last `days`, newest first.
+ * Explore runs its own in-browser sweep whose results never touch disk, so
+ * without this the CLI/portal scans (`scan.mjs` → pipeline.md) are invisible
+ * there. Rows with no scan-history entry (hand-pasted URLs) are left out —
+ * this is "what the scanner found", not "everything pending".
+ */
+export function recentScanFinds({ days = 14, limit = 30 } = {}): {
+  finds: ScanFind[];
+  latestDate: string | null;
+  totalPending: number;
+} {
+  const meta = readScanMeta();
+  const pending = readInbox().filter((j) => !j.done);
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const scanned = pending
+    .map((j) => {
+      const m = meta.get(j.url);
+      return { ...j, firstSeen: m?.firstSeen ?? "", source: scanSourceLabel(m?.portal ?? "") };
+    })
+    .filter((j): j is ScanFind => !!j.firstSeen && j.firstSeen >= cutoff)
+    .sort((a, b) => b.firstSeen.localeCompare(a.firstSeen) || a.company.localeCompare(b.company));
+
+  return {
+    finds: scanned.slice(0, limit),
+    latestDate: scanned[0]?.firstSeen ?? null,
+    totalPending: pending.length,
+  };
 }
 
 export type Application = {
@@ -221,6 +303,54 @@ export function readReport(n: string): ReportData | null {
 
 export function findApplication(n: string): Application | null {
   return readApplications().find((a) => a.n === n) ?? null;
+}
+
+export type DimensionTrend = { key: string; label: string; avg: number; count: number };
+
+const DIM_LABELS: Record<string, string> = {
+  match: "Match",
+  north_star: "North Star",
+  comp: "Comp",
+  culture: "Culture",
+  red_flags: "Red flags",
+  global: "Global",
+};
+
+export function dimensionTrends(applications: Application[]): DimensionTrend[] {
+  const sums: Record<string, { sum: number; n: number }> = {};
+  for (const app of applications) {
+    const report = readReport(app.n);
+    if (!report) continue;
+    const ms = parseMachineSummary(report.content);
+    if (!ms?.scores) continue;
+    const entries = Object.entries(ms.scores) as [string, number | undefined][];
+    for (const [key, val] of entries) {
+      if (typeof val !== "number") continue;
+      if (!sums[key]) sums[key] = { sum: 0, n: 0 };
+      sums[key].sum += val;
+      sums[key].n += 1;
+    }
+  }
+  return Object.entries(sums).map(([key, { sum, n }]) => ({
+    key,
+    label: DIM_LABELS[key] ?? key,
+    avg: sum / n,
+    count: n,
+  }));
+}
+
+export function readRankingSignals(): { sample_size: number; insights: string[] } | null {
+  try {
+    const p = path.join(careerOpsRoot(), "data", "ranking-signals.yml");
+    if (!fs.existsSync(p)) return null;
+    const doc = yaml.load(fs.readFileSync(p, "utf8")) as { sample_size?: number; insights?: string[] };
+    return {
+      sample_size: doc.sample_size ?? 0,
+      insights: Array.isArray(doc.insights) ? doc.insights.filter(Boolean) : [],
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** The CANONICAL user-customization file the CLI/TUI reads. Durable facts the

@@ -368,6 +368,7 @@ risk_summary:
   culture: "{pass | caution | fail | not_evaluated}"
   interview_redflags: "{none | caution | warning | not_evaluated}"
   ai_infra: "{consistent | mismatch | not_evaluated}"
+scores: {match: {X.X}, north_star: {X.X}, comp: {X.X}, culture: {X.X}, red_flags: {X.X}, global: {X.X}}
 ```
 ```
 

@@ -14,7 +14,7 @@ export type EnrichedOffer = DiscoveredOffer & { inPipeline: boolean; evaluatedN?
 export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
   const { companiesScanned, partial, addToPipeline, added, mode } = useExplore();
   const isAi = mode === "ai";
-  const [sort, setSort] = useState<"fresh" | "company">("fresh");
+  const [sort, setSort] = useState<"fit" | "fresh" | "company">("fit");
   const [q, setQ] = useState("");
 
   const view = useMemo(() => {
@@ -25,9 +25,11 @@ export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
         (o) => o.title.toLowerCase().includes(needle) || o.company.toLowerCase().includes(needle),
       );
     }
-    return [...list].sort((a, b) =>
-      sort === "fresh" ? (b.postedAt || "").localeCompare(a.postedAt || "") : a.company.localeCompare(b.company),
-    );
+    return [...list].sort((a, b) => {
+      if (sort === "fit") return (b.fitScore ?? 0) - (a.fitScore ?? 0) || (b.postedAt || "").localeCompare(a.postedAt || "");
+      if (sort === "company") return a.company.localeCompare(b.company);
+      return (b.postedAt || "").localeCompare(a.postedAt || "");
+    });
   }, [offers, q, sort]);
 
   const addable = offers.filter((o) => !o.inPipeline && !o.evaluatedN && !added.has(o.url));
@@ -61,6 +63,7 @@ export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
             onChange={setSort}
             aria-label="Sort results"
             options={[
+              { value: "fit", label: "Best fit" },
               { value: "fresh", label: "Fresh" },
               { value: "company", label: "Company" },
             ]}

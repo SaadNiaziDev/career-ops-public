@@ -44,6 +44,7 @@ import { classifyFetchError } from './verify-portals.mjs';
 import { fingerprintText, findCrossListings } from './fingerprint-core.mjs';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 import { normalizeCompany } from './tracker-utils.mjs';
+import { attachFitScores } from './fit-score.mjs';
 
 try {
   const { config } = await import('dotenv');
@@ -1002,7 +1003,11 @@ export function formatPipelineOffer(offer) {
   // confusing it for a positional cell, and it stays generic: nothing here is
   // source-specific, and an offer without `note` produces byte-identical output.
   const note = typeof offer.note === 'string' ? sanitizeMarkdownField(offer.note) : '';
-  return note ? `${line} | note: ${note}` : line;
+  if (note) line = `${line} | note: ${note}`;
+  const fit = typeof offer.fitScore === 'number' && Number.isFinite(offer.fitScore)
+    ? sanitizeMarkdownField(`fit: ${Math.round(offer.fitScore)}`)
+    : '';
+  return fit ? `${line} | ${fit}` : line;
 }
 
 // postedAt arrives as epoch ms (or absent). Convert to 'YYYY-MM-DD', or '' when missing.
@@ -1689,6 +1694,10 @@ async function main() {
   for (const offer of verifiedOffers) {
     offer.fingerprint = fingerprintText(offer.description);
   }
+  const scoredOffers = attachFitScores(verifiedOffers, config, {
+    matchedKeywordFor: (o) => matchedTitleKeywords(o.title, config.title_filter)[0],
+  });
+  verifiedOffers = scoredOffers.sort((a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0));
   const crossListings = findCrossListings(verifiedOffers, loadFingerprintHistory());
 
   // 6. Write results

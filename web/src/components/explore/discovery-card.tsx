@@ -78,6 +78,18 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        {typeof offer.fitScore === "number" && (
+          <span
+            className="rounded-[var(--md-sys-shape-corner-small)] bg-[var(--md-sys-color-primary-container)] px-2 py-0.5 font-semibold tabular-nums text-[var(--md-sys-color-on-primary-container)]"
+            title={
+              offer.fitSignalReasons?.length
+                ? `Why ranked here: ${offer.fitSignalReasons.join(" · ")}`
+                : "Heuristic fit from CV overlap, title match, comp band, freshness, and trust"
+            }
+          >
+            Fit {offer.fitScore}
+          </span>
+        )}
         <span className="rounded-[var(--md-sys-shape-corner-small)] border border-[var(--md-sys-color-outline-variant)] px-2 py-0.5 font-medium text-[var(--md-sys-color-outline)]">
           {ATS_LABEL[offer.ats as AtsSource] ?? offer.ats}
         </span>
