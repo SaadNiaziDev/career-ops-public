@@ -68,6 +68,9 @@ type ExploreCtx = {
   // ── AI search (modes/discover.md) ──
   mode: ExploreMode;
   setMode: (m: ExploreMode) => void;
+  /** Which surface produced the current result set — a tab shows results only
+   *  when this matches its own mode, so Scan never displays AI hits (or vice versa). */
+  resultsMode: ExploreMode;
   aiIntent: string;
   setAiIntent: (s: string) => void;
   /** Optional intent override — use when starting from a URL before state flushes. */
@@ -148,6 +151,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState<Set<string>>(new Set());
   const [mode, setModeState] = useState<ExploreMode>("scan");
+  const [resultsMode, setResultsMode] = useState<ExploreMode>("scan");
   const [aiIntent, setAiIntentState] = useState("");
   const [aiTrace, setAiTrace] = useState<AiTraceChunk[]>([]);
   const [aiCost, setAiCost] = useState<AiCost>({ searches: 0, candidates: 0, fetches: 0 });
@@ -200,6 +204,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     const f = filtersRef.current;
     const { ac, runId, isCurrent } = beginRun();
     setModeState("scan");
+    setResultsMode("scan");
     setPhase("casting");
     setOffers([]);
     setMatchCount(0);
@@ -420,6 +425,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     const { ac, runId, isCurrent } = beginRun();
     appliedAiIntentRef.current = intent;
     setModeState("ai");
+    setResultsMode("ai");
     setPhase("casting");
     setOffers([]);
     setMatchCount(0);
@@ -586,7 +592,10 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const restoreSnap = useCallback((snap: ResultSnapshot) => {
-    setModeState(snap.mode === "ai" ? "ai" : "scan");
+    // Restore WHICH surface produced these results, not the visible tab: forcing
+    // the tab is what made Scan un-selectable after an AI hunt (every return to
+    // /explore snapped the toggle back to AI).
+    setResultsMode(snap.mode === "ai" ? "ai" : "scan");
     setOffers(snap.offers);
     setMatchCount(typeof snap.matchCount === "number" ? snap.matchCount : snap.offers.length);
     setCompaniesScanned(snap.companiesScanned ?? 0);
@@ -677,14 +686,14 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     if (!SETTLED.has(phase)) return;
     try {
       const snap: ResultSnapshot = {
-        v: 1, mode, phase, offers, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, sources,
+        v: 1, mode: resultsMode, phase, offers, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, sources,
         partial, status, error, added: [...added], aiTrace, aiCost, aiIntent,
       };
       sessionStorage.setItem(RESULTS_KEY, JSON.stringify(snap));
     } catch {
       /* sessionStorage full/unavailable — non-fatal */
     }
-  }, [phase, mode, offers, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, sources, partial, status, error, added, aiTrace, aiCost, aiIntent]);
+  }, [phase, resultsMode, offers, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, sources, partial, status, error, added, aiTrace, aiCost, aiIntent]);
 
   const value = useMemo(
     () => ({
@@ -692,9 +701,9 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       running: phase === "casting" || phase === "scanning" || phase === "revealing" || phase === "hunting",
       offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding,
       discover, addToPipeline, applyPatch, reset,
-      mode, setMode, aiIntent, setAiIntent, discoverAI, aiTrace, aiCost,
+      mode, setMode, resultsMode, aiIntent, setAiIntent, discoverAI, aiTrace, aiCost,
     }),
-    [filters, setFilters, initFilters, phase, offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, discover, addToPipeline, applyPatch, reset, mode, setMode, aiIntent, setAiIntent, discoverAI, aiTrace, aiCost],
+    [filters, setFilters, initFilters, phase, offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, discover, addToPipeline, applyPatch, reset, mode, setMode, resultsMode, aiIntent, setAiIntent, discoverAI, aiTrace, aiCost],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -15,6 +15,7 @@ elapsed-time cadence case — see `confirmed_time_noshow` in `modes/email.md`
 
 - `data/applications.md` — Application tracker
 - `data/follow-ups.md` — Follow-up history (created on first use)
+- `data/contacts.tsv` — Outreach CRM (`outreach_status`, `last_touch`, `contact_type`)
 - `reports/` — Evaluation reports (for context in drafts)
 - `config/profile.yml` — User profile (name, identity)
 - `cv.md` — CV for proof points in drafts
@@ -59,6 +60,7 @@ Use visual indicators:
 
 For each **overdue** or **urgent** entry only:
 
+0. Read `data/contacts.tsv` for matching company/role — prefer contacts with `outreach_status` of `not-contacted` or `messaged` (skip `replied`). Use `last_touch` to avoid duplicate nudges within 3 days.
 1. Read the linked report (`reportPath` from JSON) for company context
 2. Read `cv.md` for proof points
 3. Read `config/profile.yml` for candidate name and identity
@@ -141,6 +143,10 @@ For each draft, show:
 
 ## Step 5 — Record Follow-ups
 
+When the user confirms a follow-up was sent, append to `data/follow-ups.md` AND update the matching row in `data/contacts.tsv`:
+- `outreach_status`: `messaged` (first touch) or keep `replied` if they responded
+- `last_touch`: today's date (YYYY-MM-DD)
+
 After the user reviews and says they've sent a follow-up, record it:
 
 1. If `data/follow-ups.md` doesn't exist, create it (this exact header — the
@@ -164,6 +170,8 @@ After the user reviews and says they've sent a follow-up, record it:
    - `notes` = brief note (e.g., "First follow-up, referenced Barbeiro.app")
 
 3. Optionally update the Notes column in `data/applications.md` with "Follow-up {N} sent {YYYY-MM-DD}"
+
+4. Update `data/contacts.tsv` for the recipient: set `outreach_status` to `messaged` and `last_touch` to today's date (dedup on email/LinkedIn).
 
 **IMPORTANT:** Only record follow-ups the user confirms they actually sent. Never record a draft as sent.
 

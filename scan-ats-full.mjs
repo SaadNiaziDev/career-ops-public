@@ -39,7 +39,8 @@ import greenhouse from './providers/greenhouse.mjs';
 import lever from './providers/lever.mjs';
 import ashby from './providers/ashby.mjs';
 import workday from './providers/workday.mjs';
-import { buildTitleFilter, buildLocationFilter, loadSeenUrls, appendToPipeline, appendToScanHistory, loadBlacklist } from './scan.mjs';
+import { buildTitleFilter, buildLocationFilter, loadSeenUrls, appendToPipeline, appendToScanHistory, loadBlacklist, matchedTitleKeywords } from './scan.mjs';
+import { attachFitScores } from './fit-score.mjs';
 import { SEED_SOURCES, toPortalEntry } from './seeds/vc-portfolios.mjs';
 import { normalizeCompany } from './tracker-utils.mjs';
 
@@ -548,7 +549,10 @@ async function main() {
   const blacklistResult = filterBlacklistedOffers(newOffers, blacklist, { includeBlacklisted: opts.includeBlacklisted });
   let offers = blacklistResult.offers;
   if (offers.length && opts.liveness) offers = await filterLive(offers);
-  offers.sort((a, b) => (b.postedAt || 0) - (a.postedAt || 0));
+  offers = attachFitScores(offers, config, {
+    matchedKeywordFor: (o) => matchedTitleKeywords(o.title, config.title_filter)[0],
+  });
+  offers.sort((a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0) || (b.postedAt || 0) - (a.postedAt || 0));
 
   log(`\n${'━'.repeat(45)}`);
   log(`Reverse ATS Scan — ${date}`);
@@ -645,6 +649,8 @@ async function main() {
         blacklisted: Boolean(o.blacklisted),
         note: o.note || null,
         source: o.source,
+        fitScore: typeof o.fitScore === 'number' ? o.fitScore : null,
+        fitSignalReasons: Array.isArray(o.fitSignalReasons) ? o.fitSignalReasons : [],
       })),
     }) + '\n');
     return;

@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{NAME}} — CV</title>
 <style>
+  :root {
+  --cv-accent: hsl(187, 74%, 32%);
+  --cv-heading: #1a1a2e;
+  --cv-font: 'Liberation Sans', 'Helvetica Neue', Arial, 'DejaVu Sans', sans-serif;
+  --cv-page-margin: 2px 0;
+  --cv-font-size: 11px;
+}
   /* ATS-safe typography (#font-extraction fix):
      The bundled variable woff2 fonts (Space Grotesk / DM Sans) render with
      glyph advances that make PDF text extractors inject spurious spaces inside
@@ -35,8 +42,8 @@
   }
 
   body {
-    font-family: 'Liberation Sans', 'Helvetica Neue', Arial, 'DejaVu Sans', sans-serif;
-    font-size: 11px;
+    font-family: var(--cv-font, 'Liberation Sans', 'Helvetica Neue', Arial, 'DejaVu Sans', sans-serif);
+    font-size: var(--cv-font-size, 11px);
     line-height: 1.5;
     color: #1a1a2e;
     background: #ffffff;
@@ -51,7 +58,7 @@
     width: 100%;
     max-width: {{PAGE_WIDTH}};
     margin: 0 auto;
-    padding: 2px 0;
+    padding: var(--cv-page-margin, 2px 0);
   }
 
   /* === HEADER === */
@@ -63,7 +70,7 @@
     font-family: 'Liberation Sans', 'Helvetica Neue', Arial, 'DejaVu Sans', sans-serif;
     font-size: 28px;
     font-weight: 700;
-    color: #1a1a2e;
+    color: var(--cv-heading);
     letter-spacing: -0.02em;
     margin-bottom: 4px;
     line-height: 1.1;
@@ -79,7 +86,7 @@
 
   .header-gradient {
     height: 2px;
-    background: linear-gradient(to right, hsl(187, 74%, 32%), hsl(270, 70%, 45%));
+    background: linear-gradient(to right, var(--cv-accent), hsl(270, 70%, 45%));
     border-radius: 1px;
     margin-bottom: 10px;
   }
@@ -130,7 +137,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: hsl(187, 74%, 32%);
+    color: var(--cv-accent);
     border-bottom: 1.5px solid #e2e2e2;
     padding-bottom: 4px;
     margin-bottom: 10px;
@@ -165,11 +172,11 @@
     font-family: 'Liberation Sans', 'Helvetica Neue', Arial, 'DejaVu Sans', sans-serif;
     font-size: 10px;
     font-weight: 500;
-    color: hsl(187, 74%, 28%);
-    background: hsl(187, 40%, 95%);
+    color: var(--cv-accent);
+    background: color-mix(in srgb, var(--cv-accent) 7%, #ffffff);
     padding: 4px 10px;
     border-radius: 3px;
-    border: 1px solid hsl(187, 40%, 88%);
+    border: 1px solid color-mix(in srgb, var(--cv-accent) 14%, #ffffff);
   }
 
   /* === WORK EXPERIENCE === */
@@ -241,8 +248,8 @@
   .project-badge {
     font-size: 9px;
     font-weight: 500;
-    color: hsl(187, 74%, 32%);
-    background: hsl(187, 40%, 95%);
+    color: var(--cv-accent);
+    background: color-mix(in srgb, var(--cv-accent) 7%, #ffffff);
     padding: 1px 6px;
     border-radius: 2px;
     margin-left: 6px;
@@ -411,7 +418,7 @@
   }
 
   html[lang="ar"] .header-gradient {
-    background: linear-gradient(to left, hsl(187, 74%, 32%), hsl(270, 70%, 45%));
+    background: linear-gradient(to left, var(--cv-accent), hsl(270, 70%, 45%));
   }
 
   html[lang="ar"] .job ul {

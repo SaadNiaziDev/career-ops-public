@@ -241,14 +241,44 @@ function renderReport(payload) {
   return { substitutions, candidate };
 }
 
+// CSS values live inside a <style> block, so strip the characters that could
+// terminate it or open a tag; profile.yml is user-owned but the payload also
+// arrives over the local web API.
+function cssValue(v) {
+  return String(v).replace(/[<>{}]/g, '').trim();
+}
+
+// Emit overrides only for keys the user actually set, appended after the
+// template's own :root so the cascade wins without erasing each template's
+// native palette (modern purple, academic navy, ...).
+function buildStyleBlock(style = {}) {
+  const densityMap = { compact: '10px', standard: '11px', spacious: '12px' };
+  const decls = [];
+  if (style.accent_color) decls.push(`  --cv-accent: ${cssValue(style.accent_color)};`);
+  if (style.heading_color) decls.push(`  --cv-heading: ${cssValue(style.heading_color)};`);
+  if (style.font_stack) decls.push(`  --cv-font: ${cssValue(style.font_stack)};`);
+  if (style.margin) decls.push(`  --cv-page-margin: ${cssValue(style.margin)};`);
+  if (densityMap[style.density]) decls.push(`  --cv-font-size: ${densityMap[style.density]};`);
+  if (!decls.length) return '';
+  return `/* user style overrides (config/profile.yml cv.style) */\n:root {\n${decls.join('\n')}\n}`;
+}
+
+function injectStyleTokens(template, style) {
+  const block = buildStyleBlock(style);
+  if (!block) return template;
+  return template.replace('</style>', `\n${block}\n</style>`);
+}
+
 // Merge a payload into the template and return the final HTML (throws on any
 // unresolved {{PLACEHOLDER}} so a malformed payload fails loudly, not silently).
 function renderHtml(template, payload) {
   const { substitutions, candidate } = renderReport(payload);
 
+  let html = injectStyleTokens(template, payload.style || {});
+
   // The contact row and photo carry conditional markup (dropped separators /
   // no <img>), so they are rebuilt as whole blocks before placeholder fill.
-  let html = template.replace(CONTACT_ROW_RE, () => buildContactRow(candidate));
+  html = html.replace(CONTACT_ROW_RE, () => buildContactRow(candidate));
   html = html.replace(/\{\{PHOTO\}\}/g, () => buildPhoto(candidate, candidate.name));
 
   // Projects is the one CV section that's genuinely optional (education,
@@ -269,6 +299,8 @@ function renderHtml(template, payload) {
   }
   return html;
 }
+
+export { renderHtml, injectStyleTokens, buildStyleBlock, renderReport };
 
 function countBullets(payload) {
   const ex = Array.isArray(payload.experience)
@@ -438,4 +470,7 @@ async function runSelfTest() {
   process.exit(0);
 }
 
-main();
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main();
+}

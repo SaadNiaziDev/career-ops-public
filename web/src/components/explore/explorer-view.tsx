@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import type { Application, InboxJob } from "@/lib/career-ops";
+import type { Application, InboxJob, ScanFind } from "@/lib/career-ops";
 import { paramsToFilters, paramsToAi, type ExploreFilters } from "@/lib/explore";
 import { useCliConfig, resolveCliIdForRun } from "@/lib/cli-config";
 import { PageShell } from "@/components/dossier/page-shell";
@@ -19,6 +19,8 @@ import { AiHuntView } from "./ai-hunt-view";
 import { ExploreModeToggle } from "./explore-mode-toggle";
 import { AiSearchBox } from "./ai-search-box";
 import { ResultsList, type EnrichedOffer } from "./results-list";
+import { DiscoveryCard } from "./discovery-card";
+import { CostBadge } from "@/components/cost/cost-badge";
 import { useExplore } from "./explore-provider";
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -57,13 +59,15 @@ export function ExplorerView({
   inboxSnapshot,
   appsSnapshot,
   rootExists,
+  scans,
 }: {
   seed: { filters: ExploreFilters; seededFrom: string[] };
   inboxSnapshot: InboxJob[];
   appsSnapshot: Application[];
   rootExists: boolean;
+  scans: { finds: ScanFind[]; latestDate: string | null; totalPending: number };
 }) {
-  const { filters, setFilters, initFilters, phase, running, offers, discover, status, error, mode, setMode, aiIntent, setAiIntent, discoverAI, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
+  const { filters, setFilters, initFilters, phase, running, offers, discover, status, error, mode, setMode, resultsMode, aiIntent, setAiIntent, discoverAI, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
   const scanNote =
     companiesScanned > 0
       ? `Scanned ${companiesScanned.toLocaleString()}${companiesAvailable > companiesScanned ? ` of ${companiesAvailable.toLocaleString()}` : ""} compan${companiesScanned === 1 ? "y" : "ies"}${partial ? " · some sources were unreachable" : ""}.`
@@ -109,7 +113,27 @@ export function ExplorerView({
   if (running) return isAi ? <AiHuntView cliName={cliName} /> : <DiscoveringState />;
 
   const canDiscover = filters.ats.length > 0;
-  const isResults = phase === "results";
+  // Each tab owns its own results: a settled run belongs to the surface that ran
+  // it, so switching tabs never shows the other one's hits.
+  const ownsResults = resultsMode === mode;
+  const isResults = phase === "results" && ownsResults;
+  const showPhase = (p: typeof phase) => phase === p && ownsResults;
+
+  // Scan tab with no live run of its own falls back to what the portal scanners
+  // (scan.mjs / workers) wrote to pipeline.md — same cards, same actions.
+  const scanFindOffers: EnrichedOffer[] = scans.finds.map((f) => ({
+    url: f.url,
+    company: f.company,
+    title: f.role,
+    location: f.location ?? "",
+    postedAt: f.firstSeen,
+    ats: f.source,
+    source: f.source,
+    fitScore: f.fitScore,
+    inPipeline: true,
+    evaluatedN: appsSnapshot.find((a) => norm(a.company) === norm(f.company) && norm(a.role) === norm(f.role))?.n,
+  }));
+  const showScanFinds = !isAi && !isResults && scanFindOffers.length > 0;
 
   return (
     <PageShell width="default">
@@ -160,8 +184,8 @@ export function ExplorerView({
                 cliName={cliName}
                 onRunScan={() => setMode("scan")}
               />
-              {phase === "results" && <ResultsList offers={enriched} />}
-              {phase === "empty-loose" && (
+              {isResults && <ResultsList offers={enriched} />}
+              {showPhase("empty-loose") && (
                 <EmptyState
                   tone="loose"
                   title="No public matches — yet."
@@ -170,7 +194,7 @@ export function ExplorerView({
                   rerunLabel="Run the free Scan"
                 />
               )}
-              {phase === "failed" && <FailedCard msg={error || status} onRetry={() => void discoverAI()} />}
+              {showPhase("failed") && <FailedCard msg={error || status} onRetry={() => void discoverAI()} />}
             </div>
           )
         ) : (
@@ -224,7 +248,11 @@ export function ExplorerView({
             )}
             {isResults && <ResultsList offers={enriched} />}
 
-            {phase === "empty-current" && (
+            {showScanFinds && (
+              <ScanFindsSection offers={scanFindOffers} latestDate={scans.latestDate} totalPending={scans.totalPending} />
+            )}
+
+            {showPhase("empty-current") && (
               <EmptyState
                 tone="good"
                 title="You're all caught up."
@@ -237,7 +265,7 @@ export function ExplorerView({
                 rerunLabel="Look back 30 days"
               />
             )}
-            {phase === "empty-loose" && (
+            {showPhase("empty-loose") && (
               <EmptyState
                 tone="loose"
                 title="No fresh matches — yet."
@@ -250,7 +278,7 @@ export function ExplorerView({
                 rerunLabel="Widen to 30 days · clear location"
               />
             )}
-            {phase === "degraded" && (
+            {showPhase("degraded") && (
               <DegradedCard
                 onRetry={() => void discover()}
                 companiesScanned={companiesScanned}
@@ -260,11 +288,54 @@ export function ExplorerView({
                 partial={partial}
               />
             )}
-            {phase === "failed" && <FailedCard msg={error || status} onRetry={() => void discover()} />}
+            {showPhase("failed") && <FailedCard msg={error || status} onRetry={() => void discover()} />}
           </>
         )}
       </DossierStack>
     </PageShell>
+  );
+}
+
+/** What the portal scanners already found, as the Scan tab's standing result set.
+ *  These live in pipeline.md (written by scan.mjs / workers), so unlike an in-browser
+ *  run they survive reloads — they are the Scan tab's answer when it has no live run. */
+function ScanFindsSection({
+  offers,
+  latestDate,
+  totalPending,
+}: {
+  offers: EnrichedOffer[];
+  latestDate: string | null;
+  totalPending: number;
+}) {
+  const newest = latestDate ? offers.filter((o) => o.postedAt === latestDate).length : 0;
+
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div>
+          <p className="mb-0 md-body-large text-[var(--md-sys-color-on-surface)]">
+            <span className="font-medium">{offers.length}</span> from your portal scans
+            <CostBadge kind="free-network" size="xs" className="ml-2 align-middle" />
+          </p>
+          <p className="md-body-small text-[var(--md-sys-color-on-surface-variant)]">
+            {newest > 0 ? `${newest} added in the latest scan · ` : ""}
+            last 14 days · already in your inbox
+          </p>
+        </div>
+        <Link href="/pipeline" className="ml-auto">
+          <Md3ActionButton variant="outlined" icon="arrow_forward">
+            Triage all {totalPending}
+          </Md3ActionButton>
+        </Link>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {offers.map((o) => (
+          <DiscoveryCard key={o.url} offer={o} inPipeline={o.inPipeline} evaluatedN={o.evaluatedN} />
+        ))}
+      </div>
+    </section>
   );
 }
 

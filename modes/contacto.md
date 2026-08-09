@@ -93,6 +93,18 @@ not quote the note verbatim in a public-facing message.
 - NEVER share phone number
 - The contact type changes the EMPHASIS, not the structure
 
+## Persist contacts (data/contacts.tsv)
+
+When saving discovered contacts, append one TSV row per person (dedup on email or LinkedIn URL — update existing row instead of duplicating):
+
+```
+date	tracker#	company	role	name	title	channel	email	linkedin	verified	source	notes	contact_type	outreach_status	last_touch
+```
+
+- `contact_type`: `recruiter` | `hiring-manager` | `peer` | `interviewer` (from Step 2)
+- `outreach_status`: `not-contacted` on first save
+- `last_touch`: empty until the user sends outreach
+
 ---
 
 ## Greeting variant

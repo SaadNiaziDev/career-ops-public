@@ -67,7 +67,10 @@ End with EXACTLY one final line: VERDICT: 5/5 — title suggestions saved to dat
 1. Read reports/${input}-*.md, cv.md, config/profile.yml. Load company + role from the report header.
 2. Use WebSearch to identify: assigned recruiter, hiring manager, talent/HR contacts, and 1–2 team peers. Prefer LinkedIn profile URLs when found.
 3. For each contact found, APPEND one tab-separated row to data/contacts.tsv (create with header if missing):
-   date\\ttracker#\\tcompany\\trole\\tname\\ttitle\\tchannel\\temail\\tlinkedin\\tverified\\tsource\\tnotes
+   date\\ttracker#\\tcompany\\trole\\tname\\ttitle\\tchannel\\temail\\tlinkedin\\tverified\\tsource\\tnotes\\tcontact_type\\toutreach_status\\tlast_touch
+   - contact_type = recruiter | hiring-manager | peer | interviewer (from Step 2 classification)
+   - outreach_status = not-contacted (default on first save)
+   - last_touch = empty until a follow-up is sent
    - verified = yes only if email appears on an official careers/recruiting page; else unverified
    - email = work email if found, else empty; never invent emails
 4. Write LinkedIn messages + any email outreach drafts to data/drafts/${input}-contacto.md (one section per contact type).

@@ -35,6 +35,16 @@
 # scan_history:
 #   recheck_after_days: 30
 
+# -- Fit-score ranking weights (optional, scan + explore) --
+# Heuristic 0–100 fit score at scan time (zero AI tokens). Weights must sum ~1.0.
+# ranking:
+#   weights:
+#     cv_overlap: 0.35
+#     title_match: 0.25
+#     comp_fit: 0.15
+#     freshness: 0.15
+#     trust: 0.10
+
 # -- Location filter (optional) --
 # Filter scanned jobs by location. Applied AFTER title filter, BEFORE dedup.
 # If this entire block is absent, all locations pass (current default behavior).
