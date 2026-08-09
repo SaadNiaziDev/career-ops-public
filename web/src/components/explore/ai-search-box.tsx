@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { CostBadge } from "@/components/cost/cost-badge";
+import { estimateSpend, fmtUsd, type SpendEstimate } from "@/lib/explore-spend";
 
 const EXAMPLES = [
   "AI infra roles at climate startups, remote EU",
@@ -26,6 +27,10 @@ export function AiSearchBox({
   onRunScan: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  // S04 · gap 6 — the estimate is stated BEFORE the run, on the row that runs it.
+  // localStorage is client-only, so it is read after mount to keep SSR stable.
+  const [estimate, setEstimate] = useState<SpendEstimate | null>(null);
+  useEffect(() => setEstimate(estimateSpend()), []);
   const grow = () => {
     const t = ref.current;
     if (t) {
@@ -63,6 +68,20 @@ export function AiSearchBox({
             {cliConfigured ? (
               <>
                 Reads the public web with <span className="text-[var(--md-sys-color-on-surface)]">{cliName || "your CLI"}</span> — it costs your tokens.
+                {estimate && (
+                  <>
+                    {" "}
+                    <span className="text-[var(--md-sys-color-on-surface)]">
+                      Estimated {fmtUsd(estimate.usd)}
+                    </span>{" "}
+                    <span className="opacity-80">
+                      ({estimate.basis === "history"
+                        ? `average of your last ${estimate.runs} hunt${estimate.runs === 1 ? "" : "s"}`
+                        : "typical first hunt"}
+                      )
+                    </span>
+                  </>
+                )}
               </>
             ) : (
               "Connect an AI CLI in Config to use AI search."

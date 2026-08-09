@@ -19,6 +19,7 @@ export type CvPreviewResult = { html: string; template: string; stats?: CvPrevie
 export function renderCvPreviewHtml(opts: {
   markdown: string;
   template?: string;
+  pageFormat?: "a4" | "letter";
   style?: Record<string, string>;
 }): CvPreviewResult {
   const tmp = path.join(os.tmpdir(), `co-cv-preview-${process.pid}-${Date.now()}.md`);
@@ -26,6 +27,7 @@ export function renderCvPreviewHtml(opts: {
   try {
     const args = [rootScript("cv-md-preview"), "--json", "--file", tmp];
     if (opts.template) args.push("--template", opts.template);
+    if (opts.pageFormat) args.push("--page-format", opts.pageFormat);
     if (opts.style && Object.keys(opts.style).length > 0) {
       args.push("--style-json", JSON.stringify(opts.style));
     }

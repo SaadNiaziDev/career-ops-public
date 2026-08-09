@@ -10,6 +10,7 @@ import {
   isBroadSearch,
   paramsToAi,
   parseExplorePatch,
+  extractUsage,
   type AtsSource,
   type DiscoveredOffer,
   type ExploreFilters,
@@ -17,6 +18,7 @@ import {
   type ScanEvent,
 } from "@/lib/explore";
 import { makeAiStreamParser, type AiTraceChunk } from "@/lib/explore-ai";
+import { estimateSpend, recordSpend, type SpendEstimate } from "@/lib/explore-spend";
 import { readCliConfig, resolveCliIdForRun } from "@/lib/cli-config";
 
 export type Phase =
@@ -31,7 +33,17 @@ export type Phase =
   | "degraded" // scan completed but searched nothing (transient fetch/rate-limit) — not "all caught up"
   | "hunting" // AI search streaming
   | "blocked"; // AI search needs a CLI
-export type AiCost = { searches: number; candidates: number; fetches: number };
+export type AiCost = {
+  searches: number;
+  candidates: number;
+  fetches: number;
+  /** What this run was quoted before it started (blueprint S04 · gap 6). */
+  estUsd?: number;
+  estBasis?: SpendEstimate["basis"];
+  /** What the CLI actually reported once it finished. */
+  usd?: number;
+  tokens?: number;
+};
 export type SourceState = {
   state: "queued" | "active" | "swept" | "noisy";
   companies?: number;
@@ -288,8 +300,9 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
                 break;
               case "offer":
                 if (!isCurrent()) break;
+                if (acc.some((x) => x.url === ev.offer.url)) break;
                 acc.push(ev.offer);
-                setOffers((o) => [...o, ev.offer]);
+                setOffers((o) => (o.some((x) => x.url === ev.offer.url) ? o : [...o, ev.offer]));
                 break;
               case "summary": {
                 if (!isCurrent()) break;
@@ -430,7 +443,8 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     setOffers([]);
     setMatchCount(0);
     setAiTrace([]);
-    setAiCost({ searches: 0, candidates: 0, fetches: 0 });
+    const quote = estimateSpend();
+    setAiCost({ searches: 0, candidates: 0, fetches: 0, estUsd: quote.usd, estBasis: quote.basis });
     setError("");
     setSources({});
     setStatus("Casting across the open web…");
@@ -452,6 +466,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       if (!isCurrent()) return;
       for (const ch of chunks) {
         if (ch.kind === "offer") {
+          if (pending.some((x) => x.url === ch.offer.url)) continue;
           pending.push(ch.offer);
           setMatchCount(pending.length);
           setAiCost((c) => ({ ...c, candidates: pending.length }));
@@ -501,7 +516,14 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
           }
           const { value, done } = await reader.read();
           if (done) break;
-          handle(parser.feed(dec.decode(value, { stream: true })));
+          // Usage lines ride the same stream — pull them out before the trace
+          // parser sees the text, then show real spend beside the estimate.
+          const { text, usage } = extractUsage(dec.decode(value, { stream: true }));
+          for (const u of usage) {
+            setAiCost((c) => ({ ...c, usd: (c.usd ?? 0) + u.usd, tokens: (c.tokens ?? 0) + u.tokens }));
+            recordSpend(u.usd, u.tokens);
+          }
+          handle(parser.feed(text));
         }
         handle(parser.flush());
       }

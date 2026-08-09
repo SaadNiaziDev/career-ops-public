@@ -4,6 +4,32 @@
 // can never drift between the two halves. Server-only logic (spawning the scanner,
 // writing temp files) lives in lib/core/{scan,portals,pipeline}.ts.
 
+/**
+ * Out-of-band usage line in the AI-hunt stream: `⟦co-usage⟧{"usd":…,"tokens":…}`.
+ * The route emits it when the CLI reports a final result; the client strips
+ * every occurrence BEFORE the trace parser runs, so real spend can be shown
+ * next to the estimate without ever being mistaken for narration.
+ */
+export const USAGE_MARK = "⟦co-usage⟧";
+
+export type AiUsage = { usd: number; tokens: number };
+
+/** Pull usage lines out of a stream chunk. Returns the cleaned text + findings. */
+export function extractUsage(text: string): { text: string; usage: AiUsage[] } {
+  if (!text.includes(USAGE_MARK)) return { text, usage: [] };
+  const usage: AiUsage[] = [];
+  const cleaned = text.replace(new RegExp(`${USAGE_MARK}(\\{[^}]*\\})`, "g"), (_m, json: string) => {
+    try {
+      const parsed = JSON.parse(json) as Partial<AiUsage>;
+      usage.push({ usd: Number(parsed.usd) || 0, tokens: Number(parsed.tokens) || 0 });
+    } catch {
+      /* a torn chunk — drop the marker rather than show it */
+    }
+    return "";
+  });
+  return { text: cleaned, usage };
+}
+
 export type AtsSource = "greenhouse" | "lever" | "ashby" | "workday";
 export const ATS_SOURCES: AtsSource[] = ["greenhouse", "lever", "ashby", "workday"];
 export const ATS_LABEL: Record<AtsSource, string> = {

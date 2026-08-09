@@ -8,8 +8,12 @@ import { DossierSection } from "@/components/dossier/dossier-section";
 import { DossierStack } from "@/components/dossier/dossier-stack";
 import { DossierStat } from "@/components/dossier/dossier-stat";
 import { Md3Card } from "@/components/ui/md3-card";
+import { MaterialSymbol } from "@/components/material-symbol";
 import { canonStatus, scoreNum } from "@/lib/format";
 import { cn } from "@/lib/cn";
+
+/** Outcomes needed before patterns-signals.mjs will bias scan ranking. */
+const LEARNING_THRESHOLD = 5;
 
 const STAGES: { key: string; label: string }[] = [
   { key: "EVALUATED", label: "Evaluated" },
@@ -92,10 +96,26 @@ export function AnalyticsView({
   const offers = stageCounts.find((s) => s.key === "OFFER")?.n ?? 0;
   const interviews = stageCounts.find((s) => s.key === "INTERVIEW")?.n ?? 0;
 
+  // Outcomes the ranker can learn from — a reply of any kind, not an evaluation.
+  const OUTCOME_STAGES = ["RESPONDED", "INTERVIEW", "OFFER", "REJECTED"];
+  const outcomes = applications.filter((a) => OUTCOME_STAGES.some((s) => canonStatus(a.status).includes(s))).length;
+  const learned = Math.min(LEARNING_THRESHOLD, rankingSignals?.sample_size ?? outcomes);
+
   return (
     <PageShell width="default" className="max-w-[900px]">
       <DossierStack>
-        <DossierPageHeader title="Analytics" description={`Across ${total} tracked evaluations.`} />
+        {/* S10 · gap 1: Export CSV used to exist only in the command palette.
+            It belongs in the header, where the data it exports is. */}
+        <DossierPageHeader
+          title="Analytics"
+          description={`Across ${total} tracked evaluations.`}
+          extra={
+            <a href="/api/export?kind=tracker" className="md3-btn-outlined min-h-10" download>
+              <MaterialSymbol name="download" size={18} />
+              Export CSV
+            </a>
+          }
+        />
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <DossierStat title="evaluated" value={total} />
@@ -150,7 +170,9 @@ export function AnalyticsView({
           </DossierSection>
         )}
 
-        {rankingSignals && rankingSignals.sample_size >= 5 && (
+        {/* S10 · gap 4: the learning card used to vanish below 5 outcomes without
+            saying so. Under the threshold it states the progress toward it. */}
+        {learned >= LEARNING_THRESHOLD && rankingSignals ? (
           <Md3Card title="System learning">
             <p className="mb-2 text-sm text-[var(--md-sys-color-on-surface-variant)]">
               {rankingSignals.sample_size} tracked outcomes → scan ranking adjusts toward responding segments.
@@ -161,6 +183,32 @@ export function AnalyticsView({
               ))}
             </ul>
             <p className="mt-3 text-xs text-[var(--md-sys-color-outline)]">Regenerate: node patterns-signals.mjs</p>
+          </Md3Card>
+        ) : (
+          <Md3Card title="System learning">
+            <p className="mb-3 text-sm text-[var(--md-sys-color-on-surface-variant)]">
+              {learned >= LEARNING_THRESHOLD ? (
+                <>
+                  {outcomes} outcomes recorded — enough to learn from. Generate the signals to switch ranking on.
+                </>
+              ) : (
+                <>
+                  Ranking starts learning from outcomes at {LEARNING_THRESHOLD}. You have {learned} —{" "}
+                  {LEARNING_THRESHOLD - learned} to go.
+                </>
+              )}
+            </p>
+            <div className="weights-readout__track">
+              <div
+                className="weights-readout__bar"
+                style={{ width: `${Math.round((learned / LEARNING_THRESHOLD) * 100)}%` }}
+              />
+            </div>
+            <p className="mt-3 text-xs text-[var(--md-sys-color-outline)]">
+              {learned >= LEARNING_THRESHOLD
+                ? "Regenerate: node patterns-signals.mjs"
+                : "An outcome is a response, interview, offer or rejection — evaluations alone do not count."}
+            </p>
           </Md3Card>
         )}
 

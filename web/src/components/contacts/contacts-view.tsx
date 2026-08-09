@@ -9,7 +9,9 @@ import { Md3Empty } from "@/components/ui/md3-empty";
 import { Md3Input } from "@/components/ui/md3-input";
 import { Md3Chip } from "@/components/ui/md3-chip";
 import { Md3Collapse } from "@/components/ui/md3-collapse";
+import { Md3Select } from "@/components/ui/md3-select";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/providers/toast-provider";
 import type { ContactRow, ContactType, OutreachStatus } from "@/lib/contacts";
 
 const OUTREACH_OPTIONS: { value: OutreachStatus; label: string }[] = [
@@ -29,7 +31,7 @@ function ContactRowView({
   onStatusChange: (row: ContactRow, status: OutreachStatus) => void;
 }) {
   return (
-    <div className="grid min-h-16 items-start gap-4 border-b border-[var(--md-sys-color-outline-variant)] px-6 py-4 last:border-b-0 xl:grid-cols-[260px_220px_260px_140px_120px_1fr]">
+    <div className="grid min-h-16 items-start gap-4 border-b border-[var(--md-sys-color-outline-variant)] px-6 py-4 last:border-b-0 xl:grid-cols-[230px_200px_240px_140px_110px_1fr]">
       <div className="min-w-0">
         <Link href={`/pipeline/${r.trackerNum}`} className="font-medium text-[var(--md-sys-color-primary)] hover:underline">
           {r.company}
@@ -63,17 +65,14 @@ function ContactRowView({
         )}
       </div>
       <div>
-        <select
-          className="h-9 w-full rounded-[var(--md-sys-shape-corner-small)] border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-high)] px-2 text-xs"
+        {/* S09 · gap 4: the last native control in the app is an Md3Select now. */}
+        <Md3Select
+          className="w-full"
+          aria-label={`Outreach status for ${r.name || r.company}`}
           value={r.outreachStatus || "not-contacted"}
-          onChange={(e) => onStatusChange(r, e.target.value as OutreachStatus)}
-        >
-          {OUTREACH_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => onStatusChange(r, v as OutreachStatus)}
+          options={OUTREACH_OPTIONS}
+        />
         {r.lastTouch && <p className="mt-1 text-[10px] text-[var(--md-sys-color-outline)]">Last: {r.lastTouch}</p>}
       </div>
       <div className="text-sm text-[var(--md-sys-color-on-surface-variant)]">{r.date}</div>
@@ -83,6 +82,7 @@ function ContactRowView({
 }
 
 export function ContactsView({ initial }: { initial: ContactRow[] }) {
+  const { toast } = useToast();
   const [q, setQ] = useState("");
   const [rows, setRows] = useState(initial);
   const [grouped, setGrouped] = useState(true);
@@ -121,30 +121,43 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [filtered]);
 
+  // S09 · state `write failed`: the row moves optimistically, then reverts to
+  // the value that is actually on disk and offers Retry — never a silent drop.
   async function patchStatus(row: ContactRow, outreachStatus: OutreachStatus) {
-    const res = await fetch("/api/contacts", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: row.email,
-        linkedin: row.linkedin,
-        trackerNum: row.trackerNum,
-        name: row.name,
-        outreach_status: outreachStatus,
-        last_touch: new Date().toISOString().slice(0, 10),
-      }),
-    });
-    if (!res.ok) return;
+    const isSame = (r: ContactRow) =>
+      (row.email && r.email === row.email) ||
+      (row.linkedin && r.linkedin === row.linkedin) ||
+      (r.trackerNum === row.trackerNum && r.name === row.name && r.date === row.date);
+
+    const previous = row.outreachStatus;
+    const previousTouch = row.lastTouch;
     const lastTouch = new Date().toISOString().slice(0, 10);
-    setRows((prev) =>
-      prev.map((r) => {
-        const same =
-          (row.email && r.email === row.email) ||
-          (row.linkedin && r.linkedin === row.linkedin) ||
-          (r.trackerNum === row.trackerNum && r.name === row.name && r.date === row.date);
-        return same ? { ...r, outreachStatus, lastTouch } : r;
-      }),
-    );
+    setRows((prev) => prev.map((r) => (isSame(r) ? { ...r, outreachStatus, lastTouch } : r)));
+
+    try {
+      const res = await fetch("/api/contacts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: row.email,
+          linkedin: row.linkedin,
+          trackerNum: row.trackerNum,
+          name: row.name,
+          outreach_status: outreachStatus,
+          last_touch: lastTouch,
+        }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+    } catch {
+      setRows((prev) =>
+        prev.map((r) => (isSame(r) ? { ...r, outreachStatus: previous, lastTouch: previousTouch } : r)),
+      );
+      toast({
+        tone: "error",
+        message: `Could not write ${row.name || row.company} to contacts.tsv`,
+        action: { label: "Retry", onClick: () => void patchStatus(row, outreachStatus) },
+      });
+    }
   }
 
   return (
@@ -152,7 +165,7 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
       <DossierPageHeader title="Contacts & applications memory" description="Grouped by company — filter by channel, type, and outreach status." />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Md3Input icon="search" type="search" placeholder="Search company, name, email…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-md flex-1" />
+        <Md3Input icon="search" type="search" placeholder="Search company, name, email…" value={q} onChange={(e) => setQ(e.target.value)} className="w-[420px] max-w-full" />
         <button type="button" className="md3-btn-outlined min-h-10" onClick={() => setGrouped((g) => !g)}>
           {grouped ? "Flat list" : "Group by company"}
         </button>

@@ -2,16 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MaterialSymbol } from "@/components/material-symbol";
-import { PageShell } from "@/components/dossier/page-shell";
-import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
-import { DossierStack } from "@/components/dossier/dossier-stack";
 import { Button } from "@/components/ui/button";
-import { Md3Card } from "@/components/ui/md3-card";
 import { Md3Chip } from "@/components/ui/md3-chip";
 import { Md3Segmented } from "@/components/ui/md3-segmented";
 import { Md3Select } from "@/components/ui/md3-select";
 import { cvReadiness } from "@/lib/cv/quality";
 import type { CvPreviewStats } from "@/lib/cv/preview";
+import { AccentSwatches } from "@/components/cv/accent-swatches";
+import { FullPreviewOverlay } from "@/components/cv/full-preview-overlay";
+import { assessFit, type CvStyleLike } from "@/lib/cv/fit";
+import { DEFAULT_PAGE_FORMAT, pageBox, type CvPageFormat } from "@/lib/cv/page";
 import { cn } from "@/lib/cn";
 
 type CvStyle = {
@@ -25,11 +25,14 @@ type CvStyle = {
 type CvSettings = {
   template: string;
   source: string;
+  pageFormat: CvPageFormat;
   style: CvStyle;
   templates: { name: string; displayName: string }[];
 };
 
 type CvSourceEntry = { path: string; label: string; exists: boolean; mtime: number };
+
+type GeneratedCv = { file: string; label: string; mtime: number; pdf: boolean };
 
 type ViewMode = "edit" | "split" | "preview";
 
@@ -51,9 +54,8 @@ const FONT_PRESETS = [
   { value: "Georgia, 'Times New Roman', serif", label: "Serif — Georgia" },
 ];
 
-// US Letter at 96dpi — the width the CV templates lay out against.
-const PAGE_WIDTH_PX = 816;
-const PAGE_HEIGHT_PX = 1056;
+// Page geometry now comes from the selected format (lib/cv/page.ts) — the studio
+// used to hard-code US Letter, which is exactly what S07 · redline 3 called out.
 
 const MARGIN_PRESETS = [
   { value: "0", label: "Tight" },
@@ -65,6 +67,9 @@ function sameStyle(a: CvStyle, b: CvStyle): boolean {
   return (Object.keys(DEFAULT_STYLE) as (keyof CvStyle)[]).every((k) => a[k] === b[k]);
 }
 
+/** One-step undo target for "Fit to one page" (S08 · redline 4). */
+type FitUndo = { style: CvStyle } | null;
+
 export function CvEditor() {
   const [content, setContent] = useState("");
   const [baseline, setBaseline] = useState("");
@@ -75,7 +80,11 @@ export function CvEditor() {
   const [error, setError] = useState("");
 
   const [settings, setSettings] = useState<CvSettings | null>(null);
-  const [styleBaseline, setStyleBaseline] = useState<{ template: string; style: CvStyle } | null>(null);
+  const [styleBaseline, setStyleBaseline] = useState<{
+    template: string;
+    pageFormat: CvPageFormat;
+    style: CvStyle;
+  } | null>(null);
   const [savingStyle, setSavingStyle] = useState(false);
 
   const [sources, setSources] = useState<CvSourceEntry[]>([]);
@@ -90,7 +99,15 @@ export function CvEditor() {
   const [previewError, setPreviewError] = useState("");
 
   const [previewScale, setPreviewScale] = useState(1);
-  const [previewDocHeight, setPreviewDocHeight] = useState(PAGE_HEIGHT_PX);
+  const [previewDocHeight, setPreviewDocHeight] = useState(0);
+  const [fullPreview, setFullPreview] = useState(false);
+  // A finished, tailored render from output/ — shown instead of the live
+  // preview so you can look at a real one-page CV, not the whole of cv.md.
+  const [generated, setGenerated] = useState<GeneratedCv[]>([]);
+  const [shownGenerated, setShownGenerated] = useState("");
+  const [generatedHtml, setGeneratedHtml] = useState("");
+  const [fitUndo, setFitUndo] = useState<FitUndo>(null);
+  const [baseMarkdown, setBaseMarkdown] = useState("");
 
   const previewBoxRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -99,7 +116,19 @@ export function CvEditor() {
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dirty = content !== baseline;
-  const styleDirty = !!(settings && styleBaseline && (settings.template !== styleBaseline.template || !sameStyle(settings.style, styleBaseline.style)));
+  const styleDirty = !!(
+    settings &&
+    styleBaseline &&
+    (settings.template !== styleBaseline.template ||
+      settings.pageFormat !== styleBaseline.pageFormat ||
+      !sameStyle(settings.style, styleBaseline.style))
+  );
+  const pageFormat = settings?.pageFormat ?? DEFAULT_PAGE_FORMAT;
+  const box = pageBox(pageFormat);
+  const fit = useMemo(
+    () => assessFit(previewDocHeight || box.height, pageFormat, settings?.style ?? DEFAULT_STYLE),
+    [previewDocHeight, pageFormat, settings?.style, box.height],
+  );
   const readiness = useMemo(() => cvReadiness(content), [content]);
 
   // The renderer is a deterministic section parser (cv-md-preview.mjs); its own report
@@ -133,7 +162,7 @@ export function CvEditor() {
         if (settingsRes.ok) {
           const s = (await settingsRes.json()) as CvSettings;
           setSettings(s);
-          setStyleBaseline({ template: s.template, style: s.style });
+          setStyleBaseline({ template: s.template, pageFormat: s.pageFormat, style: s.style });
         }
         if (sourcesRes.ok) {
           const src = await sourcesRes.json();
@@ -156,7 +185,7 @@ export function CvEditor() {
 
   // ── live preview ────────────────────────────────────────────────────────────
   const runPreview = useCallback(async (md: string, s: CvSettings) => {
-    const key = JSON.stringify([md, s.template, s.style]);
+    const key = JSON.stringify([md, s.template, s.pageFormat, s.style]);
     if (key === previewKey.current) return;
     previewKey.current = key;
 
@@ -168,7 +197,7 @@ export function CvEditor() {
       const res = await fetch("/api/cv/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: md, template: s.template, style: s.style }),
+        body: JSON.stringify({ content: md, template: s.template, pageFormat: s.pageFormat, style: s.style }),
         signal: ac.signal,
       });
       const data = await res.json();
@@ -206,22 +235,76 @@ export function CvEditor() {
   }, [content, settings, loaded, runPreview]);
 
   // ── preview sizing (real page width, scaled into the pane) ──────────────────
-  const measurePreviewDoc = useCallback((e: React.SyntheticEvent<HTMLIFrameElement>) => {
-    const doc = e.currentTarget.contentDocument;
-    if (!doc) return;
-    const height = Math.max(doc.documentElement?.scrollHeight ?? 0, doc.body?.scrollHeight ?? 0, PAGE_HEIGHT_PX);
-    setPreviewDocHeight(Math.min(height, 40 * PAGE_HEIGHT_PX));
-  }, []);
+  const measurePreviewDoc = useCallback(
+    (e: React.SyntheticEvent<HTMLIFrameElement>) => {
+      const doc = e.currentTarget.contentDocument;
+      if (!doc) return;
+      const height = Math.max(doc.documentElement?.scrollHeight ?? 0, doc.body?.scrollHeight ?? 0, box.height);
+      setPreviewDocHeight(Math.min(height, 40 * box.height));
+    },
+    [box.height],
+  );
 
   useEffect(() => {
     const el = previewBoxRef.current;
     if (!el) return;
-    const update = () => setPreviewScale(Math.min(1, (el.clientWidth || PAGE_WIDTH_PX) / PAGE_WIDTH_PX));
+    const update = () => {
+      // Leave room for the pane's own padding so the page never touches the edge.
+      const avail = Math.max(0, (el.clientWidth || box.width) - 32);
+      const raw = avail / box.width;
+      // Split keeps the page at 1:1 or smaller. Preview is the whole pane, so
+      // the page scales UP to use it — otherwise a 794px document sits in a
+      // 1200px pane and reads as a broken half-width layout.
+      setPreviewScale(view === "preview" ? Math.min(2, Math.max(0.2, raw)) : Math.min(1, raw));
+    };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [view, loaded, previewHtml]);
+  }, [view, loaded, previewHtml, box.width]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/cv/generated")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => alive && setGenerated(Array.isArray(d?.generated) ? d.generated : []))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!shownGenerated) {
+      setGeneratedHtml("");
+      return;
+    }
+    let alive = true;
+    fetch(`/api/cv/generated?file=${encodeURIComponent(shownGenerated)}`)
+      .then((r) => (r.ok ? r.text() : ""))
+      .then((html) => alive && setGeneratedHtml(html))
+      .catch(() => alive && setGeneratedHtml(""));
+    return () => {
+      alive = false;
+    };
+  }, [shownGenerated]);
+
+  // The base CV backs the tailoring diff (S08 · blueprint item 7). Only a
+  // non-canonical source can be "tailored", so cv.md never diffs against itself.
+  useEffect(() => {
+    if (activeSource === "cv.md") {
+      setBaseMarkdown("");
+      return;
+    }
+    let alive = true;
+    fetch("/api/cv?source=cv.md")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => alive && setBaseMarkdown(typeof d?.content === "string" ? d.content : ""))
+      .catch(() => alive && setBaseMarkdown(""));
+    return () => {
+      alive = false;
+    };
+  }, [activeSource]);
 
   // ── unsaved-work guards ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -341,6 +424,15 @@ export function CvEditor() {
     setSettings((prev) => (prev ? { ...prev, style: { ...prev.style, [key]: value } } : prev));
   }
 
+  /** Apply the tightening the fit assessment proposed, remembering one undo. */
+  function applyFit(next: CvStyleLike) {
+    setSettings((prev) => {
+      if (!prev) return prev;
+      setFitUndo({ style: prev.style });
+      return { ...prev, style: { ...prev.style, density: next.density, margin: next.margin } };
+    });
+  }
+
   async function saveStyle() {
     if (!settings || savingStyle) return;
     setSavingStyle(true);
@@ -349,14 +441,18 @@ export function CvEditor() {
       const res = await fetch("/api/cv/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template: settings.template, style: settings.style }),
+        body: JSON.stringify({
+          template: settings.template,
+          pageFormat: settings.pageFormat,
+          style: settings.style,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error || "Couldn't save the template settings.");
         return;
       }
-      setStyleBaseline({ template: settings.template, style: settings.style });
+      setStyleBaseline({ template: settings.template, pageFormat: settings.pageFormat, style: settings.style });
     } catch {
       setError("Couldn't save the template settings.");
     } finally {
@@ -372,238 +468,275 @@ export function CvEditor() {
 
   const showEditor = view !== "preview";
   const showPreview = view !== "edit";
+  // What the page pane actually shows: the live render of the buffer, or a
+  // finished tailored render picked from output/.
+  const viewingGenerated = !!shownGenerated && !!generatedHtml;
+  const pageHtml = viewingGenerated ? generatedHtml : previewHtml;
 
   return (
-    <PageShell width="wide">
-      <DossierStack>
-        <DossierPageHeader
-          title="CV editor"
-          description={
-            <>
-              Edit the markdown, pick a template, and preview the printed layout live. Editing{" "}
-              <code className="rounded bg-[var(--md-sys-color-surface-container-high)] px-1.5 py-0.5 text-sm">{activeSource}</code>
-              {!exists && loaded ? " — not created yet, saving will create it." : ""}
-            </>
-          }
-          extra={
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="default" onClick={() => fileRef.current?.click()} disabled={importing}>
-                {importing ? <MaterialSymbol name="progress_activity" size={18} className="animate-spin" /> : <MaterialSymbol name="upload" size={18} />}
-                Import file
-              </Button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".md,.markdown,.txt"
-                hidden
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void importFile(f);
-                  e.target.value = "";
-                }}
-              />
-              <Button variant={dirty ? "primary" : "outline"} size="default" onClick={() => void save()} disabled={saving || !dirty} title="Save (⌘S)">
-                {saving ? (
-                  <MaterialSymbol name="progress_activity" size={18} className="animate-spin" />
-                ) : saved ? (
-                  <MaterialSymbol name="check" size={18} />
-                ) : (
-                  <MaterialSymbol name="save" size={18} />
-                )}
-                {saving ? "Saving" : saved ? "Saved" : dirty ? "Save" : "Saved"}
-              </Button>
-            </div>
-          }
-        />
+    <div className="cv-studio">
+      {/* Blueprint S07 — three peers on one screen: markdown, the printed page,
+          style. Everything that used to stack (page header, source row, view
+          row, style card) collapses into one toolbar so the studio opens fully
+          visible instead of asking for three scrolls. */}
+      <header className="cv-studio__bar">
+        <span className="md-title-medium shrink-0">CV</span>
 
-        <p aria-live="polite" className="sr-only">
-          {saving ? "Saving CV" : saved ? "CV saved" : dirty ? "Unsaved changes" : "All changes saved"}
-        </p>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          {sources.map((s) => (
+            <Md3Chip
+              key={s.path}
+              active={activeSource === s.path}
+              disabled={!s.exists || switching}
+              title={s.exists ? s.path : `${s.path} — not created yet`}
+              onClick={() => switchSource(s.path)}
+            >
+              {s.label}
+            </Md3Chip>
+          ))}
+          {!exists && loaded && (
+            <span className="text-[11px] text-[var(--md-sys-color-outline)]">not created yet — saving creates it</span>
+          )}
+        </div>
 
-        {error && (
-          <div className="md3-alert md3-alert--warning flex items-center gap-2" role="alert">
-            <MaterialSymbol name="warning" size={16} className="shrink-0" />
-            <span className="min-w-0 flex-1">{error}</span>
-            <button type="button" className="shrink-0 opacity-70 hover:opacity-100" aria-label="Dismiss" onClick={() => setError("")}>
-              <MaterialSymbol name="close" size={16} />
-            </button>
-          </div>
+        {generated.length > 0 && (
+          <Md3Select
+            className="min-w-[190px]"
+            aria-label="Which CV to show"
+            value={shownGenerated}
+            onChange={setShownGenerated}
+            options={[
+              { value: "", label: "Live preview (this buffer)" },
+              ...generated.map((g) => ({
+                value: g.file,
+                label: `${g.label}${g.pdf ? " · PDF" : ""}`,
+              })),
+            ]}
+          />
         )}
 
-        {!loaded ? (
-          <div className="flex justify-center py-16">
-            <MaterialSymbol name="progress_activity" size={32} className="animate-spin text-[var(--md-sys-color-primary)]" />
-          </div>
-        ) : (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="min-w-0 space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-medium text-[var(--md-sys-color-on-surface-variant)]">Source</span>
-                {sources.map((s) => (
-                  <Md3Chip
-                    key={s.path}
-                    active={activeSource === s.path}
-                    disabled={!s.exists || switching}
-                    title={s.exists ? s.path : `${s.path} — not created yet`}
-                    onClick={() => switchSource(s.path)}
-                  >
-                    {s.label}
-                  </Md3Chip>
-                ))}
+        <Md3Segmented<ViewMode>
+          value={view}
+          onChange={setView}
+          aria-label="Editor layout"
+          options={[
+            { value: "edit", label: "Edit" },
+            { value: "split", label: "Split" },
+            { value: "preview", label: "Preview" },
+          ]}
+        />
 
-                <div className="ml-auto flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium",
-                      readiness.scoreable
-                        ? "bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)]"
-                        : "bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)]",
-                    )}
-                    title={readiness.hint ?? "Enough detail to score against job descriptions."}
-                  >
-                    <MaterialSymbol name={readiness.scoreable ? "check_circle" : "info"} size={13} />
-                    {readiness.scoreable ? "Ready to match" : "Needs more detail"}
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium",
+            fit.pages <= 1
+              ? "bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)]"
+              : "bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)]",
+          )}
+          title={`${fit.pages} page${fit.pages === 1 ? "" : "s"} at ${box.label}`}
+        >
+          <MaterialSymbol name={fit.pages <= 1 ? "check_circle" : "warning"} size={13} />
+          {fit.message}
+        </span>
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium",
+            readiness.scoreable
+              ? "bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)]"
+              : "bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)]",
+          )}
+          title={readiness.hint ?? "Enough detail to score against job descriptions."}
+        >
+          <MaterialSymbol name={readiness.scoreable ? "check_circle" : "info"} size={13} />
+          {readiness.scoreable ? "Ready to match" : "Needs detail"}
+          <span className="opacity-70">· {readiness.words.toLocaleString()}w</span>
+        </span>
+
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFullPreview(true)}
+            disabled={!previewHtml}
+            className="md3-btn-text min-h-9 text-xs disabled:opacity-40"
+          >
+            <MaterialSymbol name="fullscreen" size={16} />
+            Full preview
+          </button>
+          <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importing}>
+            {importing ? (
+              <MaterialSymbol name="progress_activity" size={16} className="animate-spin" />
+            ) : (
+              <MaterialSymbol name="upload" size={16} />
+            )}
+            Import
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".md,.markdown,.txt"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void importFile(f);
+              e.target.value = "";
+            }}
+          />
+          <Button variant={dirty ? "primary" : "outline"} size="sm" onClick={() => void save()} disabled={saving || !dirty} title="Save (⌘S)">
+            {saving ? (
+              <MaterialSymbol name="progress_activity" size={16} className="animate-spin" />
+            ) : saved ? (
+              <MaterialSymbol name="check" size={16} />
+            ) : (
+              <MaterialSymbol name="save" size={16} />
+            )}
+            {saving ? "Saving" : saved ? "Saved" : dirty ? "Save" : "Saved"}
+          </Button>
+        </div>
+      </header>
+
+      <p aria-live="polite" className="sr-only">
+        {saving ? "Saving CV" : saved ? "CV saved" : dirty ? "Unsaved changes" : "All changes saved"}
+      </p>
+
+      {error && (
+        <div className="md3-alert md3-alert--warning mx-4 mt-3 flex items-center gap-2 py-2" role="alert">
+          <MaterialSymbol name="warning" size={16} className="shrink-0" />
+          <span className="min-w-0 flex-1">{error}</span>
+          <button type="button" className="shrink-0 opacity-70 hover:opacity-100" aria-label="Dismiss" onClick={() => setError("")}>
+            <MaterialSymbol name="close" size={16} />
+          </button>
+        </div>
+      )}
+
+      {!loaded ? (
+        <div className="flex flex-1 items-center justify-center">
+          <MaterialSymbol name="progress_activity" size={32} className="animate-spin text-[var(--md-sys-color-primary)]" />
+        </div>
+      ) : (
+        <div className="cv-studio__panes" data-view={view}>
+          {showEditor && (
+            // Raw field markup (not Md3Textarea) so the textarea fills its pane
+            // instead of growing the page as the CV gets longer.
+            <label className="md3-field md3-field--textarea min-h-0 flex-col">
+              <textarea
+                data-lenis-prevent
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                spellCheck={false}
+                aria-label="CV markdown"
+                placeholder={"# Your Name\n\n**Email:** you@example.com\n\n## Professional Summary\n..."}
+                // .md3-field__input sets the `font` shorthand, which would win over a
+                // font-family utility — set the editor face inline instead.
+                style={{ font: "12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" }}
+                className="md3-field__input min-h-0 w-full flex-1 resize-none"
+              />
+            </label>
+          )}
+          {showPreview && (
+            <section className="cv-studio__page">
+              {viewingGenerated && (
+                <p className="flex items-center gap-2 bg-[var(--md-sys-color-secondary-container)] px-3 py-2 text-[11px] text-[var(--md-sys-color-on-secondary-container)]">
+                  <MaterialSymbol name="lock" size={14} className="shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">
+                    Finished render — {generated.find((g) => g.file === shownGenerated)?.label ?? shownGenerated}. Style
+                    controls do not affect it.
                   </span>
-                  <span className="text-[11px] text-[var(--md-sys-color-outline)]">{readiness.words.toLocaleString()} words</span>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Md3Segmented<ViewMode>
-                  value={view}
-                  onChange={setView}
-                  aria-label="Editor layout"
-                  options={[
-                    { value: "edit", label: "Edit" },
-                    { value: "split", label: "Split" },
-                    { value: "preview", label: "Preview" },
-                  ]}
-                />
-                <a
-                  href={`/api/cv/preview?source=${encodeURIComponent(activeSource)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={cn(
-                    "ml-auto inline-flex items-center gap-1 text-xs text-[var(--md-sys-color-primary)] hover:underline",
-                    (dirty || !exists) && "pointer-events-none opacity-40",
-                  )}
-                  title={dirty ? "Save first — the full preview renders the file on disk" : "Open the full-page preview"}
-                >
-                  <MaterialSymbol name="open_in_new" size={14} />
-                  Full preview
-                </a>
-              </div>
-
-              <div className={cn("grid gap-4", view === "split" && "lg:grid-cols-2")}>
-                {showEditor && (
-                  // Raw field markup (not Md3Textarea) so the textarea can stretch to the
-                  // pane height instead of growing the page as the CV gets longer.
-                  <label className="md3-field md3-field--textarea h-[68vh] min-h-[420px] flex-col">
-                    <textarea
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      spellCheck={false}
-                      aria-label="CV markdown"
-                      placeholder={"# Your Name\n\n**Email:** you@example.com\n\n## Professional Summary\n..."}
-                      // .md3-field__input sets the `font` shorthand, which would win over a
-                      // font-family utility — set the editor face inline instead.
-                      style={{ font: "12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" }}
-                      className="md3-field__input min-h-0 w-full flex-1 resize-none"
-                    />
-                  </label>
-                )}
-                {showPreview && (
-                  <Md3Card className="flex h-[68vh] min-h-[420px] flex-col overflow-hidden p-0" title="Printed layout preview">
-                    {previewHtml && parseHint && (
-                      <p className="mb-2 flex items-start gap-1.5 rounded-[var(--md-sys-shape-corner-small)] bg-[var(--md-sys-color-tertiary-container)] px-2.5 py-2 text-[11px] text-[var(--md-sys-color-on-tertiary-container)]">
-                        <MaterialSymbol name="info" size={14} className="mt-px shrink-0" />
-                        {parseHint}
-                      </p>
-                    )}
-                    <div ref={previewBoxRef} className="relative min-h-0 flex-1 overflow-auto bg-white">
-                      {previewLoading && (
+                  <button type="button" className="shrink-0 underline" onClick={() => setShownGenerated("")}>
+                    Back to live
+                  </button>
+                </p>
+              )}
+              {!viewingGenerated && previewHtml && parseHint && (
+                <p className="flex items-start gap-1.5 bg-[var(--md-sys-color-tertiary-container)] px-3 py-2 text-[11px] text-[var(--md-sys-color-on-tertiary-container)]">
+                  <MaterialSymbol name="info" size={14} className="mt-px shrink-0" />
+                  {parseHint}
+                </p>
+              )}
+              <div
+                ref={previewBoxRef}
+                data-lenis-prevent
+                className="relative flex min-h-0 flex-1 justify-center overflow-auto bg-white p-4"
+              >
+                      {previewLoading && !viewingGenerated && (
                         <div className="absolute right-3 top-3 z-10 rounded-full bg-black/5 p-1.5">
                           <MaterialSymbol name="progress_activity" size={18} className="animate-spin text-[var(--md-sys-color-primary)]" />
                         </div>
                       )}
-                      {previewError && (
+                      {previewError && !viewingGenerated && (
                         <p className="p-4 text-sm text-[var(--md-sys-color-error)]">{previewError}</p>
                       )}
-                      {!previewError && !previewHtml && !previewLoading && (
+                      {!pageHtml && !previewLoading && (
                         <p className="p-4 text-sm text-[var(--md-sys-color-on-surface-variant)]">
                           Add CV content to see how it will print.
                         </p>
                       )}
-                      {!previewError && previewHtml && (
+                      {pageHtml && (viewingGenerated || !previewError) && (
                         // The document is laid out at real page width and scaled down to the
                         // pane, so the preview shows the printed proportions rather than a
                         // reflowed, narrow version of the page.
-                        <div style={{ width: PAGE_WIDTH_PX * previewScale, height: previewDocHeight * previewScale }} className="relative">
+                        <div
+                          style={{
+                            width: box.width * previewScale,
+                            height: (previewDocHeight || box.height) * previewScale,
+                          }}
+                          className="relative shrink-0 self-start shadow-[0_2px_12px_rgb(0_0_0/0.12)]"
+                        >
                           <iframe
                             title="CV layout preview"
-                            srcDoc={previewHtml}
+                            srcDoc={pageHtml}
                             onLoad={measurePreviewDoc}
                             style={{
-                              width: PAGE_WIDTH_PX,
-                              height: previewDocHeight,
+                              width: box.width,
+                              height: previewDocHeight || box.height,
                               transform: `scale(${previewScale})`,
                               transformOrigin: "top left",
                             }}
                             className="absolute left-0 top-0 border-0 bg-white"
                             sandbox="allow-same-origin"
                           />
+                          {/* The page cut, drawn where it actually lands (S08 · 3). */}
+                          {Array.from({ length: fit.pages - 1 }, (_, i) => (
+                            <div
+                              key={i}
+                              className="pointer-events-none absolute left-0 right-0 border-t border-dashed border-[var(--md-sys-color-primary)]"
+                              style={{ top: (i + 1) * box.height * previewScale }}
+                            />
+                          ))}
                         </div>
                       )}
-                    </div>
-                  </Md3Card>
-                )}
               </div>
-            </div>
+            </section>
+          )}
 
-            {settings && (
-              <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-                <Md3Card title="Template & style">
-                  <p className="mb-3 text-xs text-[var(--md-sys-color-on-surface-variant)]">
+          {settings && (
+            <aside className="cv-studio__rail" data-lenis-prevent>
+                  <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">
                     Changes preview instantly. Save to write them to <code>config/profile.yml</code> so PDF runs use them too.
                   </p>
 
-                  <span className="mb-2 block text-xs font-medium">Template</span>
-                  <div className="mb-4 grid grid-cols-2 gap-2">
-                    {settings.templates.map((t) => (
-                      <button
-                        key={t.name}
-                        type="button"
-                        aria-pressed={settings.template === t.name}
-                        className="rounded-[var(--md-sys-shape-corner-small)] border border-[var(--md-sys-color-outline-variant)] px-2 py-2 text-left text-xs transition-colors data-[active=true]:border-[var(--md-sys-color-primary)] data-[active=true]:bg-[var(--md-sys-color-primary-container)]"
-                        data-active={settings.template === t.name ? "true" : "false"}
-                        onClick={() => setSettings({ ...settings, template: t.name })}
-                      >
-                        {t.displayName}
-                      </button>
-                    ))}
+                  {/* Template selection lives in profile.yml / the CLI — the
+                      studio rail stays a pure style surface (colour, type,
+                      density, padding, page box). */}
+                  <span className="mb-1 block text-xs font-medium">Page size</span>
+                  <Md3Segmented<CvPageFormat>
+                    className="mb-4"
+                    value={settings.pageFormat}
+                    onChange={(v) => setSettings({ ...settings, pageFormat: v })}
+                    aria-label="Page size"
+                    options={[
+                      { value: "a4", label: "A4" },
+                      { value: "letter", label: "Letter" },
+                    ]}
+                  />
+
+                  <div className="mb-4">
+                    <AccentSwatches
+                      accent={settings.style.accent_color}
+                      onChange={(next) =>
+                        setSettings({ ...settings, style: { ...settings.style, ...next } })
+                      }
+                    />
                   </div>
-
-                  <label htmlFor="cv-accent" className="mb-1 block text-xs font-medium">
-                    Accent colour
-                  </label>
-                  <input
-                    id="cv-accent"
-                    type="color"
-                    value={settings.style.accent_color}
-                    onChange={(e) => patchStyle("accent_color", e.target.value)}
-                    className="mb-3 h-10 w-full cursor-pointer rounded border border-[var(--md-sys-color-outline-variant)]"
-                  />
-
-                  <label htmlFor="cv-heading" className="mb-1 block text-xs font-medium">
-                    Heading colour
-                  </label>
-                  <input
-                    id="cv-heading"
-                    type="color"
-                    value={settings.style.heading_color}
-                    onChange={(e) => patchStyle("heading_color", e.target.value)}
-                    className="mb-3 h-10 w-full cursor-pointer rounded border border-[var(--md-sys-color-outline-variant)]"
-                  />
 
                   <span className="mb-1 block text-xs font-medium">Typeface</span>
                   <Md3Select
@@ -653,12 +786,64 @@ export function CvEditor() {
                   >
                     Reset style to defaults
                   </button>
-                </Md3Card>
-              </aside>
-            )}
-          </div>
-        )}
-      </DossierStack>
-    </PageShell>
+
+                {/* S07 · gap 4 — the fit warning states the spill and offers the
+                    exact fix, undoable in one step. Only shown when there is
+                    something to fix; a CV that fits says so in the toolbar. */}
+                {(fitUndo || fit.proposal) && (
+                  <div className="rounded-[var(--md-sys-shape-corner-large)] bg-[var(--md-sys-color-surface-container-high)] p-3">
+                  <p className="mb-2 text-xs text-[var(--md-sys-color-on-surface-variant)]">
+                    {fit.message} at {box.label}.
+                  </p>
+                  {fitUndo ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        setSettings({ ...settings, style: fitUndo.style });
+                        setFitUndo(null);
+                      }}
+                    >
+                      <MaterialSymbol name="undo" size={16} />
+                      Undo fit
+                    </Button>
+                  ) : (
+                    fit.proposal && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => applyFit(fit.proposal!)}
+                      >
+                        Fit to one page
+                      </Button>
+                    )
+                  )}
+                  </div>
+                )}
+            </aside>
+          )}
+        </div>
+      )}
+
+      {settings && (
+        <FullPreviewOverlay
+          open={fullPreview}
+          onClose={() => setFullPreview(false)}
+          html={previewHtml}
+          markdown={content}
+          templateLabel={
+            settings.templates.find((t) => t.name === settings.template)?.displayName ?? settings.template
+          }
+          pageFormat={settings.pageFormat}
+          onPageFormat={(f) => setSettings({ ...settings, pageFormat: f })}
+          style={settings.style as unknown as Record<string, string> & CvStyleLike}
+          onApplyFit={applyFit}
+          baseMarkdown={baseMarkdown}
+          source={activeSource}
+        />
+      )}
+    </div>
   );
 }

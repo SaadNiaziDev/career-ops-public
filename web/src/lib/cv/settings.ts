@@ -5,6 +5,9 @@ import yaml from "js-yaml";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
 import { DEFAULT_CV_SOURCE, resolveCvSource } from "@/lib/cv/sources";
+import { DEFAULT_PAGE_FORMAT, type CvPageFormat } from "@/lib/cv/page";
+
+export type { CvPageFormat };
 
 // Single owner of the `cv:` block in config/profile.yml. Every CV route reads and
 // writes through here so the profile can never gain a key the PDF renderer would
@@ -23,6 +26,7 @@ export type CvTemplate = { name: string; displayName: string };
 export type CvSettings = {
   template: string;
   source: string;
+  pageFormat: CvPageFormat;
   style: CvStyle;
 };
 
@@ -126,6 +130,12 @@ export function sanitizeCvTemplate(input: unknown, templates = listCvTemplates()
   return templates.some((t) => t.name === name) ? name : null;
 }
 
+export function sanitizeCvPageFormat(input: unknown): CvPageFormat | null {
+  if (typeof input !== "string") return null;
+  const v = input.trim().toLowerCase();
+  return v === "a4" || v === "letter" ? v : null;
+}
+
 export function readCvSettings(): CvSettings {
   const cv = cvBlock(readProfile());
   const style = sanitizeCvStyle(cv.style);
@@ -134,16 +144,23 @@ export function readCvSettings(): CvSettings {
   return {
     template: TEMPLATE_RE.test(template) ? template : "standard",
     source: source && resolveCvSource(source) ? source : DEFAULT_CV_SOURCE,
+    pageFormat: sanitizeCvPageFormat(cv.page_format) ?? DEFAULT_PAGE_FORMAT,
     style: { ...DEFAULT_CV_STYLE, ...style },
   };
 }
 
 /** Merge a validated patch into `cv:` and rewrite profile.yml atomically. */
-export function writeCvSettings(patch: { template?: string; source?: string; style?: Partial<CvStyle> }): void {
+export function writeCvSettings(patch: {
+  template?: string;
+  source?: string;
+  pageFormat?: CvPageFormat;
+  style?: Partial<CvStyle>;
+}): void {
   const profile = readProfile();
   const cv = cvBlock(profile);
   if (patch.template) cv.template = patch.template;
   if (patch.source) cv.source = patch.source;
+  if (patch.pageFormat) cv.page_format = patch.pageFormat;
   if (patch.style && Object.keys(patch.style).length > 0) {
     const current = (cv.style && typeof cv.style === "object" ? cv.style : {}) as Record<string, string>;
     cv.style = { ...current, ...patch.style };

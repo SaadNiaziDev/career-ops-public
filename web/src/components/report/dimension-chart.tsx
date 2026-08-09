@@ -1,6 +1,7 @@
 "use client";
 
 import { scoreNum, type DimensionScores } from "@/lib/format";
+import { TONE_BAR } from "@/lib/tone";
 import { cn } from "@/lib/cn";
 
 const DIMENSIONS: { key: keyof DimensionScores; label: string }[] = [
@@ -14,14 +15,14 @@ const DIMENSIONS: { key: keyof DimensionScores; label: string }[] = [
 
 function barTone(value: number, key: keyof DimensionScores): string {
   if (key === "red_flags") {
-    if (value <= -0.5) return "bg-red-500";
-    if (value < 0) return "bg-amber-500";
-    return "bg-emerald-500";
+    if (value <= -0.5) return TONE_BAR.bad;
+    if (value < 0) return TONE_BAR.warn;
+    return TONE_BAR.good;
   }
-  if (value >= 4.2) return "bg-emerald-500";
-  if (value >= 3.8) return "bg-amber-500";
-  if (value >= 3.0) return "bg-[var(--md-sys-color-primary)]";
-  return "bg-red-500";
+  if (value >= 4.2) return TONE_BAR.good;
+  if (value >= 3.8) return TONE_BAR.warn;
+  if (value >= 3.0) return TONE_BAR.muted;
+  return TONE_BAR.bad;
 }
 
 function barWidth(value: number, key: keyof DimensionScores): number {
@@ -68,7 +69,7 @@ export function DimensionChart({ scores, globalScore }: { scores?: DimensionScor
                   style={{ width: `${barWidth(val, d.key)}%` }}
                 />
               </div>
-              <span className="text-right text-xs tabular-nums text-[var(--md-sys-color-on-surface)]">
+              <span className="text-right font-mono text-xs tabular-nums text-[var(--md-sys-color-on-surface)]">
                 {val.toFixed(1)}
               </span>
             </div>

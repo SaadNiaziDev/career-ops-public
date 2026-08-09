@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { resolveCvSource } from "@/lib/cv/sources";
-import { listCvTemplates, readCvSettings, sanitizeCvStyle, sanitizeCvTemplate, writeCvSettings } from "@/lib/cv/settings";
+import {
+  listCvTemplates,
+  readCvSettings,
+  sanitizeCvPageFormat,
+  sanitizeCvStyle,
+  sanitizeCvTemplate,
+  writeCvSettings,
+  type CvPageFormat,
+} from "@/lib/cv/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,14 +19,25 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  let body: { template?: unknown; source?: unknown; style?: unknown };
+  let body: { template?: unknown; source?: unknown; pageFormat?: unknown; style?: unknown };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "bad json" }, { status: 400 });
   }
 
-  const patch: { template?: string; source?: string; style?: ReturnType<typeof sanitizeCvStyle> } = {};
+  const patch: {
+    template?: string;
+    source?: string;
+    pageFormat?: CvPageFormat;
+    style?: ReturnType<typeof sanitizeCvStyle>;
+  } = {};
+
+  if (body.pageFormat !== undefined) {
+    const pageFormat = sanitizeCvPageFormat(body.pageFormat);
+    if (!pageFormat) return NextResponse.json({ error: "page format must be a4 or letter" }, { status: 400 });
+    patch.pageFormat = pageFormat;
+  }
 
   if (body.template !== undefined) {
     const template = sanitizeCvTemplate(body.template);
