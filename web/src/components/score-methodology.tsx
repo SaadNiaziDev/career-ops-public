@@ -1,8 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { MaterialSymbol } from "@/components/material-symbol";
-import { Md3Collapse } from "@/components/ui/md3-collapse";
+import { Md3Card } from "@/components/ui/md3-card";
+import { WeightsReadout } from "@/components/config/weights-readout";
+
+// Blueprint S03 · gap 6 — scoring used to be a collapsed footnote. It is a card
+// in the decision rail now: the apply line, what each dimension means, the live
+// weights, and the one link that can change them.
 
 const DIMENSIONS: [string, string][] = [
   ["Match", "CV vs role requirements"],
@@ -15,31 +19,29 @@ const DIMENSIONS: [string, string][] = [
 
 export function ScoreMethodology() {
   return (
-    <Md3Collapse
+    <Md3Card
       title={
-        <span className="text-xs text-[var(--md-sys-color-on-surface-variant)]">
-          <MaterialSymbol name="help" size={14} className="mr-1.5 inline align-text-bottom" />
-          How scoring works
+        <span className="inline-flex items-center gap-2 md-title-small">
+          <MaterialSymbol name="function" size={18} className="text-[var(--md-sys-color-primary)]" />
+          How this was weighted
         </span>
       }
     >
-      <div className="dossier-inset-stack pb-1">
-        <p className="mb-0 text-xs leading-relaxed text-[var(--md-sys-color-on-surface-variant)]">
-          Roles score <strong className="text-[var(--md-sys-color-on-surface)]">1.0–5.0</strong>.{" "}
-          <strong className="text-[var(--md-sys-color-on-surface)]">4.0</strong> is the apply line — below it,
-          career-ops recommends passing unless you have a specific reason.
-        </p>
-        <ul className="m-0 list-disc space-y-1 pl-4 text-xs text-[var(--md-sys-color-on-surface-variant)]">
-          {DIMENSIONS.map(([k, v]) => (
-            <li key={k}>
-              <strong className="text-[var(--md-sys-color-on-surface)]">{k}</strong> — {v}
-            </li>
-          ))}
-        </ul>
-        <Link href="https://career-ops.org/methodology" target="_blank" rel="noreferrer" className="text-xs">
-          Full methodology →
-        </Link>
-      </div>
-    </Md3Collapse>
+      <p className="mb-3 text-xs leading-relaxed text-[var(--md-sys-color-on-surface-variant)]">
+        Roles score <strong className="text-[var(--md-sys-color-on-surface)]">1.0–5.0</strong>.{" "}
+        <strong className="text-[var(--md-sys-color-on-surface)]">4.0</strong> is the apply line — below it,
+        career-ops recommends passing unless you have a specific reason.
+      </p>
+
+      <WeightsReadout title="Ranking weights" />
+
+      <ul className="mt-3 list-disc space-y-1 border-t border-[var(--md-sys-color-outline-variant)] pl-4 pt-3 text-xs text-[var(--md-sys-color-on-surface-variant)]">
+        {DIMENSIONS.map(([k, v]) => (
+          <li key={k}>
+            <strong className="text-[var(--md-sys-color-on-surface)]">{k}</strong> — {v}
+          </li>
+        ))}
+      </ul>
+    </Md3Card>
   );
 }

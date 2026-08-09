@@ -18,25 +18,15 @@ import { DossierStack } from "@/components/dossier/dossier-stack";
 import { Md3Card } from "@/components/ui/md3-card";
 import { Md3Collapse } from "@/components/ui/md3-collapse";
 import { Md3Empty } from "@/components/ui/md3-empty";
+import { TONE_BAR, TONE_TEXT as TONE_TEXT_ROLES } from "@/lib/tone";
 import { cn } from "@/lib/cn";
 
 type Section = { heading: string; letter: string | null; content: string };
 
 type AlertTone = "success" | "warning" | "error" | "info";
 
-const TONE_TEXT = {
-  good: "text-emerald-500",
-  warn: "text-amber-500",
-  bad: "text-red-500",
-  muted: "text-foreground",
-} as const;
-
-const SCORE_BAR = {
-  good: "bg-emerald-500",
-  warn: "bg-amber-500",
-  bad: "bg-red-500",
-  muted: "bg-[var(--md-sys-color-primary)]",
-} as const;
+const TONE_TEXT = TONE_TEXT_ROLES;
+const SCORE_BAR = TONE_BAR;
 
 const ALERT_CLASS: Record<AlertTone, string> = {
   success: "md3-alert--success",

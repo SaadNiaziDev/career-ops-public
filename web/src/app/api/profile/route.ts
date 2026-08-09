@@ -55,6 +55,40 @@ function patchToProfile(p: ProfilePatch): Record<string, unknown> {
   return out;
 }
 
+/** Read-back of the same flat shape POST accepts, so Config can render the
+ *  fields it will write. Anything else in profile.yml (archetypes, narrative)
+ *  is deliberately not surfaced — this endpoint only owns what it writes. */
+export async function GET() {
+  const file = path.join(careerOpsRoot(), "config", "profile.yml");
+  let doc: Record<string, unknown> = {};
+  let exists = false;
+  try {
+    const parsed = yaml.load(fs.readFileSync(file, "utf8"));
+    doc = isObj(parsed) ? parsed : {};
+    exists = true;
+  } catch {
+    return Response.json({ exists: false, profile: {} satisfies ProfilePatch });
+  }
+
+  const candidate = isObj(doc.candidate) ? doc.candidate : {};
+  const targets = isObj(doc.target_roles) ? doc.target_roles : {};
+  const comp = isObj(doc.compensation) ? doc.compensation : {};
+  const range = typeof comp.target_range === "string" ? comp.target_range.match(/(\d+)\s*-\s*(\d+)/) : null;
+
+  const profile: ProfilePatch = {
+    name: typeof candidate.full_name === "string" ? candidate.full_name : undefined,
+    email: typeof candidate.email === "string" ? candidate.email : undefined,
+    location: typeof candidate.location === "string" ? candidate.location : undefined,
+    roles: Array.isArray(targets.primary) ? targets.primary.map(String) : undefined,
+    compMin: range ? Number(range[1]) : undefined,
+    compMax: range ? Number(range[2]) : undefined,
+    currency: typeof comp.currency === "string" ? comp.currency : undefined,
+    remote: typeof comp.location_flexibility === "string" ? comp.location_flexibility : undefined,
+  };
+
+  return Response.json({ exists, profile });
+}
+
 export async function POST(req: Request) {
   let patch: ProfilePatch;
   try {

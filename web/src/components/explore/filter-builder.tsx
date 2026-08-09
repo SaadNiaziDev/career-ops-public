@@ -6,6 +6,7 @@ import { ATS_LABEL, ATS_SOURCES, cleanChips, type AtsSource, type ExploreFilters
 import { MaterialSymbol } from "@/components/material-symbol";
 import { Md3Chip } from "@/components/ui/md3-chip";
 import { Md3Segmented } from "@/components/ui/md3-segmented";
+import { WeightsReadout } from "@/components/config/weights-readout";
 
 const RECENCY = [
   { label: "24h", days: 1 },
@@ -158,6 +159,10 @@ export function FilterBuilder({
             })}
           </div>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-surface/30 p-3">
+        <WeightsReadout title="How results are ranked" />
       </div>
 
       <button

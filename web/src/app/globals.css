@@ -1596,6 +1596,236 @@ html.dark .dossier-hero-scrim {
   border-bottom: none;
 }
 
+/* ── Today · what changed since you last looked (S01 · gap 5) ────────────── */
+.since-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--md-sys-spacing-3);
+  margin-bottom: var(--md-sys-spacing-5);
+  padding: var(--md-sys-spacing-4);
+  border-radius: var(--md-sys-shape-corner-extra-large);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+/* ── CV studio · three peers on one screen (S07) ─────────────────────────── */
+.cv-studio {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Lenis owns window scroll with smoothWheel — any nested scroller it is not
+   told about swallows the wheel instead of scrolling. Every internal scroller
+   in the studio must carry data-lenis-prevent. */
+.cv-studio [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.cv-studio__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--md-sys-spacing-3);
+  padding: var(--md-sys-spacing-3) var(--md-sys-spacing-4);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container);
+}
+.cv-studio__panes {
+  display: grid;
+  gap: var(--md-sys-spacing-3);
+  padding: var(--md-sys-spacing-3) var(--md-sys-spacing-4);
+  min-height: 0;
+}
+.cv-studio__page {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  border-radius: var(--md-sys-shape-corner-large);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container);
+}
+.cv-studio__rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-sys-spacing-2);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--md-sys-spacing-4);
+  border-radius: var(--md-sys-shape-corner-large);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container);
+}
+
+/* Narrow: the three peers stack and the document scrolls as usual. */
+@media (max-width: 1279px) {
+  .cv-studio__panes > * {
+    min-height: 420px;
+  }
+  .cv-studio__rail {
+    overflow: visible;
+  }
+}
+
+/* Wide: the three peers sit side by side and each one is sized to the viewport,
+   so everything is reachable at a glance (S07). The panes are height-capped
+   rather than the page being locked — a locked page with nested scrollers is
+   what breaks the wheel, so the document keeps its normal scroll. */
+@media (min-width: 1280px) {
+  .cv-studio__panes {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 340px) 300px;
+  }
+  .cv-studio__panes[data-view="edit"],
+  .cv-studio__panes[data-view="preview"] {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+  .cv-studio__panes > * {
+    height: calc(100dvh - 8.5rem);
+    min-height: 420px;
+  }
+}
+
+/* ── CV full preview overlay (S08) ───────────────────────────────────────── */
+.cv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  display: flex;
+  flex-direction: column;
+  background: var(--md-sys-color-surface);
+}
+.cv-overlay__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--md-sys-spacing-3);
+  padding: var(--md-sys-spacing-3) var(--md-sys-spacing-4);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container);
+}
+.cv-overlay__body {
+  display: grid;
+  grid-template-columns: 182px minmax(0, 1fr) 300px;
+  min-height: 0;
+  flex: 1;
+}
+@media (max-width: 1100px) {
+  .cv-overlay__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cv-overlay__thumbs {
+    display: none;
+  }
+}
+.cv-overlay__thumbs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-sys-spacing-3);
+  overflow-y: auto;
+  padding: var(--md-sys-spacing-4);
+  border-right: 1px solid var(--md-sys-color-outline-variant);
+}
+.cv-overlay__thumb {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  border-radius: var(--md-sys-shape-corner-small);
+  border: 2px solid var(--md-sys-color-outline-variant);
+  background: #fff;
+  cursor: pointer;
+}
+.cv-overlay__thumb--active {
+  border-color: var(--md-sys-color-primary);
+}
+.cv-overlay__thumb-num {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 0 6px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  font: var(--md-sys-typescale-label-small);
+}
+.cv-overlay__stage {
+  overflow: auto;
+  padding: var(--md-sys-spacing-6);
+  background: var(--md-sys-color-surface-container-low);
+  display: flex;
+  justify-content: center;
+}
+.cv-overlay__doc {
+  position: relative;
+  align-self: flex-start;
+  box-shadow: 0 4px 18px rgb(0 0 0 / 0.25);
+  background: #fff;
+}
+.cv-overlay__break {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed var(--md-sys-color-primary);
+  pointer-events: none;
+}
+.cv-overlay__break span {
+  position: absolute;
+  right: 8px;
+  top: 4px;
+  padding: 1px 6px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  font: var(--md-sys-typescale-label-small);
+}
+.cv-overlay__rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-sys-spacing-3);
+  overflow-y: auto;
+  padding: var(--md-sys-spacing-4);
+  border-left: 1px solid var(--md-sys-color-outline-variant);
+}
+.cv-fit,
+.cv-ats {
+  padding: var(--md-sys-spacing-4);
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container);
+}
+.cv-fit--ok {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--md-sys-color-tertiary);
+  font: var(--md-sys-typescale-body-medium);
+}
+.cv-diff {
+  align-self: flex-start;
+  width: min(720px, 100%);
+  padding: var(--md-sys-spacing-5);
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container);
+}
+.cv-diff__line {
+  margin: 0;
+  padding: 2px 8px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  font-family: var(--md-sys-typescale-font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.cv-diff__line--added {
+  background: color-mix(in srgb, var(--md-sys-color-tertiary) 18%, transparent);
+  color: var(--md-sys-color-on-surface);
+}
+.cv-diff__line--removed {
+  background: color-mix(in srgb, var(--md-sys-color-error) 14%, transparent);
+  color: var(--md-sys-color-on-surface-variant);
+  text-decoration: line-through;
+}
+
 /* ── Config · engine room layout ─────────────────────────────────────────── */
 .config-page {
   padding-bottom: var(--md-sys-spacing-8);
@@ -1617,6 +1847,93 @@ html.dark .dossier-hero-scrim {
 .config-status-chip--pending {
   background: var(--md-sys-color-surface-container-high);
   color: var(--md-sys-color-on-surface-variant);
+}
+
+/* Group header — the file each group writes, mono, right-aligned, muted (S13·2) */
+.config-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--md-sys-spacing-3);
+  margin-bottom: var(--md-sys-spacing-5);
+  padding-bottom: var(--md-sys-spacing-3);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+.config-group-file {
+  font-family: var(--md-sys-typescale-font-mono);
+  font-size: 11px;
+  color: var(--md-sys-color-outline);
+  text-align: right;
+}
+
+/* Sticky unsaved bar — sits at the bottom of the pane, never scrolls away */
+.config-save-bar {
+  position: sticky;
+  bottom: var(--md-sys-spacing-4);
+  z-index: var(--z-dropdown);
+  display: flex;
+  align-items: center;
+  gap: var(--md-sys-spacing-3);
+  margin-top: var(--md-sys-spacing-6);
+  padding: var(--md-sys-spacing-3) var(--md-sys-spacing-4);
+  border-radius: var(--md-sys-shape-corner-full);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container-high);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+}
+
+/* Scoring weights — label / slider / mono percent */
+.weights-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 200px) 48px;
+  align-items: center;
+  gap: var(--md-sys-spacing-4);
+  padding-block: var(--md-sys-spacing-3);
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+.weights-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+@media (max-width: 639px) {
+  .weights-row {
+    grid-template-columns: minmax(0, 1fr) 48px;
+  }
+  .weights-row input[type="range"] {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Read-only weights bars (Explore rail, Report methodology card) */
+.weights-readout {
+  display: grid;
+  grid-template-columns: minmax(0, 88px) minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: var(--md-sys-spacing-2);
+}
+.weights-readout__track {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-surface-container-highest);
+}
+.weights-readout__bar {
+  height: 100%;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary);
+}
+
+/* Provider keys */
+.keys-row {
+  padding: var(--md-sys-spacing-4);
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-low);
+}
+.keys-chip--invalid {
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
 }
 
 .config-engine-diagram {

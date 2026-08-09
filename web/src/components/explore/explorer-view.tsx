@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Application, InboxJob, ScanFind } from "@/lib/career-ops";
 import { paramsToFilters, paramsToAi, type ExploreFilters } from "@/lib/explore";
 import { useCliConfig, resolveCliIdForRun } from "@/lib/cli-config";
+import { fmtUsd } from "@/lib/explore-spend";
 import { PageShell } from "@/components/dossier/page-shell";
 import { DossierStack } from "@/components/dossier/dossier-stack";
 import { MaterialSymbol } from "@/components/material-symbol";
@@ -67,7 +68,7 @@ export function ExplorerView({
   rootExists: boolean;
   scans: { finds: ScanFind[]; latestDate: string | null; totalPending: number };
 }) {
-  const { filters, setFilters, initFilters, phase, running, offers, discover, status, error, mode, setMode, resultsMode, aiIntent, setAiIntent, discoverAI, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
+  const { filters, setFilters, initFilters, phase, running, offers, discover, status, error, mode, setMode, resultsMode, aiIntent, setAiIntent, discoverAI, aiCost, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
   const scanNote =
     companiesScanned > 0
       ? `Scanned ${companiesScanned.toLocaleString()}${companiesAvailable > companiesScanned ? ` of ${companiesAvailable.toLocaleString()}` : ""} compan${companiesScanned === 1 ? "y" : "ies"}${partial ? " · some sources were unreachable" : ""}.`
@@ -184,6 +185,16 @@ export function ExplorerView({
                 cliName={cliName}
                 onRunScan={() => setMode("scan")}
               />
+              {/* The hunt's own ledger unmounts with the progress view — this
+                  keeps the estimate/actual pair visible on the results it paid
+                  for (blueprint S04 · gap 6). */}
+              {isResults && aiCost.usd != null && aiCost.usd > 0 && (
+                <p className="md-body-small text-[var(--md-sys-color-on-surface-variant)]">
+                  This hunt cost <span className="text-[var(--md-sys-color-on-surface)]">{fmtUsd(aiCost.usd)}</span>
+                  {aiCost.tokens ? ` · ${aiCost.tokens.toLocaleString()} tokens` : ""}
+                  {aiCost.estUsd != null && ` · estimated ${fmtUsd(aiCost.estUsd)}`}
+                </p>
+              )}
               {isResults && <ResultsList offers={enriched} />}
               {showPhase("empty-loose") && (
                 <EmptyState

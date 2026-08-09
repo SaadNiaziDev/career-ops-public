@@ -2,34 +2,32 @@
 
 import { legitimacyTone, scoreNum, scoreTone, type MachineSummary } from "@/lib/format";
 import { MaterialSymbol } from "@/components/material-symbol";
+import { decisionTone, TONE_CHIP, TONE_OUTLINE, TONE_TEXT, type Tone } from "@/lib/tone";
 import { cn } from "@/lib/cn";
 
-const DECISION_TONE: Record<string, string> = {
-  apply: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  consider: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  skip: "bg-red-500/15 text-red-700 dark:text-red-400",
-  research: "bg-sky-500/15 text-sky-700 dark:text-sky-400",
-};
-
-function decisionTone(decision: string): string {
-  const d = decision.toLowerCase();
-  if (d.includes("apply")) return DECISION_TONE.apply;
-  if (d.includes("skip")) return DECISION_TONE.skip;
-  if (d.includes("research")) return DECISION_TONE.research;
-  return DECISION_TONE.consider;
-}
-
-function Chip({ label, tone }: { label: string; tone: "stop" | "gap" | "strength" }) {
-  const cls =
-    tone === "stop"
-      ? "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400"
-      : tone === "gap"
-        ? "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-400"
-        : "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-400";
+function Chip({ label, tone }: { label: string; tone: Tone }) {
   return (
-    <span className={cn("inline-flex max-w-full items-center rounded-full border px-2.5 py-0.5 text-xs", cls)}>
+    <span
+      className={cn(
+        "inline-flex max-w-full items-center rounded-full border px-2.5 py-0.5 text-xs",
+        TONE_OUTLINE[tone],
+      )}
+    >
       <span className="truncate">{label}</span>
     </span>
+  );
+}
+
+function ChipColumn({ title, tone, items }: { title: string; tone: Tone; items: string[] }) {
+  return (
+    <div>
+      <p className={cn("mb-1.5 text-[11px] font-semibold uppercase tracking-wide", TONE_TEXT[tone])}>{title}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((item) => (
+          <Chip key={`${title}-${item}`} label={item} tone={tone} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -56,7 +54,7 @@ export function VerdictCard({
             <span
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold",
-                decisionTone(summary.final_decision),
+                TONE_CHIP[decisionTone(summary.final_decision)],
               )}
             >
               <MaterialSymbol name="gavel" size={16} />
@@ -70,7 +68,14 @@ export function VerdictCard({
         <div className="flex shrink-0 flex-wrap items-center gap-3">
           {scoreStr && (
             <div className="text-right">
-              <span className="block text-4xl font-bold tabular-nums text-[var(--md-sys-color-primary)]">{scoreStr}</span>
+              <span
+                className={cn(
+                  "block font-mono text-[34px] font-semibold leading-none tabular-nums",
+                  TONE_TEXT[tone],
+                )}
+              >
+                {scoreStr}
+              </span>
               <span className="text-xs text-[var(--md-sys-color-outline)]">/5 fit</span>
             </div>
           )}
@@ -78,10 +83,7 @@ export function VerdictCard({
             <span
               className={cn(
                 "rounded-[var(--md-sys-shape-corner-small)] px-2 py-1 text-xs font-medium",
-                legTone === "good" && "bg-emerald-500/15 text-emerald-700",
-                legTone === "warn" && "bg-amber-500/15 text-amber-700",
-                legTone === "bad" && "bg-red-500/15 text-red-700",
-                legTone === "muted" && "bg-[var(--md-sys-color-surface-container-highest)] text-[var(--md-sys-color-on-surface-variant)]",
+                TONE_CHIP[legTone],
               )}
             >
               {leg}
@@ -98,34 +100,13 @@ export function VerdictCard({
       {(summary.hard_stops?.length || summary.soft_gaps?.length || summary.top_strengths?.length) && (
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {summary.hard_stops && summary.hard_stops.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-red-600">Hard stops</p>
-              <div className="flex flex-wrap gap-1.5">
-                {summary.hard_stops.map((item) => (
-                  <Chip key={`stop-${item}`} label={item} tone="stop" />
-                ))}
-              </div>
-            </div>
+            <ChipColumn title="Hard stops" tone="bad" items={summary.hard_stops} />
           )}
           {summary.soft_gaps && summary.soft_gaps.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-600">Soft gaps</p>
-              <div className="flex flex-wrap gap-1.5">
-                {summary.soft_gaps.map((item) => (
-                  <Chip key={`gap-${item}`} label={item} tone="gap" />
-                ))}
-              </div>
-            </div>
+            <ChipColumn title="Soft gaps" tone="warn" items={summary.soft_gaps} />
           )}
           {summary.top_strengths && summary.top_strengths.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-600">Strengths</p>
-              <div className="flex flex-wrap gap-1.5">
-                {summary.top_strengths.map((item) => (
-                  <Chip key={`str-${item}`} label={item} tone="strength" />
-                ))}
-              </div>
-            </div>
+            <ChipColumn title="Strengths" tone="good" items={summary.top_strengths} />
           )}
         </div>
       )}

@@ -9,6 +9,7 @@ import { MaterialSymbol } from "@/components/material-symbol";
 import { DiscoveryCard } from "@/components/explore/discovery-card";
 import { FollowUpCard, type FollowUp } from "@/components/home/follow-up-card";
 import { DecisionCard } from "@/components/home/decision-card";
+import { SinceLastVisit } from "@/components/home/since-last-visit";
 import { JobLinkHub } from "@/components/job-link-hub";
 import { TitlesBroadening } from "@/components/portals/titles-broadening";
 import { DossierHero } from "@/components/dossier/dossier-hero";
@@ -107,6 +108,8 @@ export function TodayDashboard({
           </>
         }
       />
+
+      <SinceLastVisit applications={applications} />
 
       <div className="mb-5 grid grid-cols-2 gap-3 md:mb-6 md:grid-cols-4">
         <DossierStat title="New this week" value={newThisWeek} accent={newThisWeek > 0 ? "brand" : "muted"} href="/explore" />

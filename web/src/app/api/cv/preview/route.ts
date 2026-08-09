@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { DEFAULT_CV_SOURCE, readCvSource, resolveCvSource } from "@/lib/cv/sources";
 import { renderCvPreviewHtml } from "@/lib/cv/preview";
-import { sanitizeCvStyle, sanitizeCvTemplate } from "@/lib/cv/settings";
+import { readCvSettings, sanitizeCvPageFormat, sanitizeCvStyle, sanitizeCvTemplate } from "@/lib/cv/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +12,7 @@ type PreviewBody = {
   content?: string;
   source?: string;
   template?: string;
+  pageFormat?: string;
   style?: Record<string, string>;
 };
 
@@ -42,6 +43,7 @@ export async function POST(req: Request) {
     const result = renderCvPreviewHtml({
       markdown: resolved.md,
       template: sanitizeCvTemplate(body.template) ?? undefined,
+      pageFormat: sanitizeCvPageFormat(body.pageFormat) ?? readCvSettings().pageFormat,
       style: sanitizeCvStyle(body.style) as Record<string, string>,
     });
     return NextResponse.json(result);
@@ -71,6 +73,7 @@ export async function GET(req: Request) {
     const result = renderCvPreviewHtml({
       markdown: resolved.md,
       template: sanitizeCvTemplate(url.searchParams.get("template")) ?? undefined,
+      pageFormat: sanitizeCvPageFormat(url.searchParams.get("page")) ?? readCvSettings().pageFormat,
       style,
     });
     return new Response(result.html, {

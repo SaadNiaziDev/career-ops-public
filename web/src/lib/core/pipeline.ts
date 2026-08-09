@@ -49,9 +49,9 @@ process.stdin.on("end", () => {
   try {
     const offers = JSON.parse(input);
     const date = new Date().toISOString().slice(0, 10);
-    appendToPipeline(offers);
-    appendToScanHistory(offers, date, "added");
-    process.stdout.write(JSON.stringify({ added: offers.length }));
+    const written = appendToPipeline(offers) || [];
+    if (written.length > 0) appendToScanHistory(written, date, "added");
+    process.stdout.write(JSON.stringify({ added: written.length }));
   } catch (e) {
     process.stdout.write(JSON.stringify({ added: 0, error: String((e && e.message) || e) }));
   }

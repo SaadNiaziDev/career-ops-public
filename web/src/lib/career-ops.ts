@@ -67,6 +67,10 @@ export function readInbox(): InboxJob[] {
   const md = read("data/pipeline.md");
   if (!md) return [];
   const jobs: InboxJob[] = [];
+  // First-wins by URL, but a later richer row (fit / location) replaces a thin one —
+  // scanners + "Add to pipeline" can both write the same posting.
+  const byUrl = new Map<string, number>();
+  const richness = (j: InboxJob) => (j.fitScore != null ? 2 : 0) + (j.location ? 1 : 0);
   for (const line of md.split("\n")) {
     const m = line.match(/^\s*-\s*\[([ xX])\]\s*(.+)$/);
     if (!m) continue;
@@ -80,7 +84,7 @@ export function readInbox(): InboxJob[] {
     const extras = tail.filter((p) => !/^(fit|posted|score|via)\s*:/i.test(p));
     const fit = tail.find((p) => /^fit\s*:/i.test(p));
     const fitScore = fit ? Number(fit.split(":")[1]?.trim()) : NaN;
-    jobs.push({
+    const job: InboxJob = {
       done: m[1].toLowerCase() === "x",
       url: parts[0],
       company: parts[1],
@@ -88,7 +92,15 @@ export function readInbox(): InboxJob[] {
       location: extras[0] || undefined, // optional 4th column (#1015)
       compensation: extras[1] || undefined, // optional 5th column (#1017); 6th+ ignored
       fitScore: Number.isFinite(fitScore) ? fitScore : undefined,
-    });
+    };
+    const prevIdx = byUrl.get(job.url);
+    if (prevIdx === undefined) {
+      byUrl.set(job.url, jobs.length);
+      jobs.push(job);
+      continue;
+    }
+    const prev = jobs[prevIdx];
+    if (prev && richness(job) > richness(prev)) jobs[prevIdx] = job;
   }
   return jobs;
 }

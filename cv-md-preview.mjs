@@ -212,6 +212,9 @@ export function renderCvPreview(md, opts = {}) {
   }
   const payload = markdownToPreviewPayload(md, profile);
   payload.style = opts.style || profile?.cv?.style || {};
+  // An explicit page format wins over the profile, so the CV studio can preview
+  // A4 against Letter without writing to profile.yml first.
+  if (opts.pageFormat === 'a4' || opts.pageFormat === 'letter') payload.page_format = opts.pageFormat;
   const templateName = opts.template || profile?.cv?.template || 'standard';
   const templatePath = resolveTemplate('cv', templateName, { profilePath, fallback: true });
   const template = readFileSync(templatePath, 'utf-8');
@@ -233,13 +236,14 @@ function readStdin() {
 }
 
 function parseCliArgs(argv) {
-  const out = { json: false, file: null, stdin: false, template: null, style: null, profilePath: DEFAULT_PROFILE };
+  const out = { json: false, file: null, stdin: false, template: null, style: null, pageFormat: null, profilePath: DEFAULT_PROFILE };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--json') out.json = true;
     else if (a === '--stdin') out.stdin = true;
     else if (a === '--file') out.file = argv[++i];
     else if (a === '--template') out.template = argv[++i];
+    else if (a === '--page-format') out.pageFormat = (argv[++i] || '').toLowerCase();
     else if (a === '--style-json') {
       try { out.style = JSON.parse(argv[++i] || '{}'); } catch { out.style = {}; }
     } else if (a === '--profile') out.profilePath = argv[++i];
@@ -260,13 +264,14 @@ if (isMain) {
   } else if (opts.stdin) {
     md = readStdin();
   } else {
-    process.stderr.write('Usage: node cv-md-preview.mjs --json (--file <path> | --stdin) [--template name] [--style-json \'{...}\']\n');
+    process.stderr.write('Usage: node cv-md-preview.mjs --json (--file <path> | --stdin) [--template name] [--style-json \'{...}\'] [--page-format a4|letter]\n');
     process.exit(2);
   }
   try {
     const result = renderCvPreview(md, {
       template: opts.template || undefined,
       style: opts.style || undefined,
+      pageFormat: opts.pageFormat || undefined,
       profilePath: opts.profilePath,
     });
     if (opts.json) {

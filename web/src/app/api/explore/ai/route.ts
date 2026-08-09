@@ -4,6 +4,7 @@ import path from "node:path";
 import { resolveCli } from "@/lib/clis";
 import { careerOpsRoot, readMemory } from "@/lib/career-ops";
 import { assembleDedupContext } from "@/lib/core/discover";
+import { USAGE_MARK } from "@/lib/explore";
 
 // AI search orchestrates modes/discover.md by running the USER'S configured CLI
 // headless (CLI-agnostic, like the assistant). Web hunting is slow → generous
@@ -139,6 +140,19 @@ export async function POST(req: Request) {
             if (obj.type === "stream_event" && obj.event?.type === "content_block_delta") {
               const text = obj.event.delta?.text;
               if (typeof text === "string") emit(text);
+            } else if (obj.type === "result") {
+              // What the run ACTUALLY cost. Explore shows this next to the
+              // estimate it quoted before the run (blueprint S04 · gap 6).
+              const usd = Number(obj.total_cost_usd);
+              const u = obj.usage ?? {};
+              const tokens =
+                Number(u.input_tokens ?? 0) +
+                Number(u.output_tokens ?? 0) +
+                Number(u.cache_read_input_tokens ?? 0) +
+                Number(u.cache_creation_input_tokens ?? 0);
+              if (Number.isFinite(usd) || tokens > 0) {
+                emit(`\n${USAGE_MARK}${JSON.stringify({ usd: Number.isFinite(usd) ? usd : 0, tokens })}\n`);
+              }
             }
           } catch {
             /* partial / non-json line — skip */

@@ -3,6 +3,7 @@
 import { ApplyBackdrop } from "@/components/apply/apply-backdrop";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { instrumentSerif } from "@/lib/fonts";
+import { fmtUsd } from "@/lib/explore-spend";
 import { useCountUp } from "./discovering-state";
 import { AiHuntTrace } from "./ai-hunt-trace";
 import { DiscoveryCard } from "./discovery-card";
@@ -56,11 +57,22 @@ export function AiHuntView({ cliName }: { cliName?: string }) {
           )}
         </div>
 
+        {/* S04 · gap 6: estimate and actual spend live in the SAME row, so the
+            number quoted before the run can be checked against the bill. */}
         <div className="co-ailedger">
           <MaterialSymbol name="auto_awesome" size={14} />
           {cliName || "your CLI"} · {verifying ? "verifying postings" : "searching the open web"}
           {aiCost.searches > 0 && <span className="opacity-75">· {aiCost.searches} searches</span>}
           {matchCount > 0 && <span className="opacity-75">· {matchCount} found</span>}
+          {aiCost.estUsd != null && (
+            <span className="opacity-75">· est {fmtUsd(aiCost.estUsd)}</span>
+          )}
+          {aiCost.usd != null && aiCost.usd > 0 && (
+            <span className="font-semibold">
+              · spent {fmtUsd(aiCost.usd)}
+              {aiCost.tokens ? ` (${aiCost.tokens.toLocaleString()} tokens)` : ""}
+            </span>
+          )}
         </div>
 
         <AiHuntTrace trace={aiTrace} />

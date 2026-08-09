@@ -53,7 +53,7 @@ function SourceChip({ ats, s }: { ats: AtsSource; s?: SourceState }) {
       {state === "active" ? (
         <span className="co-src__orb" />
       ) : state === "swept" || state === "noisy" ? (
-        <MaterialSymbol name="check" size={16} className="text-emerald-500" />
+        <MaterialSymbol name="check" size={16} className="text-[var(--md-sys-color-tertiary)]" />
       ) : (
         <span className="size-2.5 rounded-full border border-current opacity-40" />
       )}
@@ -80,7 +80,7 @@ export function DiscoveringState() {
         <style>{STYLE}</style>
 
         <div className="co-ledger">
-          <span className="size-1.5 rounded-full bg-emerald-500" />
+          <span className="size-1.5 rounded-full bg-[var(--md-sys-color-tertiary)]" />
           0 tokens · $0.00 {companies > 0 && <span className="opacity-70">· {companies.toLocaleString()} companies</span>}
         </div>
 

@@ -1571,15 +1571,15 @@ tracked_companies:
     enabled: true
 
   - name: CureMD
-    careers_url: https://curemd.com/career.asp
+    careers_url: https://www.curemd.com/career.asp
     api: https://curemd.wd1.myworkdayjobs.com/CureMD
     notes: "Healthcare software product company with a major Lahore engineering presence; scanned via Workday."
     enabled: true
 
   - name: i2c
-    careers_url: https://careers.i2cinc.com/
+    careers_url: https://careers.i2cinc.com/careers/
     scan_method: websearch
-    scan_query: 'site:careers.i2cinc.com/careers/index.php/showjob React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    scan_query: 'site:careers.i2cinc.com/careers React OR Frontend OR "Full Stack" OR TypeScript OR Node'
     notes: "Payments technology company with a large Lahore technology campus."
     enabled: true
 
@@ -1699,10 +1699,10 @@ tracked_companies:
     enabled: true
 
   - name: Programmers Force
-    careers_url: https://pf.com.pk/careers
+    careers_url: https://programmersforce.com/jobs/
     scan_method: websearch
-    scan_query: 'site:pf.com.pk/join-us React OR Frontend OR "Full Stack" OR TypeScript OR Node'
-    notes: "Lahore-based software development company."
+    scan_query: 'site:programmersforce.com/jobs OR site:programmersforce.com/apply-now React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based software development company. Alt apply: https://programmersforce.com/apply-now/"
     enabled: true
 
   - name: Cubix
@@ -1713,51 +1713,51 @@ tracked_companies:
     enabled: true
 
   - name: DevBatch
-    careers_url: https://www.devbatch.com/careers/
+    careers_url: https://devbatch.com/careers/
     scan_method: websearch
-    scan_query: 'site:devbatch.com/jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    scan_query: 'site:devbatch.com/careers React OR Frontend OR "Full Stack" OR TypeScript OR Node'
     notes: "Lahore-based software development company."
     enabled: true
 
   - name: Strategic Systems Intl (SSI)
-    careers_url: https://www.ssi-net.com/careers/
+    careers_url: https://strategic-systems-international.breezy.hr/
     scan_method: websearch
-    scan_query: 'site:ssi-net.com/jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
-    notes: "Lahore-based enterprise software and IT services company."
+    scan_query: 'site:strategic-systems-international.breezy.hr OR site:ssidecisions.com/careers React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based enterprise software and IT services company; scanned via Breezy. Marketing site: https://www.ssidecisions.com/careers/"
     enabled: true
 
   - name: TPS Worldwide
-    careers_url: https://tpsworldwide.com/careers/
+    careers_url: https://www.tpsworldwide.com/job-openings/
     scan_method: websearch
     scan_query: 'site:tpsworldwide.com/job-openings React OR Frontend OR "Full Stack" OR TypeScript OR Node'
     notes: "Karachi-based payments technology company."
     enabled: true
 
   - name: Mindstorm Studios
-    careers_url: https://www.mindstormstudios.com/careers
+    careers_url: https://mindstormstudios.simplicant.com/
     scan_method: websearch
-    scan_query: 'site:mindstormstudios.com/jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
-    notes: "Lahore-based game and software development studio."
+    scan_query: 'site:mindstormstudios.simplicant.com OR site:mindstormstudios.com/join-us React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based game and software development studio; Simplicant job board. Marketing: https://mindstormstudios.com/join-us/"
     enabled: true
 
   - name: Inbox Business Tech
-    careers_url: https://www.inboxbiz.com/
+    careers_url: https://inboxbiz.com/
     scan_method: websearch
-    scan_query: 'site:rozee.pk/company/inbox-business-technologies React OR Frontend OR "Full Stack" OR TypeScript OR Node'
-    notes: "Karachi, Islamabad. Alt: https://www.rozee.pk/company/inbox-business-technologies"
+    scan_query: 'site:rozee.pk/company/inbox-business-technologies OR "Inbox Business Technologies" (Engineer OR Developer) React OR Frontend OR "Full Stack"'
+    notes: "Karachi, Islamabad. No dedicated careers path on site — discover via Rozee/LinkedIn. Alt: https://www.rozee.pk/company/inbox-business-technologies"
     enabled: true
 
   - name: Sofizar
-    careers_url: https://www.sofizar.com/
+    careers_url: https://www.sofizar.com/jobs/
     scan_method: websearch
-    scan_query: '"sofizar" careers jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    scan_query: 'site:sofizar.com/jobs React OR Frontend OR "Full Stack" OR TypeScript OR Node'
     notes: "Lahore-based e-commerce and digital marketing technology company. Alt: https://www.linkedin.com/company/sofizar/"
     enabled: true
 
   - name: Alpha Bold
     careers_url: https://www.alphabold.com/careers/
     scan_method: websearch
-    scan_query: 'site:alphabold.com/job-openings React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    scan_query: 'site:alphabold.com/careers OR site:alphabold.com/job React OR Frontend OR "Full Stack" OR TypeScript OR Node'
     notes: "Lahore-based data and software engineering company."
     enabled: true
 
@@ -1769,17 +1769,17 @@ tracked_companies:
     enabled: true
 
   - name: GeniTeam
-    careers_url: https://www.geniteam.com/careers
+    careers_url: https://geniteam.com/Careers/
     scan_method: websearch
-    scan_query: 'site:geniteam.com/openings React OR Frontend OR "Full Stack" OR TypeScript OR Node'
-    notes: "Lahore-based software development company."
+    scan_query: 'site:geniteam.com/Careers OR site:geniteam.com React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based software development company. Note: www.geniteam.com does not resolve; use apex domain."
     enabled: true
 
   - name: Xavor Corporation
-    careers_url: https://www.xavor.com/careers/
+    careers_url: https://www.xavor.com/
     scan_method: websearch
-    scan_query: 'site:xavor.com/join-our-team React OR Frontend OR "Full Stack" OR TypeScript OR Node'
-    notes: "Lahore-based software product and services company."
+    scan_query: '"Xavor" (careers OR jobs OR hiring) (Lahore OR Pakistan) React OR Frontend OR "Full Stack" OR TypeScript OR Node'
+    notes: "Lahore-based software product and services company. Dedicated /careers path redirects home and is Cloudflare-blocked — discover via LinkedIn/websearch."
     enabled: true
 
   # -- Pakistan product / fintech / marketplace --
@@ -1812,7 +1812,7 @@ tracked_companies:
     enabled: true
 
   - name: Finja
-    careers_url: https://www.finja.pk/careers
+    careers_url: https://finja.pk/careers
     scan_method: websearch
     scan_query: 'site:finja.pk/careers OR "Finja" careers (Pakistan OR Lahore OR Karachi) (Engineer OR Frontend OR Backend)'
     notes: "Pakistan fintech / digital payments company."
@@ -1826,7 +1826,7 @@ tracked_companies:
     enabled: true
 
   - name: Delivery Hero / Foodpanda
-    careers_url: https://careers.deliveryhero.com
+    careers_url: https://careers.deliveryhero.com/
     scan_method: websearch
     scan_query: 'site:careers.deliveryhero.com Pakistan OR "Foodpanda" ("Software Engineer" OR Frontend OR Backend OR "Full Stack")'
     notes: "Foodpanda Pakistan engineering via Delivery Hero careers board."
@@ -1840,24 +1840,28 @@ tracked_companies:
     enabled: true
 
   - name: Abhi
-    careers_url: https://abhi.com.pk/
+    careers_url: https://abhi.com.pk/job-openings/
     scan_method: websearch
-    scan_query: '"Abhi" OR abhi.com.pk careers (Pakistan OR Karachi OR Lahore) (Engineer OR Frontend OR Backend OR "Full Stack")'
+    scan_query: 'site:abhi.com.pk/job-openings OR "Abhi" careers (Pakistan OR Karachi OR Lahore) (Engineer OR Frontend OR Backend OR "Full Stack")'
     notes: "Pakistan earned-wage access / fintech product company."
     enabled: true
 
   - name: Retailo
-    careers_url: https://retailo.co/
-    scan_method: websearch
-    scan_query: '"Retailo" careers (Pakistan OR Lahore OR Karachi OR Islamabad) (Engineer OR Frontend OR Backend OR "Full Stack")'
+    careers_url: https://retailo.zohorecruit.com/jobs/Careers
+    scan_method: local_parser
+    parser:
+      command: node
+      script: browser-extract.mjs
+      args: ["{careers_url}", "--mode", "listing", "--max", "60"]
+    scan_query: 'site:retailo.zohorecruit.com/jobs/Careers Engineer OR Frontend OR Backend OR "Full Stack"'
     notes: "Pakistan B2B commerce / retail-tech startup with engineering in major cities."
     enabled: true
 
   - name: Bykea
-    careers_url: https://bykea.com/
+    careers_url: https://bykea.breezy.hr/
     scan_method: websearch
-    scan_query: '"Bykea" careers (Pakistan OR Karachi OR Lahore) (Engineer OR Frontend OR Backend OR "Full Stack" OR Mobile)'
-    notes: "Karachi mobility / logistics super-app; careers page may block bots — websearch discovery."
+    scan_query: 'site:bykea.breezy.hr OR site:bykea.com/careers (Engineer OR Frontend OR Backend OR "Full Stack" OR Mobile)'
+    notes: "Karachi mobility / logistics super-app; Breezy job board (marketing site often Cloudflare-blocked)."
     enabled: true
 
   # ============================================================
