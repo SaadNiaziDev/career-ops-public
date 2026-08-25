@@ -11,6 +11,8 @@ import { InboxTriage } from "@/components/inbox/inbox-triage";
 import { PipelineRowActions } from "@/components/pipeline/pipeline-row-actions";
 import { PageShell } from "@/components/dossier/page-shell";
 import { JobLinkHub } from "@/components/job-link-hub";
+import { Md3Input } from "@/components/ui/md3-input";
+import { Md3Select } from "@/components/ui/md3-select";
 import { cn } from "@/lib/cn";
 
 const STAGES = [
@@ -31,6 +33,7 @@ const SORT_KEYS = ["company", "role", "score", "status", "date"] as const;
 type SortKey = (typeof SORT_KEYS)[number];
 
 const BOARD_CAP = 10;
+const DATE_WINDOWS = [7, 30, 90] as const;
 
 const STAGE_TAB_ITEMS = [
   { key: "INBOX" as const, label: "Inbox" },
@@ -56,6 +59,9 @@ export function PipelineView({
 
   const pMin = parseFloat(params.get("min") ?? "");
   const minFilter: number | null = Number.isFinite(pMin) ? pMin : null;
+  const pDays = parseInt(params.get("days") ?? "", 10);
+  const daysFilter: number | null = (DATE_WINDOWS as readonly number[]).includes(pDays) ? pDays : null;
+  const locationFilter = params.get("location") ?? "";
   const pSort = params.get("sort") ?? "";
   const sortKey: SortKey = (SORT_KEYS as readonly string[]).includes(pSort) ? (pSort as SortKey) : "score";
   const sortDir = params.get("dir") === "1" ? 1 : -1;
@@ -145,9 +151,14 @@ export function PipelineView({
         return !Number.isNaN(n) && n >= minFilter;
       });
     }
+    if (daysFilter != null) rows = rows.filter((r) => isWithinDays(r.date, daysFilter));
+    if (locationFilter.trim()) {
+      const locationNeedle = locationFilter.trim().toLowerCase();
+      rows = rows.filter((r) => applicationLocationText(r).includes(locationNeedle));
+    }
     if (q.trim()) {
       const needle = q.toLowerCase();
-      rows = rows.filter((r) => `${r.company} ${r.role}`.toLowerCase().includes(needle));
+      rows = rows.filter((r) => `${r.company} ${r.role} ${r.location ?? ""}`.toLowerCase().includes(needle));
     }
     return [...rows].sort((a, b) => {
       if (sortKey === "score") {
@@ -159,7 +170,7 @@ export function PipelineView({
       }
       return (a[sortKey] || "").localeCompare(b[sortKey] || "") * sortDir;
     });
-  }, [applications, mode, tab, q, sortKey, sortDir, minFilter]);
+  }, [applications, mode, tab, q, sortKey, sortDir, minFilter, daysFilter, locationFilter]);
 
   const goInbox = () => setParams({ tab: null, view: null, min: null });
   const goBoard = () => setParams({ tab: "ALL", view: null, min: null });
@@ -172,6 +183,12 @@ export function PipelineView({
   }, [pendingInbox.length, byStage]);
 
   const activeTabKey = mode === "inbox" ? "INBOX" : mode === "board" ? "ALL" : tab;
+  const hasTableFilters = minFilter != null || daysFilter != null || locationFilter.trim() !== "" || q.trim() !== "";
+
+  const clearTableFilters = () => {
+    setQ("");
+    setParams({ q: null, min: null, days: null, location: null });
+  };
 
   return (
     <PageShell width="wide" className="pipeline-page">
@@ -203,7 +220,7 @@ export function PipelineView({
         </p>
       </header>
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-4" data-co-tour="pipeline-tabs">
         <div className="flex min-w-0 flex-1 flex-wrap items-end gap-1 border-b border-[var(--md-sys-color-outline-variant)]">
           {STAGE_TAB_ITEMS.map((item) => {
             const active = activeTabKey === item.key || (item.key !== "INBOX" && tab === item.key && mode === "table");
@@ -263,7 +280,9 @@ export function PipelineView({
             <JobLinkHub compact origin="/pipeline" />
           </div>
           {pendingInbox.length > 0 ? (
+            <div data-co-tour="pipeline-inbox">
             <InboxTriage inbox={pendingInbox} />
+            </div>
           ) : (
             <EmptyPanel
               title={
@@ -286,7 +305,7 @@ export function PipelineView({
             cta
           />
         ) : (
-          <div className="md3-pipeline-board mt-6">
+          <div className="md3-pipeline-board mt-6" data-co-tour="pipeline-board">
             {STAGES.map((s) => (
               <BoardColumn
                 key={s.key}
@@ -308,41 +327,98 @@ export function PipelineView({
 
       {mode === "table" && (
         <div className="md3-pipeline-list-panel mt-6">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-[var(--md-sys-color-outline-variant)] px-4 py-3.5">
-            <div className="flex flex-wrap items-center gap-1.5">
+          <div className="border-b border-[var(--md-sys-color-outline-variant)] p-4">
+            <div className="flex flex-wrap items-center gap-2">
               {(["ALL", ...CLOSED] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
                   className="md3-chip"
                   data-active={tab === t ? "true" : "false"}
-                  onClick={() => setParams({ tab: t, view: t === "ALL" ? "table" : null, min: null })}
+                  onClick={() => setParams({ tab: t, view: t === "ALL" ? "table" : null })}
                 >
                   {t === "ALL" ? "All" : t.charAt(0) + t.slice(1).toLowerCase()}
                 </button>
               ))}
-              {minFilter != null && (
-                <button
-                  type="button"
-                  className="md3-chip"
-                  data-active="true"
-                  onClick={() => setParams({ min: null })}
-                >
-                  score ≥ {minFilter.toFixed(1)} ×
+              <span className="ml-auto md-body-small tabular-nums text-[var(--md-sys-color-outline)]" aria-live="polite">
+                <strong className="font-semibold text-[var(--md-sys-color-on-surface)]">{filtered.length}</strong> of {applications.length} roles
+              </span>
+            </div>
+
+            <div className="pipeline-filter-grid mt-4">
+              <div className="pipeline-filter-field pipeline-filter-field--search">
+                <span>Search</span>
+                <Md3Input
+                  icon="search"
+                  type="search"
+                  placeholder="Company or role"
+                  aria-label="Search tracked roles"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="pipeline-filter-field">
+                <span>Date evaluated</span>
+                <Md3Select
+                  value={daysFilter == null ? "any" : String(daysFilter)}
+                  onChange={(value) => setParams({ days: value === "any" ? null : value })}
+                  options={[
+                    { value: "any", label: "Any date" },
+                    { value: "7", label: "Last 7 days" },
+                    { value: "30", label: "Last 30 days" },
+                    { value: "90", label: "Last 90 days" },
+                  ]}
+                  aria-label="Date evaluated"
+                />
+              </div>
+              <div className="pipeline-filter-field">
+                <span>Minimum score</span>
+                <Md3Select
+                  value={minFilter == null ? "any" : String(minFilter)}
+                  onChange={(value) => setParams({ min: value === "any" ? null : value })}
+                  options={[
+                    { value: "any", label: "Any score" },
+                    { value: "4", label: "4.0+ / 5" },
+                    { value: "3.5", label: "3.5+ / 5" },
+                    { value: "3", label: "3.0+ / 5" },
+                  ]}
+                  aria-label="Minimum evaluation score"
+                />
+              </div>
+              <div className="pipeline-filter-field">
+                <span>Location</span>
+                <Md3Input
+                  icon="location_on"
+                  placeholder="Lahore, remote…"
+                  aria-label="Filter tracked roles by location"
+                  value={locationFilter}
+                  onChange={(e) => setParams({ location: e.target.value || null })}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="pipeline-filter-field">
+                <span>Sort by</span>
+                <Md3Select
+                  value={`${sortKey}-${sortDir === 1 ? "asc" : "desc"}`}
+                  onChange={(value) => {
+                    const [sort, dir] = value.split("-");
+                    setParams({ sort, dir: dir === "asc" ? 1 : null });
+                  }}
+                  options={[
+                    { value: "score-desc", label: "Highest score" },
+                    { value: "date-desc", label: "Newest evaluated" },
+                    { value: "company-asc", label: "Company A–Z" },
+                    { value: "role-asc", label: "Role A–Z" },
+                  ]}
+                  aria-label="Sort tracked roles"
+                />
+              </div>
+              {hasTableFilters && (
+                <button type="button" onClick={clearTableFilters} className="md3-btn-text self-end justify-self-start">
+                  <MaterialSymbol name="filter_alt_off" size={18} /> Clear filters
                 </button>
               )}
-            </div>
-            <div className="ml-auto flex items-center gap-3">
-              <span className="md-body-small tabular-nums text-[var(--md-sys-color-outline)]">
-                {filtered.length} role{filtered.length === 1 ? "" : "s"}
-              </span>
-              <input
-                type="search"
-                placeholder="Search company or role…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="h-12 w-56 rounded-[var(--md-sys-shape-corner-medium)] border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-high)] px-4 md-body-medium text-[var(--md-sys-color-on-surface)] outline-none focus:border-[var(--md-sys-color-primary)] sm:w-64"
-              />
             </div>
           </div>
           {filtered.length > 0 ? (
@@ -353,7 +429,7 @@ export function PipelineView({
             </div>
           ) : (
             <div className="px-6 py-16 text-center md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
-              No matches — pick another stage or clear the search.
+              No matches. Adjust the filters or clear them to see all roles.
             </div>
           )}
         </div>
@@ -411,13 +487,16 @@ function BoardCard({
   stage: string;
 }) {
   const hasScore = !!row.score && row.score.trim() !== "" && row.score.trim() !== "—";
+  const href = `/pipeline/${row.n}`;
   return (
     <div className="md3-pipeline-card group relative">
       <Link
-        href={`/pipeline/${row.n}`}
+        href={href}
         className="absolute inset-0 z-0 rounded-[inherit]"
         aria-label={`Open report for ${row.company}`}
-      />
+      >
+        <span className="sr-only">Open report for {row.company}</span>
+      </Link>
       <div className="relative z-[1] pointer-events-none">
         <div className="flex items-start gap-2.5">
           <CompanyLogo name={row.company} size={24} className="mt-px shrink-0" />
@@ -439,7 +518,19 @@ function BoardCard({
               row.date || "—"
             )}
           </span>
-          <span className="pointer-events-auto opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <span className="pointer-events-auto flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            {row.url ? (
+              <a
+                href={row.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Open ${row.company} posting`}
+                className="inline-flex size-8 items-center justify-center rounded-[var(--md-sys-shape-corner-full)] text-[var(--md-sys-color-outline)] hover:text-[var(--md-sys-color-on-surface)]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MaterialSymbol name="open_in_new" size={16} />
+              </a>
+            ) : null}
             <PipelineRowActions n={row.n} company={row.company} role={row.role} />
           </span>
         </div>
@@ -449,23 +540,82 @@ function BoardCard({
 }
 
 function PipelineListRow({ row }: { row: Application }) {
+  const location = applicationLocationLabel(row);
+  const href = `/pipeline/${row.n}`;
   return (
-    <div className="md3-pipeline-list-row">
-      <span aria-hidden className="size-[22px] rounded-[var(--md-sys-shape-corner-extra-small)] border border-[var(--md-sys-color-outline-variant)]" />
-      <CompanyLogo name={row.company} size={40} />
-      <div className="min-w-0">
-        <Link href={`/pipeline/${row.n}`} className="block truncate md-title-small text-[var(--md-sys-color-on-surface)] hover:text-[var(--md-sys-color-primary)]">
+    <div className="md3-pipeline-list-row group relative">
+      <Link
+        href={href}
+        className="absolute inset-0 z-0 rounded-[inherit]"
+        aria-label={`Open report for ${row.company}`}
+      >
+        <span className="sr-only">Open report for {row.company}</span>
+      </Link>
+      <span aria-hidden className="pointer-events-none relative z-[1] size-[22px] rounded-[var(--md-sys-shape-corner-extra-small)] border border-[var(--md-sys-color-outline-variant)]" />
+      <CompanyLogo name={row.company} size={40} className="pointer-events-none relative z-[1]" />
+      <div className="pointer-events-none relative z-[1] min-w-0">
+        <span className="block truncate md-title-small text-[var(--md-sys-color-on-surface)] group-hover:text-[var(--md-sys-color-primary)]">
           {row.company}
-        </Link>
-        <p className="truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)]">{row.role}</p>
+        </span>
+        <p className="flex items-center gap-1 truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
+          <span className="truncate">{row.role}</span>
+        </p>
       </div>
-      <span className="hidden truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)] lg:block">—</span>
-      <span className="hidden md-body-small text-[var(--md-sys-color-on-surface-variant)] xl:block">—</span>
-      <span className="font-mono text-sm tabular-nums text-[var(--md-sys-color-outline)]">{row.date || "—"}</span>
-      {row.score ? <ScoreBadge score={row.score} /> : <span />}
-      <PipelineRowActions n={row.n} company={row.company} role={row.role} />
+      <span className="pointer-events-none relative z-[1] hidden truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)] lg:block">{location}</span>
+      <span className="pointer-events-none relative z-[1] hidden items-center gap-1.5 md-body-small text-[var(--md-sys-color-on-surface-variant)] xl:flex">
+        <span className={cn("size-1.5 shrink-0 rounded-full", statusDot(row.status))} />
+        {row.status}
+      </span>
+      <span className="pointer-events-none relative z-[1] font-mono text-sm tabular-nums text-[var(--md-sys-color-outline)]">{row.date || "—"}</span>
+      <span className="pointer-events-none relative z-[1]">{row.score ? <ScoreBadge score={row.score} /> : null}</span>
+      <span className="relative z-[1] flex items-center gap-1">
+        {row.url ? (
+          <a
+            href={row.url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open ${row.company} posting`}
+            className="inline-flex size-8 items-center justify-center rounded-[var(--md-sys-shape-corner-full)] text-[var(--md-sys-color-outline)] opacity-0 transition-opacity hover:text-[var(--md-sys-color-on-surface)] group-hover:opacity-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MaterialSymbol name="open_in_new" size={16} />
+          </a>
+        ) : null}
+        <PipelineRowActions n={row.n} company={row.company} role={row.role} />
+      </span>
     </div>
   );
+}
+
+function applicationLocationText(row: Application): string {
+  return `${row.location ?? ""} ${row.notes} ${row.role}`.toLowerCase();
+}
+
+function applicationLocationLabel(row: Application): string {
+  const text = applicationLocationText(row);
+  const mode = text.includes("remote") ? "Remote" : text.includes("onsite") || text.includes("on-site") ? "On-site" : "";
+  const place = text.includes("lahore")
+    ? "Lahore"
+    : text.includes("islamabad")
+      ? "Islamabad"
+      : text.includes("karachi")
+        ? "Karachi"
+        : text.includes("united states") || text.includes("usa")
+          ? "USA"
+          : text.includes("pakistan")
+            ? "Pakistan"
+            : "";
+  const summary = [mode, place].filter((value, index, values) => value && values.indexOf(value) === index).join(" · ");
+  if (summary) return summary;
+  const explicit = row.location?.trim();
+  return explicit && explicit.length <= 40 ? explicit : "—";
+}
+
+function isWithinDays(date: string, days: number): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const value = Date.parse(`${date}T00:00:00Z`);
+  if (Number.isNaN(value)) return false;
+  return Date.now() - value <= days * 86_400_000;
 }
 
 function ScoreBadge({ score, inverted = false }: { score: string; inverted?: boolean }) {

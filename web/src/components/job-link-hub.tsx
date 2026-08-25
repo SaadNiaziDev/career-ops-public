@@ -116,6 +116,7 @@ export function JobLinkHub({ compact = false, origin = "/add", className }: Prop
       {notice ? (
         <p className={cn("md3-alert mb-3", `md3-alert--${notice.tone === "info" ? "info" : notice.tone}`)}>{notice.text}</p>
       ) : null}
+      <div data-co-tour="add-job-hub">
       <Md3Input
         icon="link"
         type="url"
@@ -124,7 +125,8 @@ export function JobLinkHub({ compact = false, origin = "/add", className }: Prop
         onChange={(e) => setRaw(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && evaluate()}
       />
-      <div className={cn("md3-actions-row mt-4", compact && "mt-3")}>
+      </div>
+      <div className={cn("md3-actions-row mt-4", compact && "mt-3")} data-co-tour="add-job-actions">
         <Md3ActionButton variant="filled" icon="bolt" cost="spend" disabled={!url} onClick={evaluate}>
           Evaluate
         </Md3ActionButton>

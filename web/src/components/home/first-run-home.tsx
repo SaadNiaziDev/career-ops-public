@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Joyride, { type CallBackProps, STATUS, type Step } from "react-joyride";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { PageShell } from "@/components/dossier/page-shell";
 import { ConfigCliTile, type ConfigCli } from "@/components/config/config-cli-tile";
@@ -13,35 +12,10 @@ import { cn } from "@/lib/cn";
 
 type WizardStep = "cli" | "cv";
 
-const TOUR_KEY = "career-ops:onboarding-tour";
-
-const JOYRIDE_STEPS: Step[] = [
-  {
-    target: "[data-co-onboard='welcome']",
-    title: "Welcome to career-ops",
-    content: "Everything runs on your machine. We start by connecting an AI CLI (optional but recommended), then turn your résumé into cv.md.",
-    disableBeacon: true,
-    placement: "bottom",
-  },
-  {
-    target: "[data-co-onboard='cli']",
-    title: "Pick your AI CLI",
-    content: "Claude Code, Codex, or Cursor Agent — used to score jobs, polish your CV, and run scan/evaluate modes. Skip if you only want paste or .md for now.",
-    placement: "top",
-  },
-  {
-    target: "[data-co-onboard='cv']",
-    title: "Add your CV",
-    content: "Drop a PDF or .md file, or paste the text. PDFs extract locally; your CLI formats them when connected. You review before anything is saved.",
-    placement: "top",
-  },
-];
-
 export function FirstRunHome() {
   const [wizardStep, setWizardStep] = useState<WizardStep>("cli");
   const [clis, setClis] = useState<ConfigCli[]>([]);
   const [cliId, setCliId] = useState<string>("");
-  const [runTour, setRunTour] = useState(false);
 
   useEffect(() => {
     fetch("/api/doctor").catch(() => undefined);
@@ -63,11 +37,13 @@ export function FirstRunHome() {
   }, []);
 
   useEffect(() => {
-    try {
-      if (!localStorage.getItem(TOUR_KEY)) setRunTour(true);
-    } catch {
-      setRunTour(true);
-    }
+    const onStep = (e: Event) => {
+      const idx = (e as CustomEvent<{ index: number }>).detail?.index ?? 0;
+      if (idx >= 2) setWizardStep("cv");
+      else if (idx >= 1) setWizardStep("cli");
+    };
+    window.addEventListener("co-tour-onboarding-step", onStep);
+    return () => window.removeEventListener("co-tour-onboarding-step", onStep);
   }, []);
 
   const installedCount = useMemo(() => clis.filter((c) => c.installed).length, [clis]);
@@ -78,33 +54,9 @@ export function FirstRunHome() {
     writeCliConfig({ cliId: id, mode: "cli" });
   }, []);
 
-  const onJoyride = useCallback((data: CallBackProps) => {
-    if (data.status === STATUS.FINISHED || data.status === STATUS.SKIPPED) {
-      try {
-        localStorage.setItem(TOUR_KEY, "1");
-      } catch {
-        /* ignore */
-      }
-      setRunTour(false);
-    }
-  }, []);
-
   return (
     <PageShell width="default">
-      <Joyride
-        steps={JOYRIDE_STEPS}
-        run={runTour}
-        continuous
-        showProgress
-        showSkipButton
-        callback={onJoyride}
-        styles={{
-          options: { zIndex: 10000, primaryColor: "var(--md-sys-color-primary)" },
-        }}
-        locale={{ last: "Got it", skip: "Skip tour" }}
-      />
-
-      <div data-co-onboard="welcome">
+      <div data-co-tour="welcome">
         <p className="md-eyebrow">Welcome</p>
         <h1 className="md-display-small-emphasized mt-2">Set up career-ops</h1>
         <p className="mt-2.5 max-w-[640px] text-[17px] leading-relaxed text-[var(--md-sys-color-on-surface-variant)]">
@@ -141,7 +93,7 @@ export function FirstRunHome() {
       </ol>
 
       {wizardStep === "cli" ? (
-        <section className="mt-7" data-co-onboard="cli">
+        <section className="mt-7" data-co-tour="cli">
           <h2 className="text-lg font-medium text-[var(--md-sys-color-on-surface)]">Which AI CLI do you use?</h2>
           <p className="mt-1 max-w-[640px] text-sm text-[var(--md-sys-color-on-surface-variant)]">
             Used for job scoring, CV formatting, portal scans, and application drafts. Install one if none are detected — paste
@@ -173,7 +125,7 @@ export function FirstRunHome() {
           </div>
         </section>
       ) : (
-        <section className="mt-7" data-co-onboard="cv">
+        <section className="mt-7" data-co-tour="cv">
           <h2 className="text-lg font-medium text-[var(--md-sys-color-on-surface)]">Add your CV</h2>
           <p className="mt-1 max-w-[640px] text-sm text-[var(--md-sys-color-on-surface-variant)]">
             Drop a PDF or <code className="font-mono text-[12px]">.md</code> file, or paste the text. PDF text is extracted locally

@@ -31,52 +31,58 @@ function ContactRowView({
   onStatusChange: (row: ContactRow, status: OutreachStatus) => void;
 }) {
   return (
-    <div className="grid min-h-16 items-start gap-4 border-b border-[var(--md-sys-color-outline-variant)] px-6 py-4 last:border-b-0 xl:grid-cols-[230px_200px_240px_140px_110px_1fr]">
+    <div className="grid min-h-16 grid-cols-1 items-start gap-x-5 gap-y-3 border-b border-[var(--md-sys-color-outline-variant)] px-5 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(9.5rem,auto)_6.5rem_minmax(0,1.35fr)]">
       <div className="min-w-0">
         <Link href={`/pipeline/${r.trackerNum}`} className="font-medium text-[var(--md-sys-color-primary)] hover:underline">
           {r.company}
         </Link>
-        <div className="text-sm text-[var(--md-sys-color-on-surface-variant)]">{r.role}</div>
+        <div className="truncate text-sm text-[var(--md-sys-color-on-surface-variant)]">{r.role}</div>
         <Badge tone="muted" className="mt-1">
           #{r.trackerNum}
         </Badge>
       </div>
-      <div>
-        <div className="font-medium">{r.name || "—"}</div>
-        <div className="text-sm text-[var(--md-sys-color-on-surface-variant)]">{r.title || r.channel}</div>
-        {r.contactType && (
+      <div className="min-w-0">
+        <div className="truncate font-medium">{r.name || "—"}</div>
+        <div className="truncate text-sm text-[var(--md-sys-color-on-surface-variant)]">{r.title || r.channel}</div>
+        {r.contactType ? (
           <span className="mt-1 inline-block rounded-full bg-[var(--md-sys-color-surface-container-highest)] px-2 py-0.5 text-[10px] uppercase tracking-wide">
             {r.contactType.replace("-", " ")}
           </span>
-        )}
+        ) : null}
+        <div className="mt-2 flex flex-col items-start gap-1">
+          {r.email ? (
+            <a href={`mailto:${r.email}`} className="max-w-full truncate text-sm">
+              {r.email}
+            </a>
+          ) : (
+            <span className="text-xs text-[var(--md-sys-color-outline)]">No email found</span>
+          )}
+          {r.linkedin?.startsWith("http") ? (
+            <a
+              href={r.linkedin}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-[var(--md-sys-color-primary)]"
+            >
+              LinkedIn <MaterialSymbol name="open_in_new" size={14} />
+            </a>
+          ) : null}
+        </div>
       </div>
-      <div className="min-w-0">
-        {r.email ? (
-          <a href={`mailto:${r.email}`} className="block truncate text-sm">
-            {r.email}
-          </a>
-        ) : (
-          <span className="text-xs text-[var(--md-sys-color-outline)]">No email found</span>
-        )}
-        {r.linkedin?.startsWith("http") && (
-          <a href={r.linkedin} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-[var(--md-sys-color-primary)]">
-            LinkedIn <MaterialSymbol name="open_in_new" size={14} />
-          </a>
-        )}
-      </div>
-      <div>
-        {/* S09 · gap 4: the last native control in the app is an Md3Select now. */}
+      <div className="min-w-[9.5rem]">
         <Md3Select
-          className="w-full"
+          className="w-full min-w-[9.5rem]"
           aria-label={`Outreach status for ${r.name || r.company}`}
           value={r.outreachStatus || "not-contacted"}
           onChange={(v) => onStatusChange(r, v as OutreachStatus)}
           options={OUTREACH_OPTIONS}
         />
-        {r.lastTouch && <p className="mt-1 text-[10px] text-[var(--md-sys-color-outline)]">Last: {r.lastTouch}</p>}
+        {r.lastTouch ? <p className="mt-1 text-[10px] text-[var(--md-sys-color-outline)]">Last: {r.lastTouch}</p> : null}
       </div>
-      <div className="text-sm text-[var(--md-sys-color-on-surface-variant)]">{r.date}</div>
-      <div className="text-sm text-[var(--md-sys-color-on-surface-variant)]">{r.notes || "—"}</div>
+      <div className="whitespace-nowrap text-sm tabular-nums text-[var(--md-sys-color-on-surface-variant)]">{r.date}</div>
+      <div className="min-w-0 text-sm leading-snug text-[var(--md-sys-color-on-surface-variant)] [overflow-wrap:anywhere]">
+        {r.notes || "—"}
+      </div>
     </div>
   );
 }
@@ -161,8 +167,10 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
   }
 
   return (
-    <PageShell width="default">
-      <DossierPageHeader title="Contacts & applications memory" description="Grouped by company — filter by channel, type, and outreach status." />
+    <PageShell width="wide">
+      <div data-co-tour="outreach-intro">
+        <DossierPageHeader title="Contacts & applications memory" description="Grouped by company — filter by channel, type, and outreach status." />
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Md3Input icon="search" type="search" placeholder="Search company, name, email…" value={q} onChange={(e) => setQ(e.target.value)} className="w-[420px] max-w-full" />
@@ -174,7 +182,7 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
         </Link>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2" data-co-tour="outreach-filters">
         {availChannels.map((ch) => (
           <Md3Chip key={ch} active={channels.has(ch)} onClick={() => setChannels((prev) => { const n = new Set(prev); if (n.has(ch)) n.delete(ch); else n.add(ch); return n; })}>
             {ch}
@@ -199,13 +207,15 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
       </div>
 
       {filtered.length === 0 ? (
+        <div data-co-tour="outreach-list">
         <Md3Empty description="No contacts match">
           <p className="mt-2 text-sm text-[var(--md-sys-color-on-surface-variant)]">
             Open a report → <strong>Find contacts</strong> to discover recruiters and save outreach drafts.
           </p>
         </Md3Empty>
+        </div>
       ) : grouped ? (
-        <div className="space-y-3">
+        <div className="space-y-3" data-co-tour="outreach-list">
           {groups.map(([company, items]) => (
             <Md3Collapse
               key={company}
@@ -224,7 +234,7 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
           ))}
         </div>
       ) : (
-        <div className="md3-pipeline-list-panel">
+        <div className="md3-pipeline-list-panel" data-co-tour="outreach-list">
           {filtered.map((r) => (
             <ContactRowView key={`${r.trackerNum}-${r.name}-${r.email}-${r.date}`} r={r} onStatusChange={patchStatus} />
           ))}

@@ -146,7 +146,7 @@ export function ExplorerView({
               <h2 className="mb-0 md-headline-medium">Explore</h2>
               <Badge tone="warn">New</Badge>
             </div>
-            <div className="w-full sm:ml-auto sm:w-auto">
+            <div className="w-full sm:ml-auto sm:w-auto" data-co-tour="explore-modes">
               <ExploreModeToggle mode={mode} onChange={setMode} cliConfigured={cliConfigured} />
             </div>
           </div>
@@ -195,7 +195,7 @@ export function ExplorerView({
                   {aiCost.estUsd != null && ` · estimated ${fmtUsd(aiCost.estUsd)}`}
                 </p>
               )}
-              {isResults && <ResultsList offers={enriched} />}
+              <div data-co-tour="explore-results">{isResults && <ResultsList offers={enriched} />}</div>
               {showPhase("empty-loose") && (
                 <EmptyState
                   tone="loose"
@@ -228,7 +228,7 @@ export function ExplorerView({
                 </div>
               </ControlledMd3Collapse>
             ) : (
-              <Md3Card className="mb-6">
+              <Md3Card className="mb-6" data-co-tour="explore-filters">
                 <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
                 <div className="mt-5">
                   <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Discover (free)" />
@@ -257,7 +257,7 @@ export function ExplorerView({
                 onRefine={() => setRefineOpen(true)}
               />
             )}
-            {isResults && <ResultsList offers={enriched} />}
+            <div data-co-tour="explore-results">{isResults && <ResultsList offers={enriched} />}</div>
 
             {showScanFinds && (
               <ScanFindsSection offers={scanFindOffers} latestDate={scans.latestDate} totalPending={scans.totalPending} />

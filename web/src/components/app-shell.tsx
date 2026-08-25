@@ -14,6 +14,7 @@ import { ScrollProgress } from "@/components/dossier/scroll-progress";
 import { ToastProvider } from "@/components/providers/toast-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { CommandPaletteHost } from "@/components/command-palette-host";
+import { ProductTourHost } from "@/components/product-tour/product-tour-host";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -39,6 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       <BetaBanner />
                     </div>
                     <CommandPaletteHost />
+                    <ProductTourHost />
                   </ExploreProvider>
                 </Suspense>
               </ToastProvider>

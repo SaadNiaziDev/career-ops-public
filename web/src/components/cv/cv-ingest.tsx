@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { instrumentSerif } from "@/lib/fonts";
 import { cvReadiness, parseCvStream, seedFromCvMarkdown, type CvSeed } from "@/lib/cv/quality";
 import { cliDisplayName, resolveCliIdForRun } from "@/lib/cli-config";
+import { markPhaseComplete } from "@/lib/product-tour";
 
 type Phase = "input" | "parsing" | "review" | "saving" | "error";
 
@@ -205,6 +206,12 @@ export function CvIngest({
       }
     }
     onSaved?.();
+    try {
+      markPhaseComplete("onboarding");
+      window.dispatchEvent(new CustomEvent("co-cv-saved"));
+    } catch {
+      /* tour progress best-effort */
+    }
     if (afterSave === "stay") return;
     router.push("/");
     router.refresh();

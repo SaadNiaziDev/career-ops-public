@@ -106,6 +106,7 @@ export function AnalyticsView({
       <DossierStack>
         {/* S10 · gap 1: Export CSV used to exist only in the command palette.
             It belongs in the header, where the data it exports is. */}
+        <div data-co-tour="analytics-hero">
         <DossierPageHeader
           title="Analytics"
           description={`Across ${total} tracked evaluations.`}
@@ -116,8 +117,9 @@ export function AnalyticsView({
             </a>
           }
         />
+        </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-co-tour="analytics-stats">
           <DossierStat title="evaluated" value={total} />
           <Md3Card>
             <p className="dossier-stat-title mb-1">avg score</p>
@@ -138,6 +140,7 @@ export function AnalyticsView({
           </Link>
         )}
 
+        <div data-co-tour="analytics-stages">
         <DossierSection title="Pipeline by stage">
           {stageCounts.map((s) => (
             <BarRow
@@ -150,6 +153,7 @@ export function AnalyticsView({
             />
           ))}
         </DossierSection>
+        </div>
 
         <DossierSection title="Score distribution">
           {buckets.map((b) => (

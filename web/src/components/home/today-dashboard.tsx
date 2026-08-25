@@ -70,6 +70,7 @@ export function TodayDashboard({
 
   return (
     <PageShell width="default">
+      <div data-co-tour="today-hero">
       <DossierHero
         eyebrow={`Job search dossier · ${dateLabel}`}
         title={
@@ -108,10 +109,11 @@ export function TodayDashboard({
           </>
         }
       />
+      </div>
 
       <SinceLastVisit applications={applications} />
 
-      <div className="mb-5 grid grid-cols-2 gap-3 md:mb-6 md:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 md:mb-6 md:grid-cols-4" data-co-tour="today-stats">
         <DossierStat title="New this week" value={newThisWeek} accent={newThisWeek > 0 ? "brand" : "muted"} href="/explore" />
         <DossierStat title="Follow-ups due" value={overdue} accent={overdue > 0 ? "warn" : "muted"} />
         <DossierStat

@@ -21,7 +21,9 @@ export default function PortalsPage() {
           title="Portal health"
           hint="Broken ATS links drop companies silently"
         >
+          <div data-co-tour="portals-list">
           <PortalsView />
+          </div>
         </DossierSection>
       </DossierStack>
     </PageShell>

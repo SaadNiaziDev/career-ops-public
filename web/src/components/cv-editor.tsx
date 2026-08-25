@@ -507,7 +507,7 @@ export function CvEditor() {
   }
 
   return (
-    <div className="cv-studio">
+    <div className="cv-studio" data-co-tour="cv-editor">
       {/* Blueprint S07 — three peers on one screen: markdown, the printed page,
           style. Everything that used to stack (page header, source row, view
           row, style card) collapses into one toolbar so the studio opens fully
@@ -533,6 +533,7 @@ export function CvEditor() {
         </div>
 
         {generated.length > 0 && (
+          <div data-co-tour="cv-export">
           <Md3Select
             className="min-w-[190px]"
             aria-label="Which CV to show"
@@ -546,7 +547,10 @@ export function CvEditor() {
               })),
             ]}
           />
+          </div>
         )}
+
+        {!generated.length && <div data-co-tour="cv-export" className="sr-only" aria-hidden />}
 
         <Md3Segmented<ViewMode>
           value={view}
