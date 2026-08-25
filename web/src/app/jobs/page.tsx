@@ -6,6 +6,8 @@ import { useJobs } from "@/components/jobs/job-store";
 import { PageShell } from "@/components/dossier/page-shell";
 import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
 import { DossierStack } from "@/components/dossier/dossier-stack";
+import { usePipeline } from "@/components/pipeline/pipeline-provider";
+import { jobDestinationHref, resolveReportNum } from "@/components/jobs/job-utils";
 
 function StatusIcon({ status }: { status: "running" | "done" | "error" }) {
   if (status === "running") {
@@ -19,6 +21,7 @@ function StatusIcon({ status }: { status: "running" | "done" | "error" }) {
 
 export default function JobsHistory() {
   const { jobs, clearFinished } = useJobs();
+  const { applications } = usePipeline();
 
   return (
     <PageShell width="default">
@@ -47,6 +50,8 @@ export default function JobsHistory() {
         ) : (
           <div className="overflow-hidden rounded-[var(--md-sys-shape-corner-extra-large)] bg-[var(--md-sys-color-surface-container)]">
             {jobs.map((j) => {
+              const reportN = resolveReportNum(j, applications);
+              const dest = jobDestinationHref(j, applications);
               return (
                 <div
                   key={j.id}
@@ -54,7 +59,7 @@ export default function JobsHistory() {
                 >
                   <StatusIcon status={j.status} />
                   <div className="min-w-0 flex-1">
-                    <Link href={`/jobs/${j.id}`} className="block truncate md-title-small text-[var(--md-sys-color-on-surface)] hover:text-[var(--md-sys-color-primary)]">
+                    <Link href={dest} className="block truncate md-title-small text-[var(--md-sys-color-on-surface)] hover:text-[var(--md-sys-color-primary)]">
                       {j.title}
                     </Link>
                     <p className="truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
@@ -64,7 +69,21 @@ export default function JobsHistory() {
                   {j.result?.score != null && (
                     <span className="md3-score-badge">{j.result.score}/5</span>
                   )}
-                  <span className="hidden capitalize md-body-small text-[var(--md-sys-color-outline)] sm:inline">{j.status}</span>
+                  {j.status === "done" && reportN ? (
+                    <Link
+                      href={`/pipeline/${reportN}`}
+                      className="hidden shrink-0 md-label-small text-[var(--md-sys-color-primary)] hover:underline sm:inline"
+                    >
+                      Report
+                    </Link>
+                  ) : (
+                    <span className="hidden capitalize md-body-small text-[var(--md-sys-color-outline)] sm:inline">{j.status}</span>
+                  )}
+                  {j.status === "done" && dest !== `/jobs/${j.id}` ? (
+                    <Link href={`/jobs/${j.id}`} className="hidden shrink-0 md-label-small text-[var(--md-sys-color-outline)] hover:underline sm:inline">
+                      Log
+                    </Link>
+                  ) : null}
                 </div>
               );
             })}

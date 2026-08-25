@@ -77,13 +77,12 @@ const CONCURRENCY = 10;
 
 // ── Title filter ────────────────────────────────────────────────────
 
-// Compile a lowercased keyword into a matcher. Short all-letter acronyms
-// (2-3 chars: cfo, coo, sdr, bdr, gsi…) match on WORD BOUNDARIES so "COO" no
-// longer matches "Coordinator", "SDR" no longer matches anything mid-word, etc.
-// Multi-word phrases and keywords containing non-letters (".NET", "SAP ",
-// "L&D") keep fast, permissive substring matching.
+// Compile a lowercased keyword into a matcher. All-letter tokens (cfo, intern,
+// frontend…) match on WORD BOUNDARIES so "COO" does not match "Coordinator"
+// and "Intern" does not match "Internal". Multi-word phrases and keywords
+// containing non-letters (".NET", "SAP ", "L&D") keep fast substring matching.
 export function compileKeyword(kw) {
-  if (/^[a-z]{2,3}$/.test(kw)) {
+  if (/^[a-z]{2,}$/.test(kw)) {
     const re = new RegExp(`\\b${kw}\\b`);
     return (lower) => re.test(lower);
   }

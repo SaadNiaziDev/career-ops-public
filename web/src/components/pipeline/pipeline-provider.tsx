@@ -27,8 +27,8 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refetch = useCallback(() => {
-    setLoading(true);
+  const refetch = useCallback((opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     fetch("/api/pipeline")
       .then((r) => r.json())
       .then((d) => {
@@ -44,9 +44,14 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
   }, [refetch]);
 
   useEffect(() => {
-    const onFocus = () => refetch();
+    const onFocus = () => refetch({ silent: true });
+    const onDone = () => refetch({ silent: true });
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    window.addEventListener("co-job-done", onDone);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("co-job-done", onDone);
+    };
   }, [refetch]);
 
   return (

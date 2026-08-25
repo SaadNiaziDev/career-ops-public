@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { useJobs } from "@/components/jobs/job-store";
+import { usePipeline } from "@/components/pipeline/pipeline-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import type { InboxJob } from "@/lib/career-ops";
 import type { AtsSource } from "@/lib/explore";
 import { ATS_SOURCES } from "@/lib/explore";
 import { daysSince, seniorityFromTitle, sourceFromUrl, SENIORITY_ORDER, type Seniority } from "@/lib/inbox";
-import { FacetChips } from "./facet-chips";
+import { jobDestinationHref } from "@/components/jobs/job-utils";
+import { FacetChips, type InboxSort } from "./facet-chips";
 import { TriageRow, type RowScore } from "./triage-row";
 import { ShortlistTray, type ShortItem } from "./shortlist-tray";
 import { cn } from "@/lib/cn";
@@ -24,14 +26,17 @@ const BATCH = 20;
 // role relevant — order is freshness with a single documented plug point.
 export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   const { jobs, startJob } = useJobs();
+  const { applications } = usePipeline();
   const { toast } = useToast();
 
   // facets
   const [within, setWithin] = useState<number | null>(null);
+  const [minFit, setMinFit] = useState<number | null>(null);
   const [sources, setSources] = useState<Set<AtsSource>>(() => new Set());
   const [seniorities, setSeniorities] = useState<Set<Seniority>>(() => new Set());
   const [locQ, setLocQ] = useState("");
   const [kw, setKw] = useState("");
+  const [sort, setSort] = useState<InboxSort>("newest");
   const [showAll, setShowAll] = useState(false);
 
   // persisted triage state + ephemeral selection/undo
@@ -87,10 +92,16 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
     }
     const m = new Map<string, RowScore>();
     for (const [url, j] of best) {
-      m.set(url, { score: j.result?.score ?? null, tone: j.result?.tone ?? "muted", jobId: j.id, running: j.status === "running" });
+      m.set(url, {
+        score: j.result?.score ?? null,
+        tone: j.result?.tone ?? "muted",
+        jobId: j.id,
+        running: j.status === "running",
+        href: jobDestinationHref(j, applications),
+      });
     }
     return m;
-  }, [jobs]);
+  }, [jobs, applications]);
 
   // facet options — only surface what's actually present in the (non-hidden) data
   const availSources = useMemo(() => {
@@ -109,21 +120,28 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
       enriched.filter((e) => {
         if (hidden.includes(e.job.url)) return false;
         if (within != null && (e.age == null || e.age > within)) return false;
+        if (minFit != null && (e.job.fitScore == null || e.job.fitScore < minFit)) return false;
         if (sources.size && (!e.source || !sources.has(e.source))) return false;
         if (seniorities.size && (!e.seniority || !seniorities.has(e.seniority))) return false;
         if (locQ.trim() && !(e.job.location || "").toLowerCase().includes(locQ.trim().toLowerCase())) return false;
         if (kw.trim() && !`${e.job.company} ${e.job.role}`.toLowerCase().includes(kw.trim().toLowerCase())) return false;
         return true;
       }),
-    [enriched, hidden, within, sources, seniorities, locQ, kw],
+    [enriched, hidden, within, minFit, sources, seniorities, locQ, kw],
   );
 
-  // 🔴 SINGLE ORDER PLUG POINT — freshness only (newest first_seen first; unknown last).
-  // A smarter ranker replaces ONLY this comparator; facets/triage/shortlist/score never
-  // touch relevance. This is the whole firewall in one line.
-  const ordered = useMemo(() => [...filtered].sort((a, b) => (a.age ?? Infinity) - (b.age ?? Infinity)), [filtered]);
+  // Free ordering uses only scanner metadata; no AI evaluation is implied here.
+  const ordered = useMemo(
+    () =>
+      [...filtered].sort((a, b) => {
+        if (sort === "fit") return (b.job.fitScore ?? -Infinity) - (a.job.fitScore ?? -Infinity);
+        if (sort === "company") return a.job.company.localeCompare(b.job.company);
+        return (a.age ?? Infinity) - (b.age ?? Infinity);
+      }),
+    [filtered, sort],
+  );
 
-  const anyFacet = within != null || sources.size > 0 || seniorities.size > 0 || locQ.trim() !== "" || kw.trim() !== "";
+  const anyFacet = within != null || minFit != null || sources.size > 0 || seniorities.size > 0 || locQ.trim() !== "" || kw.trim() !== "";
   const capped = !showAll && !anyFacet;
   const visible = capped ? ordered.slice(0, BATCH) : ordered;
   const hiddenCount = hidden.length;
@@ -184,7 +202,9 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   const activeFilterLabel =
     within != null
       ? `${within}d freshness`
-      : sources.size === 1
+      : minFit != null
+        ? `${minFit}+ scanner fit`
+        : sources.size === 1
         ? Array.from(sources)[0]
         : seniorities.size === 1
           ? Array.from(seniorities)[0]
@@ -196,10 +216,11 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
 
   return (
     <div className={cn("pipeline-inbox mt-6", shortlist.length > 0 && "pb-28")}>
-      <div className="flex flex-wrap items-center gap-2">
-        <FacetChips
+      <FacetChips
           within={within}
           setWithin={setWithin}
+          minFit={minFit}
+          setMinFit={setMinFit}
           sources={sources}
           toggleSource={(s) => setSources((set) => { const n = new Set(set); n.has(s) ? n.delete(s) : n.add(s); return n; })}
           seniorities={seniorities}
@@ -208,26 +229,15 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
           setLocQ={setLocQ}
           kw={kw}
           setKw={setKw}
+          sort={sort}
+          setSort={setSort}
           availSources={availSources}
           availSeniorities={availSeniorities}
           resultCount={filtered.length}
           totalCount={enriched.length - hiddenCount}
           anyActive={anyFacet}
-          onClear={() => { setWithin(null); setSources(new Set()); setSeniorities(new Set()); setLocQ(""); setKw(""); }}
-          layout="row"
+          onClear={() => { setWithin(null); setMinFit(null); setSources(new Set()); setSeniorities(new Set()); setLocQ(""); setKw(""); }}
         />
-        <span className="ml-auto text-[13px] text-[var(--md-sys-color-outline)]">
-          <span className="font-semibold tabular-nums text-[var(--md-sys-color-on-surface)]">{filtered.length}</span>/
-          {enriched.length - hiddenCount}
-        </span>
-      </div>
-
-      <p className="mt-2.5 text-xs text-[var(--md-sys-color-outline)]">
-        <span className="mr-2 rounded-[var(--md-sys-shape-corner-full)] bg-[var(--md-sys-color-tertiary-container)] px-2 py-0.5 text-[11px] font-semibold text-[var(--md-sys-color-on-tertiary-container)]">
-          FREE
-        </span>
-        Filtering is free — only scoring uses tokens.
-      </p>
 
       {selected.size > 0 && (
         <header className="mt-4 flex min-h-[72px] flex-wrap items-center gap-3 rounded-[var(--md-sys-shape-corner-extra-large)] bg-[var(--md-sys-color-secondary-container)] px-5">
@@ -272,6 +282,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
                     type="button"
                     onClick={() => {
                       if (within != null) setWithin(null);
+                      else if (minFit != null) setMinFit(null);
                       else if (sources.size) setSources(new Set());
                       else if (seniorities.size) setSeniorities(new Set());
                       else if (locQ.trim()) setLocQ("");
@@ -283,7 +294,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setWithin(null); setSources(new Set()); setSeniorities(new Set()); setLocQ(""); setKw(""); }}
+                    onClick={() => { setWithin(null); setMinFit(null); setSources(new Set()); setSeniorities(new Set()); setLocQ(""); setKw(""); }}
                     className="md3-btn-outlined min-h-10"
                   >
                     Clear all filters

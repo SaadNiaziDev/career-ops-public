@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { AtsSource } from "@/lib/explore";
 import { ATS_LABEL } from "@/lib/explore";
 import { FRESHNESS_WINDOWS, SENIORITY_LABEL, type Seniority } from "@/lib/inbox";
@@ -7,6 +8,9 @@ import { CostBadge } from "@/components/cost/cost-badge";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { Md3Chip } from "@/components/ui/md3-chip";
 import { Md3Input } from "@/components/ui/md3-input";
+import { Md3Select } from "@/components/ui/md3-select";
+
+export type InboxSort = "newest" | "fit" | "company";
 
 // Free, client-side facets over the raw firehose — 0 tokens, instant. Mirrors the
 // Explore chip language so the two surfaces read as one system. On mobile the chip
@@ -14,6 +18,8 @@ import { Md3Input } from "@/components/ui/md3-input";
 export function FacetChips({
   within,
   setWithin,
+  minFit,
+  setMinFit,
   sources,
   toggleSource,
   seniorities,
@@ -22,16 +28,19 @@ export function FacetChips({
   setLocQ,
   kw,
   setKw,
+  sort,
+  setSort,
   availSources,
   availSeniorities,
   resultCount,
   totalCount,
   anyActive,
   onClear,
-  layout = "stack",
 }: {
   within: number | null;
   setWithin: (d: number | null) => void;
+  minFit: number | null;
+  setMinFit: (score: number | null) => void;
   sources: Set<AtsSource>;
   toggleSource: (s: AtsSource) => void;
   seniorities: Set<Seniority>;
@@ -40,88 +49,114 @@ export function FacetChips({
   setLocQ: (v: string) => void;
   kw: string;
   setKw: (v: string) => void;
+  sort: InboxSort;
+  setSort: (sort: InboxSort) => void;
   availSources: AtsSource[];
   availSeniorities: Seniority[];
   resultCount: number;
   totalCount: number;
   anyActive: boolean;
   onClear: () => void;
-  layout?: "stack" | "row";
 }) {
   return (
-    <div className={layout === "row" ? "flex min-w-0 flex-1 flex-wrap items-center gap-2" : "space-y-2.5"}>
-      {layout === "stack" && (
-        <div className="flex items-center gap-3">
-          <Md3Input
-            icon="search"
-            value={kw}
-            onChange={(e) => setKw(e.target.value)}
-            placeholder="Filter by company or role…"
-            className="flex-1"
-          />
-          <span className="shrink-0 text-xs text-muted">
-            <span className="tabular-nums text-foreground">{resultCount}</span>
-            <span className="text-faint">/{totalCount}</span>
-          </span>
-        </div>
-      )}
-
-      <div className={layout === "row" ? "flex min-w-0 flex-1 flex-wrap items-center gap-2" : "flex items-center gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0"}>
-        {/* freshness (single-select segmented; click active to clear) */}
-        <div className="md3-segmented inline-flex shrink-0">
-          {FRESHNESS_WINDOWS.map((w) => (
-            <button
-              key={w.days}
-              type="button"
-              onClick={() => setWithin(within === w.days ? null : w.days)}
-              className="md3-segmented-btn min-h-[44px] shrink-0"
-              data-active={within === w.days ? "true" : "false"}
-              aria-pressed={within === w.days}
-            >
-              {w.label}
-            </button>
-          ))}
-        </div>
-
-        {availSources.map((s) => (
-          <Md3Chip key={s} active={sources.has(s)} onClick={() => toggleSource(s)}>
-            {ATS_LABEL[s]}
-          </Md3Chip>
-        ))}
-
-        {availSeniorities.map((s) => (
-          <Md3Chip key={s} active={seniorities.has(s)} onClick={() => toggleSeniority(s)}>
-            {SENIORITY_LABEL[s]}
-          </Md3Chip>
-        ))}
-
-        {/* location contains */}
-        <label className="md3-field w-28 shrink-0 py-1">
-          <input
-            value={locQ}
-            onChange={(e) => setLocQ(e.target.value)}
-            placeholder="location…"
-            className="md3-field__input text-xs"
-          />
-        </label>
-
+    <section className="pipeline-filter-bar" aria-label="Filter inbox roles">
+      <div className="pipeline-filter-bar__top">
+        <Md3Input
+          icon="search"
+          value={kw}
+          onChange={(e) => setKw(e.target.value)}
+          placeholder="Search company or role"
+          aria-label="Search company or role"
+          className="pipeline-filter-search"
+        />
+        <span className="shrink-0 md-body-small text-[var(--md-sys-color-outline)]" aria-live="polite">
+          <strong className="font-semibold tabular-nums text-[var(--md-sys-color-on-surface)]">{resultCount}</strong> of {totalCount} roles
+        </span>
         {anyActive && (
-          <button
-            type="button"
-            onClick={onClear}
-            className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 text-xs text-faint transition-colors hover:text-foreground max-sm:min-h-[44px]"
-          >
-            <MaterialSymbol name="close" size={14} /> Clear
+          <button type="button" onClick={onClear} className="md3-btn-text shrink-0">
+            <MaterialSymbol name="filter_alt_off" size={18} /> Clear filters
           </button>
         )}
       </div>
 
-      {layout === "stack" && (
-        <div className="flex items-center gap-1.5">
-          <CostBadge kind="free" size="xs" />
-          <span className="text-[11px] text-faint">Filtering is free — only scoring uses tokens.</span>
+      <div className="pipeline-filter-grid">
+        <FilterField label="Date added">
+          <Md3Select
+            value={within == null ? "any" : String(within)}
+            onChange={(value) => setWithin(value === "any" ? null : Number(value))}
+            options={[
+              { value: "any", label: "Any date" },
+              ...FRESHNESS_WINDOWS.map((w) => ({ value: String(w.days), label: `Last ${w.label}` })),
+            ]}
+            aria-label="Date added"
+          />
+        </FilterField>
+
+        <FilterField label="Scanner fit">
+          <Md3Select
+            value={minFit == null ? "any" : String(minFit)}
+            onChange={(value) => setMinFit(value === "any" ? null : Number(value))}
+            options={[
+              { value: "any", label: "Any fit" },
+              { value: "60", label: "60+ fit" },
+              { value: "58", label: "58+ fit" },
+              { value: "55", label: "55+ fit" },
+            ]}
+            aria-label="Minimum scanner fit score"
+          />
+        </FilterField>
+
+        <FilterField label="Location">
+          <Md3Input
+            icon="location_on"
+            value={locQ}
+            onChange={(e) => setLocQ(e.target.value)}
+            placeholder="Lahore, remote…"
+            aria-label="Filter by location"
+            className="min-h-10"
+          />
+        </FilterField>
+
+        <FilterField label="Sort by">
+          <Md3Select
+            value={sort}
+            onChange={(value) => setSort(value as InboxSort)}
+            options={[
+              { value: "newest", label: "Newest first" },
+              { value: "fit", label: "Best fit first" },
+              { value: "company", label: "Company A–Z" },
+            ]}
+            aria-label="Sort inbox roles"
+          />
+        </FilterField>
+      </div>
+
+      {(availSeniorities.length > 0 || availSources.length > 0) && (
+        <div className="pipeline-filter-bar__facets">
+          {availSeniorities.map((s) => (
+            <Md3Chip key={s} active={seniorities.has(s)} onClick={() => toggleSeniority(s)}>
+              {SENIORITY_LABEL[s]}
+            </Md3Chip>
+          ))}
+          {availSources.map((s) => (
+            <Md3Chip key={s} active={sources.has(s)} onClick={() => toggleSource(s)}>
+              {ATS_LABEL[s]}
+            </Md3Chip>
+          ))}
+          <span className="ml-auto inline-flex items-center gap-1.5 md-body-small text-[var(--md-sys-color-outline)]">
+            <CostBadge kind="free" size="xs" /> Filters use no tokens
+          </span>
         </div>
       )}
+    </section>
+  );
+}
+
+function FilterField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="pipeline-filter-field">
+      <span>{label}</span>
+      {children}
     </div>
   );
 }

@@ -108,6 +108,7 @@ data/model-blacklist.json
 *.mp4
 
 # CLI-specific local config
+.codex/
 .claude/settings.local.json
 .claude/memory/
 .opencode/settings.local.json

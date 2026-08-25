@@ -62,6 +62,7 @@ export async function POST(req: Request) {
   const prompt = `${mode}${OUTPUT_CONTRACT}${memoryLine}${knownBlock}\n\n--- USER INTENT ---\n${query}\n`;
 
   const isClaude = cliId === "claude";
+  const isCodex = cliId === "codex";
   const args = isClaude
     ? [
         "-p",
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
       ]
     : spec.args(prompt);
 
-  const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env });
+  const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"] });
 
   const encoder = new TextEncoder();
   // `closed` + kill timer in the OUTER scope so cancel() can flip `closed` before
@@ -125,6 +126,29 @@ export async function POST(req: Request) {
 
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
+        if (isCodex) {
+          buf += d.toString();
+          let nl: number;
+          while ((nl = buf.indexOf("\n")) !== -1) {
+            const line = buf.slice(0, nl).trim();
+            buf = buf.slice(nl + 1);
+            if (!line) continue;
+            try {
+              const ev = JSON.parse(line);
+              if (ev.type === "item.completed" && ev.item?.type === "agent_message") {
+                const text = ev.item.text;
+                if (typeof text === "string") emit(text);
+              } else if (ev.type === "turn.completed") {
+                const u = ev.usage || {};
+                const tokens = (u.input_tokens || 0) + (u.output_tokens || 0) + (u.cache_write_input_tokens || 0);
+                if (tokens > 0) emit(`\n${USAGE_MARK}${JSON.stringify({ usd: 0, tokens })}\n`);
+              }
+            } catch {
+              /* Codex may print non-JSON setup lines before JSONL; ignore them. */
+            }
+          }
+          return;
+        }
         if (!isClaude) {
           emit(d.toString());
           return;

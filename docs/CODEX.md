@@ -1,6 +1,6 @@
 # Codex Guide
 
-Career-ops supports Codex through the same shared router used by Claude Code and Cursor.
+Career-ops supports Codex through the same shared router used by the other CLI integrations.
 
 ## How Codex maps to career-ops
 

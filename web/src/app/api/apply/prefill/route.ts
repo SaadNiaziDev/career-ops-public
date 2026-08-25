@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { resolveCli } from "@/lib/clis";
+import { extractCodexAgentText, resolveCli } from "@/lib/clis";
 import { careerOpsRoot, readMemory } from "@/lib/career-ops";
 import { getSession } from "@/lib/apply/session";
 
@@ -145,6 +145,7 @@ Output ONLY a compact JSON object mapping each field id → {"value": "...", "ne
       log(`Planner: ${cliId} (${binPath})`);
 
       const isClaude = cliId === "claude";
+      const isCodex = cliId === "codex";
       // --strict-mcp-config with no --mcp-config = load ZERO MCP servers → much
       // faster startup (skips the user's global playwright/gmail/linear/… servers
       // the planner doesn't need; it only reads local files).
@@ -195,19 +196,20 @@ Output ONLY a compact JSON object mapping each field id → {"value": "...", "ne
         });
       });
 
-      log(`Planner exited code=${result.code} signal=${result.signal} · ${result.buf.length} chars total`);
-      log(`output head: ${result.buf.slice(0, 100).replace(/\s+/g, " ") || "(empty)"}`);
-      log(`output tail: ${result.buf.slice(-100).replace(/\s+/g, " ") || "(empty)"}`);
+      const plannerText = isCodex ? extractCodexAgentText(result.buf) : result.buf;
+      log(`Planner exited code=${result.code} signal=${result.signal} · ${result.buf.length} raw chars · ${plannerText.length} answer chars`);
+      log(`output head: ${plannerText.slice(0, 100).replace(/\s+/g, " ") || "(empty)"}`);
+      log(`output tail: ${plannerText.slice(-100).replace(/\s+/g, " ") || "(empty)"}`);
 
-      if (!result.buf.trim()) {
+      if (!plannerText.trim()) {
         return fail(result.signal ? "planner was killed before producing any output (try again / smaller form)" : "planner produced no output (check the CLI works in this folder)");
       }
 
-      const { obj, truncated } = extractJsonObject(result.buf);
+      const { obj, truncated } = extractJsonObject(plannerText);
       if (!obj) {
         return fail(
           result.signal ? "planner was killed mid-answer (form too large/slow) — couldn't recover any fields" : "couldn't parse the planner's answer as JSON",
-          result.buf.slice(-300),
+          plannerText.slice(-300),
         );
       }
       const count = Object.keys(obj).length;

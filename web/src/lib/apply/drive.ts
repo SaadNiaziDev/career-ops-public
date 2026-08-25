@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import type { Page, Frame } from "playwright-core";
-import { resolveCli } from "@/lib/clis";
+import { extractCodexAgentText, resolveCli, type CliSpec } from "@/lib/clis";
 import { careerOpsRoot } from "@/lib/career-ops";
 import { dropNewTabs } from "./diagnose";
 import type { DriveStep } from "./issue";
@@ -54,10 +54,15 @@ async function snapshot(frame: Frame): Promise<{ text: string; n: number }> {
   });
 }
 
-/** One planner turn (Claude-first: --resume keeps the loop's context cheaply). */
-function plannerTurn(binPath: string, prompt: string, resumeId: string | null): Promise<{ out: string; sessionId: string | null }> {
+/** One planner turn. Claude uses resume for cheap loop context; other CLIs get
+ *  the full current snapshot each turn and return a single JSON action. */
+function plannerTurn(spec: CliSpec, binPath: string, cliId: string, prompt: string, resumeId: string | null): Promise<{ out: string; sessionId: string | null }> {
+  const isClaude = cliId === "claude";
+  const isCodex = cliId === "codex";
   const base = resumeId ? ["-p", "--resume", resumeId, prompt] : ["-p", prompt];
-  const args = [...base, "--output-format", "json", "--strict-mcp-config", "--disallowedTools", "Bash,Read,Write,Edit,NotebookEdit,Task,WebFetch,WebSearch,Glob,Grep"];
+  const args = isClaude
+    ? [...base, "--output-format", "json", "--strict-mcp-config", "--disallowedTools", "Bash,Read,Write,Edit,NotebookEdit,Task,WebFetch,WebSearch,Glob,Grep"]
+    : spec.args(prompt);
   return new Promise((resolve) => {
     const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"] });
     let buf = "";
@@ -74,12 +79,16 @@ function plannerTurn(binPath: string, prompt: string, resumeId: string | null): 
       clearTimeout(killer);
       let out = buf;
       let sessionId: string | null = null;
-      try {
-        const j = JSON.parse(buf);
-        out = j.result ?? buf;
-        sessionId = j.session_id ?? null;
-      } catch {
-        /* non-json (other CLI) → use raw */
+      if (isCodex) {
+        out = extractCodexAgentText(buf);
+      } else if (isClaude) {
+        try {
+          const j = JSON.parse(buf);
+          out = j.result ?? buf;
+          sessionId = j.session_id ?? null;
+        } catch {
+          /* non-json → use raw */
+        }
       }
       resolve({ out, sessionId });
     });
@@ -116,8 +125,8 @@ export async function driveSession(
 ): Promise<DriveResult> {
   const resolved = resolveCli(cliId);
   const steps: DriveStep[] = [];
-  if (!resolved || cliId !== "claude") {
-    return { reached: false, turns: 0, reason: "Agentic drive currently needs Claude Code (browser-driving CLI).", steps };
+  if (!resolved) {
+    return { reached: false, turns: 0, reason: "Configured CLI was not found on this machine.", steps };
   }
   const shot = async () => {
     try {
@@ -164,7 +173,7 @@ ${snap.text}
 
 Reply ONE action JSON.`;
 
-    const { out, sessionId } = await plannerTurn(resolved.binPath, prompt, resumeId);
+    const { out, sessionId } = await plannerTurn(resolved.spec, resolved.binPath, cliId, prompt, resumeId);
     if (sessionId) resumeId = sessionId;
     const act = parseAction(out);
     if (!act) {

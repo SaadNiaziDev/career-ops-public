@@ -7,8 +7,8 @@ import { cn } from "@/lib/cn";
  * | Token     | Max     | Routes |
  * |-----------|---------|--------|
  * | narrow    | 48rem   | add, config, apply, jobs/[id], first-run home |
- * | default   | 72rem   | today, explore, CV, contacts, analytics, portals, jobs |
- * | wide      | 80rem   | pipeline list, pipeline report |
+ * | default   | 72rem   | today, explore, CV, analytics, portals, jobs |
+ * | wide      | 80rem   | pipeline list, pipeline report, contacts |
  */
 export type PageWidth = "narrow" | "default" | "wide";
 

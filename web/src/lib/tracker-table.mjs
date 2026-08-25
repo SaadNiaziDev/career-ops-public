@@ -109,7 +109,7 @@ export function detectColumnMap(lines, aliases) {
  * mirroring parseTrackerRow in tracker-parse.mjs.
  * @param {string} md - content of data/applications.md.
  * @param {string} rootDir - career-ops root holding tracker-aliases.json.
- * @returns {{n: string, date: string, company: string, via: string, role: string, score: string, status: string, pdf: string, report: string, notes: string}[]}
+ * @returns {{n: string, date: string, company: string, via: string, role: string, location?: string, score: string, status: string, pdf: string, report: string, notes: string}[]}
  */
 export function parseApplications(md, rootDir) {
   const lines = md.split("\n");
@@ -125,6 +125,7 @@ export function parseApplications(md, rootDir) {
       if (!/^\d+$/.test(at("n"))) continue; // header / separator / malformed
       rows.push({
         n: at("n"), date: at("date"), company: at("company"), via: at("via"), role: at("role"),
+        location: at("location") || undefined,
         score: at("score"), status: at("status"), pdf: at("pdf"), report: at("report"),
         notes: at("notes"),
       });

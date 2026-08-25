@@ -41,7 +41,7 @@ export function DimensionChart({ scores, globalScore }: { scores?: DimensionScor
     if (Number.isNaN(n)) return null;
     return (
       <section className="rounded-[var(--md-sys-shape-corner-medium)] border border-[var(--md-sys-color-outline-variant)] p-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--md-sys-color-outline)]">Fit score</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--md-sys-color-outline)]">Evaluation score</p>
         <div className="relative h-2 overflow-hidden rounded-full bg-[var(--md-sys-color-surface-container-highest)]">
           <div
             className="h-full rounded-full bg-[var(--md-sys-color-primary)]"

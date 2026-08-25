@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Job, JobStep } from "@/components/jobs/job-store";
+import type { Application } from "@/lib/career-ops";
 
 const STEP_LABELS: Record<string, string> = {
   WebFetch: "Reading the posting",
@@ -76,14 +77,31 @@ export type JobArtifact = {
   href: string;
   path?: string;
   download?: boolean;
+  primary?: boolean;
 };
+
+export function extractReportNum(hay: string): string | undefined {
+  const m =
+    hay.match(/reports\/(\d+)/i) ||
+    hay.match(/\[(\d+)\]\((?:\.\.\/)?reports\//i) ||
+    hay.match(/batch\/tracker-additions\/(\d+)/i) ||
+    hay.match(/\/pipeline\/(\d+)/);
+  return m?.[1];
+}
+
+export function sameReportNum(a?: string, b?: string): boolean {
+  if (!a || !b) return false;
+  const na = parseInt(a, 10);
+  const nb = parseInt(b, 10);
+  return !Number.isNaN(na) && na === nb;
+}
 
 function extractPdfPath(hay: string): string | undefined {
   return hay.match(/output\/[^\s"'`]+\.pdf/i)?.[0];
 }
 
-function companyFromTitle(title: string): string | undefined {
-  const m = title.match(/^CV PDF · (.+)$/i);
+function companyFromJobTitle(title: string): string | undefined {
+  const m = title.match(/^(?:Score|Evaluate|CV PDF|Cover|Email|Contacts) · (.+)$/i);
   return m?.[1]?.trim() || undefined;
 }
 
@@ -96,43 +114,110 @@ function companyFromPdfPath(path: string | undefined): string | undefined {
   return slugParts.join(" ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function resolveArtifact(job: Job): JobArtifact | null {
-  if (job.status !== "done") return null;
+export function normalizePostingUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    let host = u.hostname.replace(/^www\./, "").toLowerCase();
+    if (host === "job-boards.greenhouse.io") host = "boards.greenhouse.io";
+    const path = u.pathname.replace(/\/+$/, "").toLowerCase();
+    return `${host}${path}`;
+  } catch {
+    return raw.trim().toLowerCase().replace(/\/+$/, "");
+  }
+}
+
+export function reportNumFromJob(job: Job): string | undefined {
+  if (job.reportN) return job.reportN;
+  if (job.page) {
+    const fromPage = job.page.match(/\/pipeline\/(\d+)/)?.[1];
+    if (fromPage) return fromPage;
+  }
+  if (job.input && /^\d+$/.test(job.input.trim())) return job.input.trim();
+  return extractReportNum(`${job.result?.summary ?? ""}\n${job.text}`);
+}
+
+function reportNumFromApplications(job: Job, applications: Application[]): string | undefined {
+  if (!applications.length) return undefined;
+  const input = job.input?.trim();
+  if (input && !/^\d+$/.test(input)) {
+    const needle = normalizePostingUrl(input);
+    const byUrl = applications.find((a) => a.url && normalizePostingUrl(a.url) === needle);
+    if (byUrl) return byUrl.n;
+  }
+  const company = companyFromJobTitle(job.title);
+  const role = job.subtitle?.trim();
+  if (!company || !role) return undefined;
+  const hits = applications.filter(
+    (a) =>
+      a.company.trim().toLowerCase() === company.toLowerCase() &&
+      a.role.trim().toLowerCase() === role.toLowerCase(),
+  );
+  if (hits.length === 0) return undefined;
+  return hits.sort((a, b) => parseInt(b.n, 10) - parseInt(a.n, 10))[0]?.n;
+}
+
+export function resolveReportNum(job: Job, applications: Application[] = []): string | undefined {
+  return reportNumFromJob(job) ?? reportNumFromApplications(job, applications);
+}
+
+export function resolveArtifacts(job: Job, applications: Application[] = []): JobArtifact[] {
+  if (job.status !== "done") return [];
+
+  const artifacts: JobArtifact[] = [];
+  const reportN = resolveReportNum(job, applications);
+  if (reportN) {
+    artifacts.push({
+      label: "Open report",
+      href: `/pipeline/${reportN}`,
+      primary: true,
+    });
+  }
 
   const hay = `${job.result?.summary ?? ""}\n${job.text}`;
   const pdfPath = extractPdfPath(hay);
-
   if (job.kind === "pdf" || pdfPath) {
-    const company = companyFromTitle(job.title) ?? companyFromPdfPath(pdfPath);
+    const company = companyFromJobTitle(job.title) ?? companyFromPdfPath(pdfPath);
     if (company) {
-      return {
+      artifacts.push({
         label: "View tailored CV",
         href: `/api/cv-pdf?company=${encodeURIComponent(company)}`,
         path: pdfPath,
         download: false,
-      };
+        primary: artifacts.length === 0,
+      });
+    } else if (pdfPath) {
+      artifacts.push({
+        label: "View file",
+        href: `/api/cv-pdf?company=${encodeURIComponent(companyFromPdfPath(pdfPath) ?? "unknown")}`,
+        path: pdfPath,
+        primary: artifacts.length === 0,
+      });
     }
   }
 
-  const reportFromText = hay.match(/reports\/(\d+)/i)?.[1] ?? hay.match(/\[(\d+)\]\(reports\//i)?.[1];
-  const reportFromInput = job.input && /^\d+$/.test(job.input.trim()) ? job.input.trim() : undefined;
-  const reportN = reportFromText ?? reportFromInput;
-  if (reportN) {
-    return {
-      label: "Open report",
-      href: `/pipeline/${reportN}`,
-    };
-  }
+  return artifacts;
+}
 
-  if (pdfPath) {
-    return {
-      label: "View file",
-      href: `/api/cv-pdf?company=${encodeURIComponent(companyFromPdfPath(pdfPath) ?? "unknown")}`,
-      path: pdfPath,
-    };
-  }
+export function resolveArtifact(job: Job, applications: Application[] = []): JobArtifact | null {
+  return resolveArtifacts(job, applications)[0] ?? null;
+}
 
-  return null;
+export function jobDestinationHref(job: Job, applications: Application[] = []): string {
+  if (job.status === "done") {
+    const n = resolveReportNum(job, applications);
+    if (n && ["evaluate", "pdf", "cover", "email", "contacto"].includes(job.kind ?? "")) {
+      return `/pipeline/${n}`;
+    }
+  }
+  return `/jobs/${job.id}`;
+}
+
+export function findJobForReport(jobs: Job[], reportN: string, url?: string): Job | undefined {
+  const byNum = jobs.find((j) => sameReportNum(resolveReportNum(j), reportN) || sameReportNum(j.input, reportN));
+  if (byNum) return byNum;
+  if (!url) return undefined;
+  const needle = normalizePostingUrl(url);
+  return jobs.find((j) => j.input && normalizePostingUrl(j.input) === needle);
 }
 
 export function jobBackHref(job: Job | undefined): string {

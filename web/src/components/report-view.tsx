@@ -18,6 +18,8 @@ import { DossierStack } from "@/components/dossier/dossier-stack";
 import { Md3Card } from "@/components/ui/md3-card";
 import { Md3Collapse } from "@/components/ui/md3-collapse";
 import { Md3Empty } from "@/components/ui/md3-empty";
+import { useJobs } from "@/components/jobs/job-store";
+import { findJobForReport } from "@/components/jobs/job-utils";
 import { TONE_BAR, TONE_TEXT as TONE_TEXT_ROLES } from "@/lib/tone";
 import { cn } from "@/lib/cn";
 
@@ -310,6 +312,8 @@ export function ReportView({
   const tone = score ? scoreTone(score) : "muted";
   const applies = !Number.isNaN(n) ? n >= 4.0 : null;
   const company = app?.company ?? meta?.title ?? `Report #${id}`;
+  const { jobs } = useJobs();
+  const originJob = findJobForReport(jobs, id, url || app?.url);
 
   return (
     <PageShell width="wide" className="report-page">
@@ -321,6 +325,14 @@ export function ReportView({
           </Link>
           <span>/</span>
           <span className="font-mono md-body-small">#{id}</span>
+          {originJob ? (
+            <>
+              <span>/</span>
+              <Link href={`/jobs/${originJob.id}`} className="hover:text-[var(--md-sys-color-primary)]">
+                Worker log
+              </Link>
+            </>
+          ) : null}
         </nav>
 
         <header className="flex flex-wrap items-start gap-5">
@@ -391,7 +403,7 @@ export function ReportView({
               {score ? (
                 <div className="mb-3">
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <span className="text-xs text-[var(--md-sys-color-on-surface-variant)]">Fit score</span>
+                    <span className="text-xs text-[var(--md-sys-color-on-surface-variant)]">Evaluation score</span>
                     <strong className={cn("tabular-nums", TONE_TEXT[tone])}>{formatScoreDisplay(score)}</strong>
                   </div>
                   {!Number.isNaN(n) && (

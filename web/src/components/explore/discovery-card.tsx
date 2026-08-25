@@ -6,6 +6,8 @@ import { useJobs } from "@/components/jobs/job-store";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { useExplore } from "./explore-provider";
+import { jobDestinationHref, resolveReportNum } from "@/components/jobs/job-utils";
+import { usePipeline } from "@/components/pipeline/pipeline-provider";
 
 function freshness(postedAt: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(postedAt)) return "";
@@ -40,6 +42,7 @@ const WORKER_LABEL: Record<string, string> = { evaluate: "Evaluating…", pdf: "
 export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: DiscoveredOffer; inPipeline: boolean; evaluatedN?: string }) {
   const { added, adding, addToPipeline } = useExplore();
   const { jobs, startJob } = useJobs();
+  const { applications } = usePipeline();
 
   const job = useMemo(
     () => jobs.filter((j) => j.input === offer.url).sort((a, b) => b.startedAt - a.startedAt)[0],
@@ -47,6 +50,8 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
   );
   const working = job?.status === "running";
   const doneEval = job?.status === "done" && job.kind === "evaluate";
+  const reportN = evaluatedN ?? (job ? resolveReportNum(job, applications) : undefined);
+  const reportHref = reportN ? `/pipeline/${reportN}` : job ? jobDestinationHref(job, applications) : "/pipeline";
   const statusLabel = WORKER_LABEL[job?.kind ?? ""] ?? "Working…";
 
   const isAdded = added.has(offer.url) || inPipeline || working || doneEval;
@@ -110,7 +115,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
 
       <div className="mt-4 md3-actions-row">
         {evaluatedN || doneEval ? (
-          <a href={evaluatedN ? `/pipeline/${evaluatedN}` : job ? `/jobs/${job.id}` : "/pipeline"} className="md3-btn-filled w-full min-h-11">
+          <a href={reportHref} className="md3-btn-filled w-full min-h-11">
             <MaterialSymbol name="check" size={18} /> Evaluated · view report
           </a>
         ) : working ? (

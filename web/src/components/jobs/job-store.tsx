@@ -13,6 +13,7 @@ export type Job = {
   page?: string; // route the job was launched from / refers to
   input?: string; // the URL/posting it processed (links inbox rows to their worker)
   kind?: string;
+  reportN?: string; // tracker/report number once the worker persists reports/{n}-*.md
   batchId?: string; // groups jobs fired together (e.g. "evaluate all Anthropic")
   status: "running" | "done" | "error";
   steps: JobStep[];
@@ -54,6 +55,15 @@ function parseVerdict(text: string): JobResult {
     return { score, summary: "", tone: scoreTone(`${score}`) };
   }
   return { score: null, summary: "", tone: "muted" };
+}
+
+function latchReportNum(hay: string): string | undefined {
+  const m =
+    hay.match(/reports\/(\d+)/i) ||
+    hay.match(/\[(\d+)\]\((?:\.\.\/)?reports\//i) ||
+    hay.match(/batch\/tracker-additions\/(\d+)/i) ||
+    hay.match(/\/pipeline\/(\d+)/);
+  return m?.[1];
 }
 
 export function JobsProvider({ children }: { children: React.ReactNode }) {
@@ -123,17 +133,24 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
       (async () => {
         let text = "";
         let verdictLine = ""; // latched separately so the 8000-char tail can't drop it
+        let reportN: string | undefined = /^\d+$/.test(opts.input.trim()) ? opts.input.trim() : latchReportNum(opts.page ?? "");
         let doneTokens = 0; // per-run token cost, forwarded on the done event (#6)
         let doneCostUsd: number | null = null;
         const steps: JobStep[] = [];
+        const latchReport = (hay: string) => {
+          const n = latchReportNum(hay);
+          if (n) reportN = n;
+        };
         const finish = (status: "done" | "error", lastLabel?: string) => {
           const result = status === "done" ? parseVerdict(verdictLine || text) : undefined;
           const cost = status === "done" && doneTokens > 0 ? { tokens: doneTokens, usd: doneCostUsd ?? undefined } : undefined;
+          latchReport(`${verdictLine}\n${text}`);
           patch(id, (j) => ({
             ...j,
             status,
             result,
             cost,
+            reportN,
             endedAt: Date.now(),
             steps: lastLabel ? [...j.steps, { kind: "status", label: lastLabel, ts: Date.now() }] : j.steps,
           }));
@@ -187,12 +204,14 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
                   const full = text + ev.text;
                   const vm = full.match(/VERDICT:[^\n]*/i);
                   if (vm) verdictLine = vm[0];
+                  latchReport(full);
                   text = full.slice(-8000);
-                  patch(id, (j) => ({ ...j, text }));
+                  patch(id, (j) => ({ ...j, text, reportN }));
                 } else if (ev.type === "done") {
                   // finish happens on stream-close; capture the per-run cost it carries
                   if (typeof ev.tokens === "number") doneTokens = ev.tokens;
                   if (typeof ev.costUsd === "number") doneCostUsd = ev.costUsd;
+                  if (typeof ev.reportN === "string" && ev.reportN.trim()) reportN = ev.reportN.trim();
                 } else if (ev.type === "error") {
                   finish("error", ev.msg || "Error");
                   return;

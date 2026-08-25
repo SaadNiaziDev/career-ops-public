@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import type { Frame } from "playwright-core";
-import { resolveCli } from "@/lib/clis";
+import { extractCodexAgentText, resolveCli } from "@/lib/clis";
 import { careerOpsRoot } from "@/lib/career-ops";
 import type { ApplyField } from "./extract";
 
@@ -116,7 +116,8 @@ export async function agentInterpretForm(frame: Frame, cliId: string, title: str
   if (!cands.length) return [];
 
   const out = await runPlanner(resolved.binPath, cliId === "claude", resolved.spec.args, buildPrompt(title, cands));
-  const m = out.match(/\[[\s\S]*\]/);
+  const plannerText = cliId === "codex" ? extractCodexAgentText(out) : out;
+  const m = plannerText.match(/\[[\s\S]*\]/);
   if (!m) return [];
   let parsed: Interpreted[];
   try {

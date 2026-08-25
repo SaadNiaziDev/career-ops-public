@@ -11,6 +11,7 @@ import { Md3Empty } from "@/components/ui/md3-empty";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useJobs } from "@/components/jobs/job-store";
+import { usePipeline } from "@/components/pipeline/pipeline-provider";
 import { HeroGlow } from "@/components/hero-glow";
 import { PageShell } from "@/components/dossier/page-shell";
 import { DossierStack, DossierInsetStack } from "@/components/dossier/dossier-stack";
@@ -22,7 +23,8 @@ import {
   isAuthError,
   jobBackHref,
   jobDuration,
-  resolveArtifact,
+  resolveArtifacts,
+  resolveReportNum,
   useElapsed,
 } from "@/components/jobs/job-utils";
 import { cn } from "@/lib/cn";
@@ -62,12 +64,14 @@ function StatusTag({ status }: { status: "running" | "done" | "error" }) {
 export default function JobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { jobs, startJob } = useJobs();
+  const { applications } = usePipeline();
   const router = useRouter();
   const [retrying, setRetrying] = useState(false);
   const job = jobs.find((j) => j.id === id);
   const running = job?.status === "running";
   const elapsed = useElapsed(running ?? false, job?.startedAt ?? Date.now());
-  const artifact = job ? resolveArtifact(job) : null;
+  const artifacts = job ? resolveArtifacts(job, applications) : [];
+  const reportN = job ? resolveReportNum(job, applications) : undefined;
   const steps = useMemo(() => (job ? collapseSteps(job.steps) : []), [job]);
   const [outputOpen, setOutputOpen] = useState<boolean | undefined>(undefined);
   const outputExpanded = outputOpen ?? running;
@@ -122,12 +126,22 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
   return (
     <PageShell width="narrow">
       <DossierStack>
-        <Link href={backHref}>
-          <Button variant="text" className="px-0">
+        <nav className="flex flex-wrap items-center gap-2 md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
+          <Link href={backHref} className="inline-flex items-center gap-1 hover:text-[var(--md-sys-color-primary)]">
             <MaterialSymbol name="arrow_back" size={18} />
             {backLabel}
-          </Button>
-        </Link>
+          </Link>
+          {reportN ? (
+            <>
+              <span>/</span>
+              <Link href={`/pipeline/${reportN}`} className="hover:text-[var(--md-sys-color-primary)]">
+                Report #{reportN}
+              </Link>
+            </>
+          ) : null}
+          <span>/</span>
+          <span>Worker</span>
+        </nav>
 
         <Md3Card className="relative overflow-hidden !p-0">
           {running && <HeroGlow />}
@@ -163,24 +177,38 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
               )}
             </div>
 
-            {job.status === "done" && job.result?.summary && !artifact && (
+            {job.status === "done" && job.result?.summary && (
               <p className="mb-0 text-[var(--md-sys-color-on-surface-variant)]">{job.result.summary}</p>
             )}
 
-            {artifact && (
-              <div className="flex flex-wrap items-center gap-4">
-                <a
-                  href={artifact.href}
-                  target={artifact.href.startsWith("/api/") ? "_blank" : undefined}
-                  rel={artifact.href.startsWith("/api/") ? "noreferrer" : undefined}
-                  className="md3-btn-filled"
-                >
-                  <MaterialSymbol name="description" size={18} />
-                  {artifact.label}
-                </a>
-                {artifact.path && (
-                  <code className="text-xs text-[var(--md-sys-color-on-surface-variant)]">{artifact.path}</code>
-                )}
+            {artifacts.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3">
+                {artifacts.map((artifact) => {
+                  const external = artifact.href.startsWith("/api/");
+                  const className = artifact.primary ? "md3-btn-filled" : "md3-btn-outlined";
+                  const inner = (
+                    <>
+                      <MaterialSymbol name="description" size={18} />
+                      {artifact.label}
+                    </>
+                  );
+                  return (
+                    <span key={artifact.href} className="inline-flex flex-wrap items-center gap-2">
+                      {external ? (
+                        <a href={artifact.href} target="_blank" rel="noreferrer" className={className}>
+                          {inner}
+                        </a>
+                      ) : (
+                        <Link href={artifact.href} className={className}>
+                          {inner}
+                        </Link>
+                      )}
+                      {artifact.path ? (
+                        <code className="text-xs text-[var(--md-sys-color-on-surface-variant)]">{artifact.path}</code>
+                      ) : null}
+                    </span>
+                  );
+                })}
               </div>
             )}
 

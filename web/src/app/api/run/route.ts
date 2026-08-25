@@ -161,6 +161,7 @@ export async function POST(req: Request) {
   const prompt = buildPrompt(kind, input, readMemory(), today);
 
   const isClaude = cliId === "claude";
+  const isCodex = cliId === "codex";
   // Tool scope by kind (comma-separated lists; disallowedTools is the hard
   // guardrail). 'evaluate' runs the REAL mode + persists canonical artifacts →
   // it needs Write + Bash (reserve-report-num / merge-tracker / write the
@@ -187,13 +188,39 @@ export async function POST(req: Request) {
       return 0;
     }
   };
+  const findReportNumForInput = (needle: string): string | undefined => {
+    const trimmed = needle.trim();
+    if (/^\d+$/.test(trimmed)) {
+      try {
+        const match = fs.readdirSync(reportsDir).find((f) => f.endsWith(".md") && parseInt(f, 10) === parseInt(trimmed, 10));
+        return match?.match(/^(\d+)/)?.[1] ?? trimmed;
+      } catch {
+        return trimmed;
+      }
+    }
+    try {
+      const files = fs
+        .readdirSync(reportsDir)
+        .filter((f) => f.endsWith(".md"))
+        .map((f) => ({ f, t: fs.statSync(path.join(reportsDir, f)).mtimeMs }))
+        .sort((a, b) => b.t - a.t);
+      for (const { f } of files) {
+        const body = fs.readFileSync(path.join(reportsDir, f), "utf8");
+        if (body.includes(trimmed)) return f.match(/^(\d+)/)?.[1];
+      }
+    } catch {
+      /* ignore */
+    }
+    return undefined;
+  };
+  const hasReportForInput = (needle: string) => Boolean(findReportNumForInput(needle));
   const persists = kind === "evaluate";
   const reportsBefore = persists ? countReports() : 0;
   // Tracker-mutating runs hold a write token so a row delete can't race their merge
   // (tracker.mjs delete doesn't yet share a lock with merge-tracker — see run-registry).
   const writeToken = kind === "evaluate" || kind === "pdf" ? acquireTrackerWrite() : null;
 
-  const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env });
+  const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"] });
   const enc = new TextEncoder();
 
   // `closed` + kill timer in the OUTER scope so cancel() (client disconnect) can
@@ -204,6 +231,8 @@ export async function POST(req: Request) {
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let buf = "";
+      let codexFinalText = "";
+      let codexCommandStarted = false;
       let emittedText = false; // any assistant text delta → the CLI actually ran
       let sawError = false;
       let lastTokens = 0; // per-run token cost from the Claude result event (#6) — local only
@@ -233,6 +262,36 @@ export async function POST(req: Request) {
 
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
+        if (isCodex) {
+          buf += d.toString();
+          let nl: number;
+          while ((nl = buf.indexOf("\n")) !== -1) {
+            const line = buf.slice(0, nl).trim();
+            buf = buf.slice(nl + 1);
+            if (!line) continue;
+            try {
+              const ev = JSON.parse(line);
+              if (ev.type === "item.started" && ev.item?.type === "command_execution") {
+                if (!codexCommandStarted) {
+                  codexCommandStarted = true;
+                  send({ type: "status", label: "Codex working" });
+                }
+              } else if (ev.type === "item.completed" && ev.item?.type === "agent_message") {
+                const text = ev.item.text;
+                if (typeof text === "string") {
+                  emittedText = true;
+                  codexFinalText = text;
+                }
+              } else if (ev.type === "turn.completed") {
+                const u = ev.usage || {};
+                lastTokens = (u.input_tokens || 0) + (u.output_tokens || 0) + (u.cache_write_input_tokens || 0);
+              }
+            } catch {
+              /* Codex may print non-JSON setup lines before JSONL; ignore them. */
+            }
+          }
+          return;
+        }
         if (!isClaude) {
           emittedText = true;
           send({ type: "text", text: d.toString() });
@@ -280,7 +339,8 @@ export async function POST(req: Request) {
       });
       child.on("error", (e) => { send({ type: "error", msg: e.message }); close(); });
       child.on("close", (code) => {
-        const wroteReport = countReports() > reportsBefore;
+        if (isCodex && codexFinalText) send({ type: "text", text: codexFinalText });
+        const wroteReport = countReports() > reportsBefore || hasReportForInput(input);
         const cleanExit = code === 0; // non-zero OR null (killed/signal) = NOT clean
         // Honesty gate (#9): a green "done" with a parsed score requires a CLEAN exit,
         // real output, AND (for evaluations) a report actually written. Anything else
@@ -298,7 +358,13 @@ export async function POST(req: Request) {
           // instead of recording a confident score off a half-finished run.
           send({ type: "error", msg: "This run hit an error before finishing, so it isn't recorded as a confident result — re-run it to verify." });
         } else {
-          send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd });
+          const reportN =
+            kind === "evaluate"
+              ? findReportNumForInput(input)
+              : ["pdf", "cover", "email", "contacto"].includes(kind) && /^\d+$/.test(input.trim())
+                ? input.trim()
+                : findReportNumForInput(input);
+          send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd, reportN });
         }
         close();
       });

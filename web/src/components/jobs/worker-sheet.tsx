@@ -7,6 +7,8 @@ import { useJobs } from "@/components/jobs/job-store";
 import { WorkerCard } from "@/components/jobs/worker-card";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { cn } from "@/lib/cn";
+import { usePipeline } from "@/components/pipeline/pipeline-provider";
+import { jobDestinationHref, resolveReportNum } from "@/components/jobs/job-utils";
 
 type WorkersUiCtx = {
   open: boolean;
@@ -31,6 +33,7 @@ export function WorkersUiProvider({ children }: { children: React.ReactNode }) {
 /** Shared worker card list — used by the desktop sheet and the mobile drawer. */
 export function WorkerTray({ className }: { className?: string }) {
   const { jobs, removeJob, clearFinished } = useJobs();
+  const { applications } = usePipeline();
   const pathname = usePathname();
   if (jobs.length === 0) {
     return (
@@ -72,11 +75,13 @@ export function WorkerTray({ className }: { className?: string }) {
       </div>
       <ul className="space-y-1.5">
         {jobs.slice(0, 6).map((j) => {
-          const active = pathname === `/jobs/${j.id}`;
+          const dest = jobDestinationHref(j, applications);
+          const reportN = resolveReportNum(j, applications);
+          const active = pathname === `/jobs/${j.id}` || (reportN != null && pathname === `/pipeline/${reportN}`);
           return (
             <li key={j.id}>
               <Link
-                href={`/jobs/${j.id}`}
+                href={dest}
                 className={cn(
                   "group block rounded-[var(--md-sys-shape-corner-medium)] border px-2.5 py-2 transition-colors",
                   active
