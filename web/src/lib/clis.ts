@@ -19,7 +19,7 @@ export type CliSpec = {
 
 export const KNOWN: CliSpec[] = [
   { id: "claude", name: "Claude Code", bin: "claude", run: "claude -p", url: "https://claude.ai/code", args: (p) => ["-p", p] },
-  { id: "codex", name: "Codex", bin: "codex", run: "codex exec", url: "https://github.com/openai/codex", args: (p) => ["exec", p] },
+  { id: "codex", name: "Codex", bin: "codex", run: "codex exec --json", url: "https://github.com/openai/codex", args: (p) => ["exec", "--json", p] },
   // --force is required so print mode actually writes reports/PDFs (otherwise proposals only).
   {
     id: "cursor",
@@ -104,4 +104,31 @@ export function resolveCli(id: string): { spec: CliSpec; binPath: string } | nul
   const binPath = resolveBin(spec);
   if (!binPath) return null;
   return { spec, binPath };
+}
+
+/** First installed headless CLI — used when ingest/run has no explicit cliId. */
+export function resolveDefaultCli(): { cliId: string; spec: CliSpec; binPath: string } | null {
+  for (const c of detectClis()) {
+    if (!c.installed) continue;
+    const resolved = resolveCli(c.id);
+    if (resolved) return { cliId: c.id, ...resolved };
+  }
+  return null;
+}
+
+export function extractCodexAgentText(output: string): string {
+  const parts: string[] = [];
+  for (const rawLine of output.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    try {
+      const ev = JSON.parse(line);
+      if (ev.type === "item.completed" && ev.item?.type === "agent_message" && typeof ev.item.text === "string") {
+        parts.push(ev.item.text);
+      }
+    } catch {
+      /* Codex may print non-JSON setup lines before JSONL; ignore them. */
+    }
+  }
+  return parts.join("\n");
 }

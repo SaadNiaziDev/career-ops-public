@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { resolveCli } from "@/lib/clis";
+import { resolveCli, resolveDefaultCli } from "@/lib/clis";
 import { careerOpsRoot } from "@/lib/career-ops";
 import { extractPdfText } from "@/lib/cv/pdf-text.mjs";
 import { localCvStream } from "@/lib/cv/quality";
@@ -110,14 +110,15 @@ export async function POST(req: Request) {
   }
 
   const resolved = cliId ? resolveCli(cliId) : null;
-  if (!resolved) {
+  const active = resolved ? { cliId, ...resolved } : resolveDefaultCli();
+  if (!active) {
     if (extractedText) return localResponse(extractedText);
     return Response.json({ error: "Connect an AI CLI in Config, or paste / drop a .md file." }, { status: 404 });
   }
-  const { spec, binPath } = resolved;
+  const { spec, binPath, cliId: activeCliId } = active;
   const prompt = ingestPrompt(promptSource);
-  const isClaude = cliId === "claude";
-  const isCodex = cliId === "codex";
+  const isClaude = activeCliId === "claude";
+  const isCodex = activeCliId === "codex";
   const args = isClaude
     ? [
         "-p",

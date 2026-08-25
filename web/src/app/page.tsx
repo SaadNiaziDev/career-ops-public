@@ -1,4 +1,4 @@
-import { pipelineSummary, doctorState } from "@/lib/career-ops";
+import { pipelineSummary, doctorState, ensureOnboardingTemplates } from "@/lib/career-ops";
 import { OnboardingBanner } from "@/components/onboarding-banner";
 import { FirstRunHome } from "@/components/home/first-run-home";
 import { TodayDashboard } from "@/components/home/today-dashboard";
@@ -6,6 +6,7 @@ import { TodayDashboard } from "@/components/home/today-dashboard";
 export const dynamic = "force-dynamic"; // always read fresh local files at request time (never at build — CI has no user data)
 
 export default function Home() {
+  ensureOnboardingTemplates();
   const { phase, onboardingNeeded } = doctorState();
   // First run (truly empty install): the CV-upload takeover IS the home — value
   // before commitment. The full dashboard returns once they have a CV or any data.

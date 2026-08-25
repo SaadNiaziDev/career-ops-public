@@ -20,7 +20,7 @@ npx playwright install chromium
 npm run web:dev
 ```
 
-Open http://localhost:3000. On first run, drop a PDF or `.md` of your résumé — that becomes `cv.md` after you review it. See [README.md](../README.md#how-to-get-cvmd-and-the-other-markdown-files) for other ways to gather the markdown files.
+Open http://localhost:3000. On first run, a setup wizard walks you through **(1) picking an AI CLI** and **(2) adding your CV** (PDF, `.md`, or paste). See [README.md](../README.md#how-to-get-cvmd-and-the-other-markdown-files) for other ways to gather the markdown files.
 
 Or set it up by hand:
 

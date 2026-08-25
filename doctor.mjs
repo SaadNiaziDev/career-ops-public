@@ -340,6 +340,12 @@ async function main() {
   console.log('\ncareer-ops doctor');
   console.log('================\n');
 
+  const boot = onboardingState(projectRoot);
+  if (boot.autoCopied.length) {
+    console.log(`${green('✓')} Auto-copied: ${boot.autoCopied.join(', ')}`);
+    console.log('');
+  }
+
   const checks = [
     checkNodeVersion(),
     checkDependencies(),

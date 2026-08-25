@@ -12,6 +12,7 @@ import { Md3Textarea } from "@/components/ui/md3-input";
 import { cn } from "@/lib/cn";
 import { instrumentSerif } from "@/lib/fonts";
 import { cvReadiness, parseCvStream, seedFromCvMarkdown, type CvSeed } from "@/lib/cv/quality";
+import { cliDisplayName, resolveCliIdForRun } from "@/lib/cli-config";
 
 type Phase = "input" | "parsing" | "review" | "saving" | "error";
 
@@ -22,7 +23,15 @@ const STYLE = `
 @keyframes co-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 `;
 
-export function CvIngest({ onSaved, afterSave = "home" }: { onSaved?: () => void; afterSave?: "home" | "stay" }) {
+export function CvIngest({
+  onSaved,
+  afterSave = "home",
+  cliId: cliIdProp = null,
+}: {
+  onSaved?: () => void;
+  afterSave?: "home" | "stay";
+  cliId?: string | null;
+}) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("input");
   const [paste, setPaste] = useState("");
@@ -35,12 +44,31 @@ export function CvIngest({ onSaved, afterSave = "home" }: { onSaved?: () => void
 
   const readiness = md ? cvReadiness(md) : null;
 
-  const runStream = useCallback(async (init: RequestInit) => {
+  const runStream = useCallback(async (init: RequestInit, explicitCliId?: string | null) => {
     setPhase("parsing");
     setTrace("Reading your CV…");
     setErr("");
+    const resolvedCli = explicitCliId ?? cliIdProp ?? (await resolveCliIdForRun());
+    setActiveCliLabel(resolvedCli ? (cliDisplayName(resolvedCli) ?? resolvedCli) : null);
     try {
-      const r = await fetch("/api/cv/ingest", init);
+      let reqInit = init;
+      if (resolvedCli) {
+        const headers = new Headers(init.headers);
+        if (init.body instanceof FormData) {
+          const form = new FormData();
+          for (const [k, v] of init.body.entries()) form.append(k, v);
+          form.set("cliId", resolvedCli);
+          reqInit = { ...init, body: form };
+        } else if (typeof init.body === "string") {
+          try {
+            const parsed = JSON.parse(init.body) as Record<string, unknown>;
+            reqInit = { ...init, body: JSON.stringify({ ...parsed, cliId: resolvedCli }) };
+          } catch {
+            reqInit = init;
+          }
+        }
+      }
+      const r = await fetch("/api/cv/ingest", reqInit);
       const ctype = r.headers.get("content-type") || "";
       if (ctype.includes("application/json")) {
         const d = (await r.json().catch(() => ({}))) as { error?: string };
@@ -87,7 +115,7 @@ export function CvIngest({ onSaved, afterSave = "home" }: { onSaved?: () => void
       setErr(e instanceof Error ? e.message : "stream error");
       setPhase("error");
     }
-  }, []);
+  }, [cliIdProp]);
 
   const ingestText = (text: string) => {
     const trimmed = text.trim();
@@ -121,6 +149,7 @@ export function CvIngest({ onSaved, afterSave = "home" }: { onSaved?: () => void
   };
 
   const [saveErr, setSaveErr] = useState("");
+  const [activeCliLabel, setActiveCliLabel] = useState<string | null>(null);
   const save = async () => {
     if (!md.trim()) {
       setSaveErr("Your CV looks empty — paste it again.");
@@ -250,7 +279,8 @@ export function CvIngest({ onSaved, afterSave = "home" }: { onSaved?: () => void
           <span className={`${instrumentSerif.className} text-lg text-[var(--md-sys-color-on-surface)]`}>{trace || "Reading your CV…"}</span>
         </div>
         <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--md-sys-color-tertiary)_30%,transparent)] bg-[var(--md-sys-color-tertiary-container)] px-2.5 py-1 text-[11px] font-semibold text-[var(--md-sys-color-on-tertiary-container)]">
-          <span className="size-1.5 rounded-full bg-[var(--md-sys-color-tertiary)]" /> 0 tokens · $0.00 · local
+          <span className="size-1.5 rounded-full bg-[var(--md-sys-color-tertiary)]" />{" "}
+          {activeCliLabel ? `${activeCliLabel} formatting…` : "Local extract · no tokens"}
         </div>
         {md && (
           <div className="co-cvtrace mt-4 max-h-40 overflow-hidden rounded-lg border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] p-3 text-[11px] text-[var(--md-sys-color-outline)]">

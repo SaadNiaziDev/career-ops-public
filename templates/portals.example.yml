@@ -1,5 +1,19 @@
-# Portal Scanner Configuration
+# Portal Scanner Configuration — USER LAYER (copy to portals.yml)
+# =============================================================================
+# ONBOARDING — create your portals.yml:
+#   1. Web UI: saving your CV auto-copies templates/portals.example.yml → portals.yml
+#   2. CLI:     node doctor.mjs --json   (or npm run doctor — also auto-copies)
+#   3. Manual:  cp templates/portals.example.yml portals.yml
+#
+# Then customize:
+#   • title_filter.positive — YOUR target role keywords (required for good scans)
+#   • tracked_companies     — employers to watch (add via Portals page or below)
+#   • search_queries        — broad site: searches
+#   • location_filter       — geography gate (optional)
+#   • enabled: false        — on companies you don't care about
+#
 # Used by /career-ops scan to discover new offers automatically.
+# =============================================================================
 #
 # Strategy (4 levels):
 #   0. Local parser → per-company `parser:` script for SSR/static career pages (zero-token)
@@ -14,12 +28,11 @@
 #   Exception: ATS-hosted careers_url is acceptable when no branded careers page exists.
 #   Using raw ATS URLs when a branded page exists can cause false 410 errors (job ID mismatch).
 #
-# HOW TO CUSTOMIZE:
-#   1. Copy this file to portals.yml in the project root
-#   2. Edit title_filter.positive with YOUR target role keywords
-#   3. Add/remove companies in tracked_companies
-#   4. Adjust search_queries for your preferred job boards
-#   5. Set enabled: false on companies you don't care about
+# HOW TO CUSTOMIZE (after copying to portals.yml):
+#   1. Edit title_filter.positive with YOUR target role keywords
+#   2. Add/remove companies in tracked_companies
+#   3. Adjust search_queries for your preferred job boards
+#   4. Set enabled: false on companies you don't care about
 #
 # Greenhouse opt-in: set `fetch_content: true` on a tracked company to pull full
 # JD bodies from the Greenhouse API (~extra bandwidth). Useful when

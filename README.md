@@ -15,13 +15,12 @@ npx playwright install chromium
 npm run web:dev
 ```
 
-Open http://localhost:3000. On first run the home screen asks for your CV:
+Open http://localhost:3000. On first run you get a **two-step setup wizard**:
 
-- **Drop a PDF** of your résumé — text is extracted locally (scanned-image PDFs need a paste instead)
-- **Drop a `.md` / `.txt` file** — saved as `cv.md` after you review it
-- **Paste** the CV text
+1. **Connect an AI CLI** (Claude Code, Codex, or Cursor Agent) — optional but recommended for scoring jobs and polishing PDFs
+2. **Add your CV** — drop a PDF or `.md`, or paste the text
 
-You review the markdown before anything is written. An AI CLI (Claude Code, Codex, or Cursor) is optional: it only polishes formatting. Paste and `.md` work with no CLI.
+You review the markdown before anything is written. Paste and `.md` work with no CLI; PDFs extract locally and your CLI formats them when connected.
 
 Or set it up by hand:
 

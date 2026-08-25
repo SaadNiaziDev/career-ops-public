@@ -199,6 +199,8 @@ export type Application = {
   /** Intermediary channel (#1596): agency/recruiter firm, "—" for direct, "" when the tracker has no Via column. */
   via: string;
   role: string;
+  url?: string;
+  location?: string;
   score: string;
   status: string;
   pdf: string;
@@ -216,7 +218,30 @@ export type Application = {
 export function readApplications(): Application[] {
   const md = read("data/applications.md");
   if (!md) return [];
-  return parseApplications(md, careerOpsRoot());
+  return parseApplications(md, careerOpsRoot()).map((row: Application) => {
+    const report = readReportDetails(row.n);
+    return {
+      ...row,
+      url: report.url,
+      location: row.location || report.location,
+    };
+  });
+}
+
+function readReportDetails(n: string): { location?: string; url?: string } {
+  const file = findReportFile(n);
+  if (!file) return {};
+  try {
+    const md = fs.readFileSync(file, "utf8");
+    const locationRow = md.match(/^\|\s*\*{0,2}Remote\*{0,2}\s*\|\s*(.+?)\s*\|\s*$/im);
+    const urlRow = md.match(/^\*\*URL:\*\*\s*<?(https?:\/\/[^\s>]+)>?/im);
+    return {
+      location: locationRow?.[1]?.replace(/[*`]/g, "").trim() || undefined,
+      url: urlRow?.[1],
+    };
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -231,13 +256,36 @@ export type LifecyclePhase = "first-run" | "in-between" | "established";
  * SAME existsSync semantics (the SSOT the OnboardingBanner already reads via
  * /api/doctor). The 4 user-layer prereqs: cv.md, config/profile.yml,
  * modes/_profile.md, portals.yml.
- *   - first-run  → a TRULY empty install (no cv AND no data): the CV takeover.
- *     CRITICAL back-compat (maintainer): NEVER force onboarding on a user who
- *     already has data (a full pipeline/tracker with no cv.md is valid).
- *   - in-between → has cv/data but setup incomplete: dashboard + the nudge banner.
+ *   - first-run  → no cv.md yet: the onboarding wizard (CLI + CV dropzone).
+ *   - in-between → has cv but setup incomplete: dashboard + the nudge banner.
  *   - established → all 4 prereqs present.
  * onboardingNeeded mirrors doctor.mjs: true if ANY prereq is missing → show banner.
  */
+/** Auto-copy user-layer templates (portals.yml, modes/_profile.md, …) — same rules as doctor.mjs --json. */
+export function ensureOnboardingTemplates(): string[] {
+  const root = careerOpsRoot();
+  const autoCopied: string[] = [];
+  const templates = [
+    { target: "modes/_profile.md", template: "modes/_profile.template.md" },
+    { target: "modes/_custom.md", template: "modes/_custom.template.md" },
+    { target: "portals.yml", template: "templates/portals.example.yml" },
+  ];
+  for (const { target, template } of templates) {
+    const targetPath = path.join(root, ...target.split("/"));
+    const templatePath = path.join(root, ...template.split("/"));
+    if (!fs.existsSync(targetPath) && fs.existsSync(templatePath)) {
+      try {
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        fs.copyFileSync(templatePath, targetPath);
+        autoCopied.push(target);
+      } catch {
+        /* read-only fs — doctor /api will retry */
+      }
+    }
+  }
+  return autoCopied;
+}
+
 export function doctorState(): {
   phase: LifecyclePhase;
   onboardingNeeded: boolean;
@@ -262,7 +310,7 @@ export function doctorState(): {
   const hasCv = has("cv.md");
   const hasData = readApplications().length > 0 || readInbox().some((j) => !j.done);
   const onboardingNeeded = missing.length > 0;
-  const phase: LifecyclePhase = !hasCv && !hasData ? "first-run" : onboardingNeeded ? "in-between" : "established";
+  const phase: LifecyclePhase = !hasCv ? "first-run" : onboardingNeeded ? "in-between" : "established";
   return { phase, onboardingNeeded, missing, hasCv, hasData };
 }
 
