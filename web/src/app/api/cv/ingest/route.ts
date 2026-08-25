@@ -1,15 +1,16 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { resolveCli } from "@/lib/clis";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { extractPdfText } from "@/lib/cv/pdf-text.mjs";
+import { localCvStream } from "@/lib/cv/quality";
 
-// Parse a CV (pasted text or an uploaded PDF) into clean cv.md markdown by running
-// the USER'S OWN CLI headless — the web never ships a heavyweight parser, and the
-// real CV NEVER leaves the machine (local-first, PII-safe). This route is a
-// PROPOSER: it produces candidate markdown only; the actual write to cv.md happens
-// via the existing POST /api/cv after the user confirms (propose-then-confirm).
+// Parse a CV (pasted text or an uploaded PDF) into clean cv.md markdown.
+// PDFs are extracted locally first so any CLI (or no CLI) can continue — the
+// real CV NEVER leaves the machine. This route is a PROPOSER: it produces
+// candidate markdown only; the actual write to cv.md happens via POST /api/cv
+// after the user confirms (propose-then-confirm).
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -55,13 +56,18 @@ ${source}`;
 }
 
 const TEXT_SRC = (t: string) => `SOURCE (the user's CV, pasted as text — convert it):\n"""\n${t.slice(0, 24000)}\n"""`;
-const FILE_SRC = (p: string) => `SOURCE: the user's CV is the file at this local path — READ it with your file/Read tool, then convert it:\n${p}`;
+
+function localResponse(markdown: string, trace = "Reading your CV…") {
+  return new Response(localCvStream(markdown, trace), {
+    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no" },
+  });
+}
 
 export async function POST(req: Request) {
   const ctype = req.headers.get("content-type") || "";
   let cliId = "";
   let promptSource = "";
-  let tempFile: string | null = null;
+  let extractedText = "";
 
   try {
     if (ctype.includes("application/json")) {
@@ -69,22 +75,33 @@ export async function POST(req: Request) {
       cliId = body.cliId || "";
       const text = (body.text || "").trim();
       if (!text) return Response.json({ error: "empty cv text" }, { status: 400 });
+      extractedText = text;
       promptSource = TEXT_SRC(text);
     } else if (ctype.includes("multipart/form-data")) {
       const form = await req.formData();
       cliId = String(form.get("cliId") || "");
       const file = form.get("file");
       if (!(file instanceof File)) return Response.json({ error: "no file" }, { status: 400 });
-      // Reading a PDF/DOCX from a path needs the CLI's file tool, which only Claude
-      // is granted here. Tell non-Claude users plainly instead of failing opaquely.
-      if (cliId !== "claude" && /\.(pdf|docx)$/i.test(file.name)) {
-        return Response.json({ error: "PDF upload needs Claude Code — paste your CV text instead." }, { status: 400 });
+      if (/\.docx$/i.test(file.name)) {
+        return Response.json({ error: "Word .docx isn't supported yet — export as PDF or Markdown (.md), or paste the text." }, { status: 400 });
       }
       const ext = (file.name.match(/\.[a-z0-9]+$/i)?.[0] || ".pdf").toLowerCase();
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-cv-"));
-      tempFile = path.join(dir, `cv${ext}`); // outside the repo, basename-only
-      fs.writeFileSync(tempFile, Buffer.from(await file.arrayBuffer()), { mode: 0o600 }); // PII → owner-only
-      promptSource = FILE_SRC(tempFile);
+      const buf = Buffer.from(await file.arrayBuffer());
+      if (/\.(md|markdown|txt)$/i.test(file.name)) {
+        const text = buf.toString("utf8").trim();
+        if (!text) return Response.json({ error: "empty file" }, { status: 400 });
+        extractedText = text;
+        promptSource = TEXT_SRC(text);
+      } else if (ext === ".pdf" || buf.subarray(0, 5).toString("latin1") === "%PDF-") {
+        const text = extractPdfText(buf);
+        if (!text || text.trim().length < 40) {
+          return Response.json({ error: "Couldn't read text from that PDF (it may be a scanned image). Export as .md or paste the text instead." }, { status: 400 });
+        }
+        extractedText = text.trim();
+        promptSource = TEXT_SRC(extractedText);
+      } else {
+        return Response.json({ error: "Use a PDF, .md, or .txt file — or paste the CV text." }, { status: 400 });
+      }
     } else {
       return Response.json({ error: "unsupported content-type" }, { status: 400 });
     }
@@ -92,14 +109,15 @@ export async function POST(req: Request) {
     return Response.json({ error: "bad request" }, { status: 400 });
   }
 
-  const resolved = resolveCli(cliId);
+  const resolved = cliId ? resolveCli(cliId) : null;
   if (!resolved) {
-    if (tempFile) cleanupTemp(tempFile);
-    return Response.json({ error: `CLI '${cliId}' not found on this machine` }, { status: 404 });
+    if (extractedText) return localResponse(extractedText);
+    return Response.json({ error: "Connect an AI CLI in Config, or paste / drop a .md file." }, { status: 404 });
   }
   const { spec, binPath } = resolved;
   const prompt = ingestPrompt(promptSource);
   const isClaude = cliId === "claude";
+  const isCodex = cliId === "codex";
   const args = isClaude
     ? [
         "-p",
@@ -111,7 +129,7 @@ export async function POST(req: Request) {
         "--permission-mode",
         "acceptEdits",
         "--allowedTools",
-        "Read,Glob,Grep", // read the temp PDF; CANNOT write/edit/shell (proposer)
+        "Read,Glob,Grep",
         "--disallowedTools",
         "Bash,Write,Edit,NotebookEdit,Task,WebFetch,WebSearch",
       ]
@@ -119,9 +137,8 @@ export async function POST(req: Request) {
 
   let child;
   try {
-    child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env });
+    child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"] });
   } catch (e) {
-    if (tempFile) cleanupTemp(tempFile); // never leak the CV temp if spawn throws sync
     return Response.json({ error: e instanceof Error ? e.message : "failed to start the CLI" }, { status: 500 });
   }
 
@@ -148,7 +165,6 @@ export async function POST(req: Request) {
         if (!closed) {
           closed = true;
           if (killer) clearTimeout(killer);
-          if (tempFile) cleanupTemp(tempFile);
           try {
             controller.close();
           } catch {
@@ -174,6 +190,25 @@ export async function POST(req: Request) {
 
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
+        if (isCodex) {
+          buf += d.toString();
+          let nl: number;
+          while ((nl = buf.indexOf("\n")) !== -1) {
+            const line = buf.slice(0, nl).trim();
+            buf = buf.slice(nl + 1);
+            if (!line) continue;
+            try {
+              const ev = JSON.parse(line);
+              if (ev.type === "item.completed" && ev.item?.type === "agent_message") {
+                const text = ev.item.text;
+                if (typeof text === "string") emit(text);
+              }
+            } catch {
+              /* Codex may print non-JSON setup lines before JSONL; ignore them. */
+            }
+          }
+          return;
+        }
         if (!isClaude) {
           emit(d.toString());
           return;
@@ -216,19 +251,10 @@ export async function POST(req: Request) {
       } catch {
         /* ignore */
       }
-      if (tempFile) cleanupTemp(tempFile);
     },
   });
 
   return new Response(stream, {
     headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no" },
   });
-}
-
-function cleanupTemp(file: string) {
-  try {
-    fs.rmSync(path.dirname(file), { recursive: true, force: true });
-  } catch {
-    /* best-effort */
-  }
 }

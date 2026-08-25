@@ -107,13 +107,13 @@ Output: `{"onboardingNeeded": <bool>, "missing": [...], "warnings": [...], "auto
 If `onboardingNeeded` is true (`cv.md`, `config/profile.yml`, `modes/_profile.md`, or `portals.yml` missing), guide setup step by step. Do not evaluate or scan until basics exist.
 
 #### Step 1: CV
-Create `cv.md` from paste, LinkedIn URL, or conversation.
+Open the web UI (`npm run web:dev`) and drop a PDF or `.md` file on the first-run screen — that writes `cv.md` locally after you review it. Or create `cv.md` by hand using `examples/cv-example.md` as a heading guide (do not copy the fictional content). Paste, LinkedIn export-to-PDF, and conversation still work.
 
 #### Step 2: Profile
-Copy `config/profile.example.yml` → `config/profile.yml`. Fill identity, targets, comp range, `spend_tier` (`economy` / `standard` / `premium`).
+The web UI seeds `config/profile.yml` from the CV when you save it. Or copy `config/profile.example.yml` → `config/profile.yml` and fill identity, targets, comp range, `spend_tier` (`economy` / `standard` / `premium`).
 
 #### Step 3: Portals
-Copy `templates/portals.example.yml` → `portals.yml`. Tune `title_filter.positive` for target roles.
+`node doctor.mjs --json` copies `templates/portals.example.yml` → `portals.yml` when missing. Tune `title_filter.positive` for target roles.
 
 #### Step 4: Tracker
 Create `data/applications.md` with the standard table header if missing.

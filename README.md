@@ -15,12 +15,20 @@ npx playwright install chromium
 npm run web:dev
 ```
 
-Open http://localhost:3000 and follow onboarding, or set it up by hand:
+Open http://localhost:3000. On first run the home screen asks for your CV:
 
-1. Copy `templates/portals.example.yml` → `portals.yml`
+- **Drop a PDF** of your résumé — text is extracted locally (scanned-image PDFs need a paste instead)
+- **Drop a `.md` / `.txt` file** — saved as `cv.md` after you review it
+- **Paste** the CV text
+
+You review the markdown before anything is written. An AI CLI (Claude Code, Codex, or Cursor) is optional: it only polishes formatting. Paste and `.md` work with no CLI.
+
+Or set it up by hand:
+
+1. Copy `templates/portals.example.yml` → `portals.yml` (or run `node doctor.mjs --json`, which copies it for you)
 2. Copy `config/profile.example.yml` → `config/profile.yml`
-3. Copy `modes/_profile.template.md` → `modes/_profile.md`
-4. Create `cv.md` from your résumé
+3. Copy `modes/_profile.template.md` → `modes/_profile.md` (also auto-copied by doctor)
+4. Create `cv.md` from your résumé (see below)
 5. Create `data/applications.md` from the template header if missing
 
 ```bash
@@ -29,6 +37,43 @@ node verify-pipeline.mjs      # tracker integrity check
 ```
 
 Full walkthrough: [docs/SETUP.md](docs/SETUP.md). Codex users: [docs/CODEX.md](docs/CODEX.md).
+
+## How to get `cv.md` (and the other markdown files)
+
+career-ops generates every user-facing draft from a small set of **local markdown/yaml files**. You do not need all of them on day one. `cv.md` is the only one required to start matching jobs.
+
+### Required — `cv.md`
+
+This is your résumé in markdown. Ways to create it:
+
+| Method | What to do |
+|---|---|
+| **Web UI (recommended)** | `npm run web:dev` → drop a PDF or `.md` on the welcome screen → review → save |
+| **Export from Word / Google Docs** | File → Download → Plain Text (`.txt`) or Markdown, save as `cv.md` in the repo root |
+| **LinkedIn** | Profile → More → Save to PDF, then drop that PDF on the welcome screen |
+| **By hand** | Copy `examples/cv-example.md` to `cv.md` and **replace** the fictional Alex Chen content. Keep the headings. |
+
+Use these headings so scoring, PDF export, and the studio preview all parse the same way:
+
+- `# CV -- {Your Name}` then `**Location:**` / `**Email:**` / `**LinkedIn:**` lines
+- `## Professional Summary`
+- `## Work Experience` — each role as `### Company -- Location`, then `**Title**`, then dates, then bullets
+- `## Projects` / `## Education` / `## Skills`
+
+The fictional file `examples/cv-example.md` is a **structure** reference, not sample content to submit.
+
+### Optional markdown that improves drafts
+
+| File | Copy from | What to put in it |
+|---|---|---|
+| `article-digest.md` | `examples/article-digest-example.md` | Proof points and hero metrics per project (evaluations and cover letters read this) |
+| `writing-samples/*.md` | [writing-samples/README.md](writing-samples/README.md) | Emails, posts, anything that sounds like you — used for voice, not facts |
+| `modes/_profile.md` | auto-created from `modes/_profile.template.md` | Target archetypes and narrative |
+| `modes/_custom.md` | auto-created from `modes/_custom.template.md` | House rules and output preferences (never facts) |
+| `interview-prep/story-bank.md` | create when you prep | STAR stories for interviews |
+| `voice-dna.md` | `examples/voice-dna.example.md` | Voice/style only |
+
+`node doctor.mjs --json` copies the `_profile.md`, `_custom.md`, and `portals.yml` starters when they are missing. It never copies `cv.md` or `config/profile.yml` (those are your identity).
 
 ## Agent workflows
 

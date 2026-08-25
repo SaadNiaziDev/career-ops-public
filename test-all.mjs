@@ -3804,6 +3804,15 @@ try {
     fail('compileKeyword("cfo") boundary behavior wrong');
   }
 
+  const internNeg = buildTitleFilter({ positive: ['software engineer'], negative: ['intern'] });
+  if (internNeg('Software Engineer Intern') === false) pass('negative "Intern" still rejects intern titles');
+  else fail('negative "Intern" should reject "Software Engineer Intern"');
+  if (internNeg('Senior Software Engineer - Full Stack Internal Tooling') === true) {
+    pass('negative "Intern" does not reject "Internal"');
+  } else {
+    fail('negative "Intern" must not match "Internal"');
+  }
+
   // A malformed title_filter (null / numeric / empty entries) must not crash.
   const messyFilter = buildTitleFilter({ positive: ['cfo', null, 123, '', 'head of'] });
   if (messyFilter('Group CFO') === true && messyFilter('Marketing Coordinator') === false) {
@@ -5783,6 +5792,28 @@ try {
   }
   rmSync(autoCopy, { recursive: true, force: true });
 
+  const autoPortals = mkdtempSync(join(tmpdir(), 'co-autoportals-'));
+  mkdirSync(join(autoPortals, 'config'), { recursive: true });
+  mkdirSync(join(autoPortals, 'modes'), { recursive: true });
+  mkdirSync(join(autoPortals, 'templates'), { recursive: true });
+  writeFileSync(join(autoPortals, 'cv.md'), 'x');
+  writeFileSync(join(autoPortals, 'config/profile.yml'), 'x');
+  writeFileSync(join(autoPortals, 'modes/_profile.md'), 'x');
+  writeFileSync(join(autoPortals, 'templates/portals.example.yml'), 'tracked_companies: []\n');
+  const ap = JSON.parse(run(NODE, ['doctor.mjs', '--json', '--target', autoPortals]) || '{}');
+  if (
+    ap.onboardingNeeded === false &&
+    Array.isArray(ap.autoCopied) &&
+    ap.autoCopied.includes('portals.yml') &&
+    existsSync(join(autoPortals, 'portals.yml')) &&
+    readFileSync(join(autoPortals, 'portals.yml'), 'utf-8') === 'tracked_companies: []\n'
+  ) {
+    pass('Auto-copy template → portals.yml copied silently in --json mode');
+  } else {
+    fail(`Auto-copy portals.yml failed: ${JSON.stringify(ap)}`);
+  }
+  rmSync(autoPortals, { recursive: true, force: true });
+
   const claudeDoc = readFile('CLAUDE.md');
   const agentsDoc = readFile('AGENTS.md');
   const claudeWrapperLines = claudeDoc.trim().split(/\r?\n/).filter(Boolean);
@@ -5800,6 +5831,43 @@ try {
   }
 } catch (e) {
   fail(`Cold-start trigger test crashed: ${e.message}`);
+}
+
+console.log('\n12b. CV PDF text extract (first-run ingest)');
+try {
+  const { extractPdfText } = await import(pathToFileURL(join(ROOT, 'web/src/lib/cv/pdf-text.mjs')).href);
+  const { deflateSync } = await import('node:zlib');
+  const uncompressed = Buffer.from(
+    '%PDF-1.1\n1 0 obj<<>>endobj\nstream\nBT (Jane Smith) Tj (jane@example.com) Tj ET\nendstream\n%%EOF\n',
+    'latin1',
+  );
+  const fromUncompressed = extractPdfText(uncompressed) || '';
+  if (fromUncompressed.includes('Jane Smith') && fromUncompressed.includes('jane@example.com')) {
+    pass('PDF extract reads uncompressed Tj strings');
+  } else {
+    fail(`PDF extract missed uncompressed text: ${JSON.stringify(fromUncompressed)}`);
+  }
+
+  const payload = deflateSync(Buffer.from('BT (Senior Engineer) Tj ET\n', 'latin1'));
+  const flate = Buffer.concat([
+    Buffer.from('%PDF-1.4\n1 0 obj<</Filter /FlateDecode /Length ' + payload.length + '>>\nstream\n', 'latin1'),
+    payload,
+    Buffer.from('\nendstream\nendobj\n%%EOF\n', 'latin1'),
+  ]);
+  const fromFlate = extractPdfText(flate) || '';
+  if (fromFlate.includes('Senior Engineer')) {
+    pass('PDF extract inflates FlateDecode streams');
+  } else {
+    fail(`PDF extract missed FlateDecode text: ${JSON.stringify(fromFlate)}`);
+  }
+
+  if (extractPdfText(Buffer.from('not a pdf')) === null && extractPdfText(Buffer.from('%PDF-1.4\n')) === null) {
+    pass('PDF extract returns null for empty / non-PDF input');
+  } else {
+    fail('PDF extract should return null for garbage input');
+  }
+} catch (e) {
+  fail(`CV PDF text extract test crashed: ${e.message}`);
 }
 
 // ── 15. TRACKER DERIVED INDEX (#918 phase 1) ────────────────────

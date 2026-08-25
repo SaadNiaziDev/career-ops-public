@@ -168,8 +168,8 @@ const USER_LAYER_PREREQS = [
   {
     path: 'cv.md',
     fix: [
-      'Create cv.md in the project root with your CV in markdown',
-      'See examples/ for reference CVs',
+      'Open the web UI and drop a PDF or .md, or create cv.md in the project root',
+      'See examples/cv-example.md for the heading structure',
     ],
   },
   {
@@ -405,6 +405,7 @@ function onboardingState(root) {
   const templates = [
     { target: 'modes/_profile.md', template: 'modes/_profile.template.md' },
     { target: 'modes/_custom.md', template: 'modes/_custom.template.md' },
+    { target: 'portals.yml', template: 'templates/portals.example.yml' },
   ];
   for (const { target, template } of templates) {
     const targetPath = join(root, ...target.split('/'));

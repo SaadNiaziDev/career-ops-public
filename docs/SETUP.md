@@ -20,12 +20,14 @@ npx playwright install chromium
 npm run web:dev
 ```
 
-Open http://localhost:3000. On first run, complete onboarding:
+Open http://localhost:3000. On first run, drop a PDF or `.md` of your résumé — that becomes `cv.md` after you review it. See [README.md](../README.md#how-to-get-cvmd-and-the-other-markdown-files) for other ways to gather the markdown files.
 
-1. Copy `templates/portals.example.yml` → `portals.yml`
+Or set it up by hand:
+
+1. Copy `templates/portals.example.yml` → `portals.yml` (`node doctor.mjs --json` also copies this)
 2. Copy `config/profile.example.yml` → `config/profile.yml`
 3. Copy `modes/_profile.template.md` → `modes/_profile.md`
-4. Create `cv.md` from your résumé
+4. Create `cv.md` from your résumé (`examples/cv-example.md` is the heading guide)
 5. Create `data/applications.md` from the template header if missing
 
 Run health checks:

@@ -11,18 +11,9 @@ import { Md3Card } from "@/components/ui/md3-card";
 import { Md3Textarea } from "@/components/ui/md3-input";
 import { cn } from "@/lib/cn";
 import { instrumentSerif } from "@/lib/fonts";
-import { cvReadiness, parseCvStream, type CvSeed } from "@/lib/cv/quality";
-import { DEFAULT_FILTERS, filtersToParams } from "@/lib/explore";
+import { cvReadiness, parseCvStream, seedFromCvMarkdown, type CvSeed } from "@/lib/cv/quality";
 
 type Phase = "input" | "parsing" | "review" | "saving" | "error";
-
-function cliId(): string | null {
-  try {
-    return JSON.parse(localStorage.getItem("career-ops:config") || "{}").cliId || null;
-  } catch {
-    return null;
-  }
-}
 
 const STYLE = `
 .co-cvdrop{position:relative;border:1.5px dashed color-mix(in srgb, var(--md-sys-color-outline) 55%, transparent);border-radius:var(--md-sys-shape-corner-extra-large);transition:border-color .2s,background .2s}
@@ -31,7 +22,7 @@ const STYLE = `
 @keyframes co-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 `;
 
-export function CvIngest({ onSaved }: { onSaved?: () => void }) {
+export function CvIngest({ onSaved, afterSave = "home" }: { onSaved?: () => void; afterSave?: "home" | "stay" }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("input");
   const [paste, setPaste] = useState("");
@@ -50,8 +41,14 @@ export function CvIngest({ onSaved }: { onSaved?: () => void }) {
     setErr("");
     try {
       const r = await fetch("/api/cv/ingest", init);
-      if (r.status === 404) {
-        setErr("Connect an AI CLI in Config first — it parses your CV locally.");
+      const ctype = r.headers.get("content-type") || "";
+      if (ctype.includes("application/json")) {
+        const d = (await r.json().catch(() => ({}))) as { error?: string };
+        if (r.status === 404) {
+          setErr("needs-cli");
+        } else {
+          setErr(d.error || "Couldn't parse the CV — paste the text instead.");
+        }
         setPhase("error");
         return;
       }
@@ -93,13 +90,11 @@ export function CvIngest({ onSaved }: { onSaved?: () => void }) {
   }, []);
 
   const ingestText = (text: string) => {
-    const id = cliId();
-    if (!id) {
-      setErr("needs-cli");
-      setPhase("error");
-      return;
-    }
-    void runStream({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, cliId: id }) });
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setMd(trimmed);
+    setSeed(seedFromCvMarkdown(trimmed));
+    setPhase("review");
   };
 
   const ingestFile = (file: File) => {
@@ -112,8 +107,7 @@ export function CvIngest({ onSaved }: { onSaved?: () => void }) {
             setPhase("error");
             return;
           }
-          setMd(t.trim());
-          setPhase("review");
+          ingestText(t.trim());
         })
         .catch(() => {
           setErr("Couldn't read that file — paste your CV instead.");
@@ -121,15 +115,8 @@ export function CvIngest({ onSaved }: { onSaved?: () => void }) {
         });
       return;
     }
-    const id = cliId();
-    if (!id) {
-      setErr("needs-cli");
-      setPhase("error");
-      return;
-    }
     const form = new FormData();
     form.append("file", file);
-    form.append("cliId", id);
     void runStream({ method: "POST", body: form });
   };
 
@@ -154,11 +141,44 @@ export function CvIngest({ onSaved }: { onSaved?: () => void }) {
       setPhase("review");
       return;
     }
+    const merged: CvSeed = { ...seedFromCvMarkdown(md), ...(seed || {}) };
+    const roles = merged.roles?.length ? merged.roles : merged.title ? [merged.title] : [];
+    try {
+      await fetch("/api/doctor");
+    } catch {
+      /* auto-copy templates */
+    }
+    if (merged.name || merged.email || merged.location || roles.length) {
+      try {
+        await fetch("/api/profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: merged.name,
+            email: merged.email,
+            location: merged.location,
+            roles: roles.length ? roles : undefined,
+          }),
+        });
+      } catch {
+        /* best-effort */
+      }
+    }
+    if (roles.length) {
+      try {
+        await fetch("/api/portals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roles, location: merged.location ? [merged.location] : undefined }),
+        });
+      } catch {
+        /* best-effort */
+      }
+    }
     onSaved?.();
-    const roles = seed?.roles?.length ? seed.roles : seed?.title ? [seed.title] : [];
-    const f = { ...DEFAULT_FILTERS, ats: [...DEFAULT_FILTERS.ats], positive: roles, sinceDays: 30 };
-    const qs = filtersToParams(f);
-    router.push(`/explore?${qs}${qs ? "&" : ""}run=1`);
+    if (afterSave === "stay") return;
+    router.push("/");
+    router.refresh();
   };
 
   if (phase === "input" || phase === "error") {
@@ -186,17 +206,17 @@ export function CvIngest({ onSaved }: { onSaved?: () => void }) {
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && paste.trim()) ingestText(paste.trim());
             }}
-            placeholder="Paste your CV here — or drop a PDF / .md file below. Even a rough paste works; we'll clean it up."
+            placeholder="Paste your CV, or drop a PDF / .md file. Markdown is saved as-is; PDFs are converted locally."
             rows={6}
             className="!border-none !bg-transparent !p-0 !shadow-none"
           />
           <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[var(--md-sys-color-outline-variant)] pt-3">
             <Md3ActionButton icon="upload" onClick={() => fileRef.current?.click()}>
-              Upload PDF / file
+              Upload PDF or .md
             </Md3ActionButton>
-            <input ref={fileRef} type="file" accept=".pdf,.md,.markdown,.txt,.docx" hidden onChange={(e) => e.target.files?.[0] && ingestFile(e.target.files[0])} />
+            <input ref={fileRef} type="file" accept=".pdf,.md,.markdown,.txt" hidden onChange={(e) => e.target.files?.[0] && ingestFile(e.target.files[0])} />
             <span className="inline-flex items-center gap-1 text-[11px] text-[var(--md-sys-color-outline)]">
-              <MaterialSymbol name="lock" size={12} /> Stays on your machine. Parsed by your own AI.
+              <MaterialSymbol name="lock" size={12} /> Stays on this machine. Nothing is uploaded to us.
             </span>
             <Md3ActionButton variant="filled" icon="arrow_forward" disabled={!paste.trim()} onClick={() => ingestText(paste.trim())} className="ml-auto">
               Read my CV
@@ -207,7 +227,7 @@ export function CvIngest({ onSaved }: { onSaved?: () => void }) {
           (err === "needs-cli" ? (
             <div className="md3-alert md3-alert--warning flex-wrap items-center">
               <MaterialSymbol name="warning" size={14} className="shrink-0" />
-              <span>To read a PDF, connect your AI CLI — or paste your CV text above (no setup needed).</span>
+              <span>Paste the CV text or drop a .md file — no AI CLI needed. A PDF still works without one; connecting a CLI only polishes the formatting.</span>
               <Link href="/config" className="ml-auto">
                 <Md3ActionButton icon="arrow_forward">Connect your AI CLI</Md3ActionButton>
               </Link>
@@ -275,7 +295,7 @@ export function CvIngest({ onSaved }: { onSaved?: () => void }) {
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Md3ActionButton variant="filled" onClick={save} disabled={phase === "saving"} loading={phase === "saving"} icon={phase === "saving" ? undefined : "check"}>
-          Save &amp; find my matches
+          Save my CV
         </Md3ActionButton>
         <Md3ActionButton
           variant="text"

@@ -16,8 +16,41 @@ export function cvReadiness(md: string): CvReadiness {
 }
 
 // ── CV ingest stream markers (parallel to the <<act:>>/<<offer:>> envelopes) ──
-export type CvSeed = { title?: string; roles?: string[]; location?: string };
+export type CvSeed = { title?: string; roles?: string[]; location?: string; name?: string; email?: string };
 export type CvIngestResult = { markdown: string; seed: CvSeed | null; error: string | null; trace: string };
+
+/** Pull identity fields from already-converted cv.md (or a rough paste). */
+export function seedFromCvMarkdown(md: string): CvSeed {
+  const text = (md || "").trim();
+  if (!text) return {};
+  const heading = text.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "";
+  const name = heading
+    .replace(/^(CV|Resume|Curriculum Vitae)\s*(?:--|–|—|-)?\s*/i, "")
+    .trim();
+  const email = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
+  const location =
+    text.match(/\*\*Location:\*\*\s*(.+)/i)?.[1]?.trim() ||
+    text.match(/^Location:\s*(.+)$/im)?.[1]?.trim();
+  const bold = [...text.matchAll(/\*\*([^*]{3,80})\*\*/g)].map((m) => m[1].trim());
+  const title = bold.find(
+    (b) => !/^(Location|Email|LinkedIn|Portfolio|GitHub|Phone|Tel|Website):/i.test(b) && !b.includes("@"),
+  );
+  const roles = title ? [title] : undefined;
+  const seed: CvSeed = {};
+  if (name) seed.name = name;
+  if (email) seed.email = email;
+  if (location) seed.location = location.replace(/[*`]/g, "").trim();
+  if (title) seed.title = title;
+  if (roles) seed.roles = roles;
+  return seed;
+}
+
+/** Wrap locally extracted / pasted markdown in the ingest stream contract. */
+export function localCvStream(markdown: string, trace = "Reading your CV…"): string {
+  const md = (markdown || "").trim();
+  const seed = seedFromCvMarkdown(md);
+  return `${trace}\n<<cv:start>>\n${md}\n<<cv:end>>\n<<cv:seed>>${JSON.stringify(seed)}\n`;
+}
 
 /** Parse the full accumulated ingest stream text into its parts. Tolerant: a
  *  still-streaming buffer just yields partial markdown + the pre-start trace. */
@@ -50,6 +83,8 @@ export function parseCvStream(buf: string): CvIngestResult {
         title: typeof j.title === "string" ? j.title : undefined,
         roles: Array.isArray(j.roles) ? j.roles.filter((r: unknown): r is string => typeof r === "string").slice(0, 6) : undefined,
         location: typeof j.location === "string" ? j.location : undefined,
+        name: typeof j.name === "string" ? j.name : undefined,
+        email: typeof j.email === "string" ? j.email : undefined,
       };
     } catch {
       /* malformed seed → ignore */

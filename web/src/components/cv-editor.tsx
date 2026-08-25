@@ -10,6 +10,7 @@ import { cvReadiness } from "@/lib/cv/quality";
 import type { CvPreviewStats } from "@/lib/cv/preview";
 import { AccentSwatches } from "@/components/cv/accent-swatches";
 import { FullPreviewOverlay } from "@/components/cv/full-preview-overlay";
+import { CvIngest } from "@/components/cv/cv-ingest";
 import { assessFit, type CvStyleLike } from "@/lib/cv/fit";
 import { DEFAULT_PAGE_FORMAT, pageBox, type CvPageFormat } from "@/lib/cv/page";
 import { cn } from "@/lib/cn";
@@ -91,6 +92,7 @@ export function CvEditor() {
   const [activeSource, setActiveSource] = useState("cv.md");
   const [switching, setSwitching] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [forceEditor, setForceEditor] = useState(false);
 
   const [view, setView] = useState<ViewMode>("split");
   const [previewHtml, setPreviewHtml] = useState("");
@@ -472,6 +474,37 @@ export function CvEditor() {
   // finished tailored render picked from output/.
   const viewingGenerated = !!shownGenerated && !!generatedHtml;
   const pageHtml = viewingGenerated ? generatedHtml : previewHtml;
+
+  if (loaded && !exists && !content.trim() && !forceEditor) {
+    return (
+      <div className="mx-auto w-full max-w-3xl px-6 py-10">
+        <p className="md-eyebrow">CV</p>
+        <h1 className="md-display-small-emphasized mt-2">Add your CV</h1>
+        <p className="mt-2.5 max-w-[620px] text-[15px] leading-relaxed text-[var(--md-sys-color-on-surface-variant)]">
+          Drop a PDF or a <code className="font-mono text-[13px]">.md</code> file. We save it locally as{" "}
+          <code className="font-mono text-[13px]">cv.md</code> after you review it.
+        </p>
+        <div className="mt-6">
+          <CvIngest
+            afterSave="stay"
+            onSaved={() => {
+              fetch("/api/cv")
+                .then((r) => r.json())
+                .then((d: { content?: string; exists?: boolean }) => {
+                  setContent(d.content ?? "");
+                  setBaseline(d.content ?? "");
+                  setExists(d.exists ?? false);
+                })
+                .catch(() => undefined);
+            }}
+          />
+        </div>
+        <button type="button" className="md3-btn-text mt-4 text-sm" onClick={() => setForceEditor(true)}>
+          Write markdown instead
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="cv-studio">
