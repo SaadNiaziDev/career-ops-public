@@ -154,7 +154,7 @@ export function ExplorerView({
             <p className="mt-3 max-w-2xl md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
               {isAi
                 ? "Describe the role in plain language — an AI hunts the open web for it, on your own AI. Candidates are unverified until you evaluate."
-                : "Scan the public ATS network — Greenhouse, Lever, Ashby, Workday. Fresh postings matched to you, zero tokens. You only spend when you choose to evaluate one."}
+                : "Scan the public ATS network — Greenhouse, Lever, Ashby, Workday — with a worldwide remote focus when you need more reach. Fresh postings matched to you, zero tokens."}
             </p>
           )}
         </header>

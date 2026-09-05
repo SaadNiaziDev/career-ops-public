@@ -15,16 +15,27 @@ export type Job = {
   kind?: string;
   reportN?: string; // tracker/report number once the worker persists reports/{n}-*.md
   batchId?: string; // groups jobs fired together (e.g. "evaluate all Anthropic")
+  context?: Record<string, unknown>;
   status: "running" | "done" | "error";
   steps: JobStep[];
   text: string;
   result?: JobResult;
+  error?: string;
+  outputTruncated?: boolean;
   cost?: { tokens: number; usd?: number }; // per-run token cost (Claude result event) — local only
   startedAt: number;
   endedAt?: number;
 };
 
-type StartOpts = { title: string; subtitle?: string; kind: string; input: string; page?: string; batchId?: string };
+type StartOpts = {
+  title: string;
+  subtitle?: string;
+  kind: string;
+  input: string;
+  page?: string;
+  batchId?: string;
+  context?: Record<string, unknown>;
+};
 
 type Ctx = {
   jobs: Job[];
@@ -42,6 +53,7 @@ export function useJobs() {
 
 const CONFIG_KEY = "career-ops:config";
 const JOBS_KEY = "career-ops:jobs";
+const MAX_JOB_OUTPUT = 24_000;
 
 function parseVerdict(text: string): JobResult {
   const m = text.match(/VERDICT:\s*([\d.]+)\s*\/\s*5\s*[—:|-]+\s*(.+)/i);
@@ -78,12 +90,36 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
       const arr = raw ? JSON.parse(raw) : null;
       if (Array.isArray(arr)) {
         // anything left "running" from a previous session is stale → mark interrupted
-        setJobs(arr.map((j: Job) => (j.status === "running" ? { ...j, status: "error", steps: [...(j.steps || []), { kind: "status", label: "Interrupted (page reloaded)", ts: Date.now() }] } : j)));
+        const restored: Job[] = arr.map((j: Job) => (j.status === "running" ? { ...j, status: "error" as const, error: "Interrupted (page reloaded)", steps: [...(j.steps || []), { kind: "status", label: "Interrupted (page reloaded)", ts: Date.now() }] } : j));
+        setJobs((current) => {
+          const byId = new Map(current.map((j) => [j.id, j]));
+          for (const job of restored) if (job?.id && !byId.has(job.id)) byId.set(job.id, job);
+          return [...byId.values()].sort((a, b) => b.startedAt - a.startedAt).slice(0, 40);
+        });
       }
     } catch {
       /* ignore */
     }
     loaded.current = true;
+  }, []);
+
+  // Rehydrate the server-side worker ledger so a completed run survives a
+  // refresh, cleared localStorage, or a second tab.
+  useEffect(() => {
+    fetch("/api/runs")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!Array.isArray(data?.runs)) return;
+        setJobs((current) => {
+          const byId = new Map(current.map((j) => [j.id, j]));
+          for (const run of data.runs as Job[]) {
+            if (!run?.id || run.status === "running" || byId.has(run.id)) continue;
+            byId.set(run.id, run);
+          }
+          return [...byId.values()].sort((a, b) => b.startedAt - a.startedAt).slice(0, 40);
+        });
+      })
+      .catch(() => {});
   }, []);
 
   // persist
@@ -118,6 +154,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         input: opts.input,
         kind: opts.kind,
         batchId: opts.batchId,
+        context: opts.context,
         status: "running",
         steps: [{ kind: "status", label: "Starting…", ts: Date.now() }],
         text: "",
@@ -126,7 +163,18 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
       setJobs((js) => [job, ...js]);
 
       if (!cliId) {
-        patch(id, (j) => ({ ...j, status: "error", endedAt: Date.now(), steps: [...j.steps, { kind: "status", label: "No CLI configured — open Config", ts: Date.now() }] }));
+        const endedAt = Date.now();
+        const error = "No CLI configured — open Config";
+        const steps = [
+          { kind: "status" as const, label: "Starting…", ts: job.startedAt },
+          { kind: "status" as const, label: error, ts: endedAt },
+        ];
+        patch(id, (j) => ({ ...j, status: "error", error, endedAt, steps }));
+        fetch("/api/runs/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, title: opts.title, subtitle: opts.subtitle, kind: opts.kind, batchId: opts.batchId, page: opts.page, input: opts.input, status: "error", error, startedAt: job.startedAt, endedAt, steps, output: "" }),
+        }).catch(() => {});
         return id;
       }
 
@@ -136,34 +184,44 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         let reportN: string | undefined = /^\d+$/.test(opts.input.trim()) ? opts.input.trim() : latchReportNum(opts.page ?? "");
         let doneTokens = 0; // per-run token cost, forwarded on the done event (#6)
         let doneCostUsd: number | null = null;
+        let outputTruncated = false;
+        let finished = false;
         const steps: JobStep[] = [];
         const latchReport = (hay: string) => {
           const n = latchReportNum(hay);
           if (n) reportN = n;
         };
         const finish = (status: "done" | "error", lastLabel?: string) => {
+          if (finished) return;
+          finished = true;
           const result = status === "done" ? parseVerdict(verdictLine || text) : undefined;
-          const cost = status === "done" && doneTokens > 0 ? { tokens: doneTokens, usd: doneCostUsd ?? undefined } : undefined;
+          const cost = doneTokens > 0 ? { tokens: doneTokens, usd: doneCostUsd ?? undefined } : undefined;
+          const error = status === "error" ? lastLabel || "Worker failed" : undefined;
           latchReport(`${verdictLine}\n${text}`);
+          const endedAt = Date.now();
+          const finalSteps = lastLabel ? [...steps, { kind: "status" as const, label: lastLabel, ts: endedAt }] : steps;
           patch(id, (j) => ({
             ...j,
             status,
             result,
+            error,
             cost,
             reportN,
-            endedAt: Date.now(),
-            steps: lastLabel ? [...j.steps, { kind: "status", label: lastLabel, ts: Date.now() }] : j.steps,
+            outputTruncated,
+            endedAt,
+            steps: lastLabel ? [...j.steps, { kind: "status", label: lastLabel, ts: endedAt }] : j.steps,
           }));
-          // persist a readable log file so the CLI/assistant can read past runs
+          // Persist both successful and failed runs so the worker log is a
+          // truthful history, including the useful failure message.
+          fetch("/api/runs/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, title: opts.title, subtitle: opts.subtitle, kind: opts.kind, batchId: opts.batchId, reportN, page: opts.page, input: opts.input, status, error, startedAt: job.startedAt, endedAt, result, cost, steps: finalSteps, output: text, outputTruncated }),
+          }).catch(() => {});
           if (status === "done") {
-            fetch("/api/runs/save", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id, title: opts.title, subtitle: opts.subtitle, page: opts.page, input: opts.input, result, cost, steps, output: text }),
-            }).catch(() => {});
             // Tell server-snapshot surfaces (Today, pipeline) to refetch — the
             // worker just wrote a real tracker row / report they don't yet see.
-            if (typeof window !== "undefined" && ["evaluate", "pdf", "cover", "email", "contacto", "titles"].includes(opts.kind ?? "")) {
+            if (typeof window !== "undefined" && ["evaluate", "pdf", "cover", "email", "contacto", "titles", "interview-prep", "interview-questions", "interview-plan", "interview-practice", "interview-debrief", "interview-redflag"].includes(opts.kind ?? "")) {
               window.dispatchEvent(new CustomEvent("co-job-done", { detail: { kind: opts.kind, input: opts.input } }));
             }
           }
@@ -173,7 +231,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
           const res = await fetch("/api/run", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ kind: opts.kind, input: opts.input, cliId }),
+            body: JSON.stringify({ kind: opts.kind, input: opts.input, cliId, context: opts.context }),
           });
           if (!res.ok || !res.body) {
             const e = await res.json().catch(() => ({}));
@@ -205,8 +263,9 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
                   const vm = full.match(/VERDICT:[^\n]*/i);
                   if (vm) verdictLine = vm[0];
                   latchReport(full);
-                  text = full.slice(-8000);
-                  patch(id, (j) => ({ ...j, text, reportN }));
+                  outputTruncated = full.length > MAX_JOB_OUTPUT;
+                  text = full.slice(-MAX_JOB_OUTPUT);
+                  patch(id, (j) => ({ ...j, text, reportN, outputTruncated }));
                 } else if (ev.type === "done") {
                   // finish happens on stream-close; capture the per-run cost it carries
                   if (typeof ev.tokens === "number") doneTokens = ev.tokens;

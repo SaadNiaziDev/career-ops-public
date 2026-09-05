@@ -30,11 +30,15 @@ export default {
       .filter(j => j && typeof j === 'object'
         && typeof j.title === 'string' && j.title.trim() !== ''
         && typeof j.url === 'string' && /^https?:\/\//i.test(j.url.trim()))
-      .map(j => ({
-        title: j.title.trim(),
-        url: j.url.trim(),
-        company: typeof j.company_name === 'string' && j.company_name.trim() ? j.company_name.trim() : (entry.name || 'Working Nomads'),
-        location: typeof j.location === 'string' ? j.location.trim() : '',
-      }));
+      .map(j => {
+        const description = typeof j.description === 'string' ? j.description.trim() : '';
+        return {
+          title: j.title.trim(),
+          url: j.url.trim(),
+          company: typeof j.company_name === 'string' && j.company_name.trim() ? j.company_name.trim() : (entry.name || 'Working Nomads'),
+          location: typeof j.location === 'string' ? j.location.trim() : '',
+          ...(description ? { description } : {}),
+        };
+      });
   },
 };

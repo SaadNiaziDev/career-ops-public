@@ -16,6 +16,8 @@ const RECENCY = [
   { label: "30d", days: 30 },
 ];
 
+const REMOTE_LOCATIONS = ["Remote", "Worldwide", "Anywhere", "Global", "Work from anywhere"];
+
 function KeywordField({
   values,
   tone,
@@ -129,6 +131,31 @@ export function FilterBuilder({
       <div>
         <Label>Exclude</Label>
         <KeywordField values={filters.negative} tone="exc" placeholder="manager, sales, contract…" onChange={(v) => set({ negative: v })} />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[12px] font-medium text-muted">Quick focus</span>
+        <Md3Chip
+          active={filters.alwaysAllow.length === 0 && REMOTE_LOCATIONS.every((location) => filters.allow.includes(location))}
+          onClick={() => set({ allow: REMOTE_LOCATIONS, alwaysAllow: [] })}
+        >
+          <MaterialSymbol name="public" size={15} />
+          Remote worldwide
+        </Md3Chip>
+        {filters.alwaysAllow.length > 0 && (
+          <Md3Chip
+            active={filters.alwaysAllow.length > 0 && REMOTE_LOCATIONS.every((location) => filters.allow.includes(location))}
+            onClick={() => set({ allow: REMOTE_LOCATIONS })}
+          >
+            <MaterialSymbol name="home_work" size={15} />
+            Home + remote
+          </Md3Chip>
+        )}
+        {(filters.allow.length > 0 || filters.alwaysAllow.length > 0) && (
+          <button type="button" onClick={() => set({ allow: [], alwaysAllow: [] })} className="text-[12px] text-muted hover:text-foreground">
+            Clear location focus
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-end gap-x-8 gap-y-4">

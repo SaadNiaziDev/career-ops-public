@@ -133,6 +133,7 @@ export function parseJobspressoFeed(xml) {
     if (!title) continue;
     const company = tagText(item, "job_listing:company") || "";
     const location = tagText(item, "job_listing:location");
+    const description = tagText(item, "description");
 
     jobs.push({
       title,
@@ -140,6 +141,7 @@ export function parseJobspressoFeed(xml) {
       location,
       url,
       postedAt: toEpochMs(tagText(item, "pubDate")),
+      ...(description ? { description } : {}),
     });
   }
 

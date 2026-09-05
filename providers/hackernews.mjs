@@ -57,7 +57,7 @@ const ENTITY_RE = /&amp;|&lt;|&gt;|&quot;|&#x27;|&#39;|&nbsp;/g;
  *
  * @param {string} text  Raw comment text (may contain HTML; tags are stripped).
  * @param {string} threadUrl  Fallback url (the HN thread) if no URL in comment.
- * @returns {{ title: string, url: string, company: string, location: string } | null}
+ * @returns {{ title: string, url: string, company: string, location: string, description: string } | null}
  *   null when the comment is empty, deleted, or carries no usable title.
  */
 export function parseHnComment(text, threadUrl = '') {
@@ -107,7 +107,7 @@ export function parseHnComment(text, threadUrl = '') {
   const url = extractUrl(plain) || threadUrl;
   if (!url) return null;
 
-  return { title, url, company, location };
+  return { title, url, company, location, description: plain };
 }
 
 /**
@@ -170,6 +170,7 @@ export default {
         url: parsed.url,
         company: parsed.company || (entry.name || 'HN Hiring'),
         location: parsed.location,
+        description: parsed.description,
         // Algolia returns created_at as ISO string.
         ...(child.created_at
           ? { postedAt: Date.parse(child.created_at) || undefined }

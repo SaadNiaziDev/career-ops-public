@@ -7,7 +7,7 @@ import { PageShell } from "@/components/dossier/page-shell";
 import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
 import { DossierStack } from "@/components/dossier/dossier-stack";
 import { usePipeline } from "@/components/pipeline/pipeline-provider";
-import { jobDestinationHref, resolveReportNum } from "@/components/jobs/job-utils";
+import { humanizeJobKind, jobDestinationHref, resolveReportNum } from "@/components/jobs/job-utils";
 
 function StatusIcon({ status }: { status: "running" | "done" | "error" }) {
   if (status === "running") {
@@ -63,7 +63,11 @@ export default function JobsHistory() {
                       {j.title}
                     </Link>
                     <p className="truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
-                      {j.result?.summary || j.subtitle}
+                      {j.result?.summary || j.subtitle || humanizeJobKind(j.kind)}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-[var(--md-sys-color-outline)]">
+                      {humanizeJobKind(j.kind)} · {j.steps.length} updates
+                      {j.error ? ` · ${j.error}` : ""}
                     </p>
                   </div>
                   {j.result?.score != null && (

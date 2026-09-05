@@ -41,7 +41,8 @@ export const ATS_LABEL: Record<AtsSource, string> = {
 
 /** The full UI filter state. The keyword/location lists mirror scan.mjs's
  *  buildTitleFilter / buildLocationFilter semantics; sinceDays/ats/limitPerAts map
- *  to scan-ats-full.mjs's --since / --ats / --limit. */
+ *  to scan-ats-full.mjs's --since / --ats / --limit. Explore also includes the
+ *  enabled remote board providers from the user's portals.yml. */
 export type ExploreFilters = {
   positive: string[];
   negative: string[];

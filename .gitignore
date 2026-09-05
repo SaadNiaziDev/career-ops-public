@@ -16,6 +16,7 @@ data/agent-inbox.md
 data/active-interviews.md
 data/reply-candidates.json
 data/contacts.tsv
+data/interview-rounds.tsv
 data/drafts/
 data/titles-suggestions.json
 data/parser-output/**/*.json

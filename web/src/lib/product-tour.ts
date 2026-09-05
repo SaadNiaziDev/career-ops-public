@@ -57,7 +57,7 @@ export const TOUR_PHASES: Record<TourPhaseId, TourPhase> = {
         target: "[data-co-tour='welcome']",
         title: "Welcome to career-ops",
         content: "Everything runs locally on your machine. First we connect an AI CLI, then turn your résumé into cv.md.",
-        disableBeacon: true,
+        skipBeacon: true,
         placement: "bottom",
       },
       {
@@ -85,7 +85,7 @@ export const TOUR_PHASES: Record<TourPhaseId, TourPhase> = {
         target: "[data-co-tour='nav-rail']",
         title: "Navigation",
         content: "The rail is your map: Today, Add job, Explore, Pipeline, Outreach, Portals, Analytics, CV, and Config.",
-        disableBeacon: true,
+        skipBeacon: true,
         placement: "right",
       },
       {
@@ -119,7 +119,7 @@ export const TOUR_PHASES: Record<TourPhaseId, TourPhase> = {
         target: "[data-co-tour='explore-modes']",
         title: "Two discovery modes",
         content: "Scan runs free against portals.yml (no AI tokens). AI Hunt uses your CLI for natural-language search on the open web.",
-        disableBeacon: true,
+        skipBeacon: true,
         placement: "bottom",
       },
       {
@@ -147,7 +147,7 @@ export const TOUR_PHASES: Record<TourPhaseId, TourPhase> = {
         target: "[data-co-tour='pipeline-tabs']",
         title: "Inbox & stages",
         content: "Inbox holds unscored URLs. After evaluation, roles move through Evaluated → Applied → Interview → Offer.",
-        disableBeacon: true,
+        skipBeacon: true,
         placement: "bottom",
       },
       {
@@ -175,7 +175,7 @@ export const TOUR_PHASES: Record<TourPhaseId, TourPhase> = {
         target: "[data-co-tour='add-job-hub']",
         title: "Paste a job URL",
         content: "Drop a careers or ATS link. career-ops verifies the posting, scores it A–F against your CV, and generates a report + tailored PDF.",
-        disableBeacon: true,
+        skipBeacon: true,
         placement: "bottom",
       },
       {
@@ -197,7 +197,7 @@ export const TOUR_PHASES: Record<TourPhaseId, TourPhase> = {
         target: "[data-co-tour='apply-intro']",
         title: "Application assist",
         content: "Paste an application URL. We read the form on your machine, draft answers from cv.md, and fill fields after you approve. Never auto-submits.",
-        disableBeacon: true,
+        skipBeacon: true,
         placement: "bottom",
       },
       {
@@ -219,7 +219,7 @@ export const TOUR_PHASES: Record<TourPhaseId, TourPhase> = {
         target: "[data-co-tour='cv-editor']",
         title: "CV studio",
         content: "cv.md is the single source of truth for every generated draft. Edit here; evaluations and PDFs read this file.",
-        disableBeacon: true,
+        skipBeacon: true,
         placement: "bottom",
       },
       {
@@ -241,7 +241,7 @@ export const TOUR_PHASES: Record<TourPhaseId, TourPhase> = {
         target: "[data-co-tour='portals-hero']",
         title: "Portal scanner config",
         content: "portals.yml controls free scans: tracked companies, search queries, title_filter.positive, and location gates.",
-        disableBeacon: true,
+        skipBeacon: true,
         placement: "bottom",
       },
       {
@@ -263,7 +263,7 @@ export const TOUR_PHASES: Record<TourPhaseId, TourPhase> = {
         target: "[data-co-tour='outreach-intro']",
         title: "Contacts & outreach",
         content: "People tied to your applications — recruiters, hiring managers, peers. Saved from reports via Find contacts; grouped by company.",
-        disableBeacon: true,
+        skipBeacon: true,
         placement: "bottom",
       },
       {
@@ -291,7 +291,7 @@ export const TOUR_PHASES: Record<TourPhaseId, TourPhase> = {
         target: "[data-co-tour='analytics-hero']",
         title: "Search analytics",
         content: "Retrospective on your pipeline — export CSV, average scores, interviews, and offers across all tracked evaluations.",
-        disableBeacon: true,
+        skipBeacon: true,
         placement: "bottom",
       },
       {
@@ -318,7 +318,7 @@ export const TOUR_PHASES: Record<TourPhaseId, TourPhase> = {
         target: "[data-co-tour='config-cli']",
         title: "Engines & keys",
         content: "Pick Claude Code, Codex, or Cursor Agent. Set timeouts, worker concurrency, and provider keys for AI Hunt.",
-        disableBeacon: true,
+        skipBeacon: true,
         placement: "bottom",
       },
       {

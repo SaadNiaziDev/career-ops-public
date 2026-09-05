@@ -117,9 +117,11 @@ export function normalize4dwJob(j, fallbackCompany) {
   const base = [city, country].filter(Boolean).join(', ');
   const remote = j.work_arrangement === 'remote' || first.work_arrangement === 'remote';
   const location = [base, remote ? 'Remote' : ''].filter(Boolean).join(', ');
+  const description = [j.description, j.description_html, j.content]
+    .find(value => typeof value === 'string' && value.trim())?.trim() || '';
 
   /** @type {{ title: string, url: string, company: string, location: string, postedAt?: number }} */
-  const job = { title, url, company, location };
+  const job = { title, url, company, location, ...(description ? { description } : {}) };
   const postedAt = toEpochMs(j.posted);
   if (postedAt !== undefined) job.postedAt = postedAt;
   return job;

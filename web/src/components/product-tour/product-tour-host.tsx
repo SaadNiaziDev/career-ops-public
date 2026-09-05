@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Joyride, { type CallBackProps, STATUS } from "react-joyride";
+import { Joyride, EVENTS, STATUS, type EventData } from "react-joyride";
 import {
   TOUR_PHASES,
   markPhaseComplete,
@@ -97,11 +97,11 @@ export function ProductTourHost() {
     [phase, phaseId, hasCv, router],
   );
 
-  const onCallback = useCallback(
-    (data: CallBackProps) => {
-      if (data.type === "step:after" && data.action === "next") setStepIndex(data.index + 1);
-      if (data.status === STATUS.FINISHED) finish(false);
-      if (data.status === STATUS.SKIPPED) finish(true);
+  const onEvent = useCallback(
+    (data: EventData) => {
+      if (data.type === EVENTS.STEP_AFTER && data.action === "next") setStepIndex(data.index + 1);
+      if (data.type === EVENTS.TOUR_END && data.status === STATUS.FINISHED) finish(false);
+      if (data.type === EVENTS.TOUR_END && data.status === STATUS.SKIPPED) finish(true);
     },
     [finish],
   );
@@ -114,12 +114,15 @@ export function ProductTourHost() {
       run={run}
       stepIndex={stepIndex}
       continuous
-      showProgress
-      showSkipButton
       scrollToFirstStep
-      disableOverlayClose
-      callback={onCallback}
-      styles={{ options: { zIndex: 10000, primaryColor: "var(--md-sys-color-primary)" } }}
+      onEvent={onEvent}
+      options={{
+        showProgress: true,
+        overlayClickAction: false,
+        buttons: ["back", "close", "primary", "skip"],
+        primaryColor: "var(--md-sys-color-primary)",
+        zIndex: 10000,
+      }}
       locale={{
         back: "Back",
         close: "Close",

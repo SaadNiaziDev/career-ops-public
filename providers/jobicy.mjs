@@ -71,6 +71,8 @@ export function parseJobicyResponse(json, defaultCompany = 'Jobicy') {
       const company = typeof j.companyName === 'string' && j.companyName.trim() ? j.companyName.trim() : defaultCompany;
       const location = typeof j.jobGeo === 'string' ? j.jobGeo.trim() : '';
       const postedAt = toEpochMs(j.pubDate);
+      const description = [j.jobDescription, j.description]
+        .find(value => typeof value === 'string' && value.trim())?.trim() || '';
 
       return {
         title,
@@ -78,6 +80,7 @@ export function parseJobicyResponse(json, defaultCompany = 'Jobicy') {
         company,
         location,
         postedAt,
+        ...(description ? { description } : {}),
       };
     })
     .filter(j => j !== null);

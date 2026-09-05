@@ -141,6 +141,7 @@ export function parseWwrFeed(xml, defaultCompany = 'We Work Remotely') {
 
     const { company, title } = splitTitle(rawTitle, fallback);
     const location = tagText(item, 'region') || tagText(item, 'category');
+    const description = tagText(item, 'description');
 
     jobs.push({
       title,
@@ -148,6 +149,7 @@ export function parseWwrFeed(xml, defaultCompany = 'We Work Remotely') {
       location,
       url,
       postedAt: toEpochMs(tagText(item, 'pubDate')),
+      ...(description ? { description } : {}),
     });
   }
 

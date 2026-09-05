@@ -9,11 +9,11 @@ function Chip({ label, tone }: { label: string; tone: Tone }) {
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center rounded-full border px-2.5 py-0.5 text-xs",
+        "inline-flex max-w-full items-center rounded-2xl border px-2.5 py-1 text-xs",
         TONE_OUTLINE[tone],
       )}
     >
-      <span className="truncate">{label}</span>
+      <span className="line-clamp-2 whitespace-normal leading-snug">{label}</span>
     </span>
   );
 }
@@ -45,6 +45,13 @@ export function VerdictCard({
   const tone = scoreStr ? scoreTone(String(scoreStr)) : "muted";
   const leg = summary.legitimacy_tier || legitimacy || "";
   const legTone = leg ? legitimacyTone(leg) : "muted";
+  const facts = [
+    summary.confidence ? { label: "Confidence", value: summary.confidence } : null,
+    summary.advertised_comp !== undefined
+      ? { label: "Comp from posting", value: summary.advertised_comp || "Not stated" }
+      : null,
+    summary.via ? { label: "Source", value: summary.via } : null,
+  ].filter((fact): fact is { label: string; value: string } => fact !== null);
 
   return (
     <section className="rounded-[var(--md-sys-shape-corner-large)] border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] p-4 sm:p-5">
@@ -108,6 +115,16 @@ export function VerdictCard({
           {summary.top_strengths && summary.top_strengths.length > 0 && (
             <ChipColumn title="Strengths" tone="good" items={summary.top_strengths} />
           )}
+        </div>
+      )}
+      {facts.length > 0 && (
+        <div className="mt-4 grid gap-3 border-t border-[var(--md-sys-color-outline-variant)] pt-3 sm:grid-cols-3">
+          {facts.map((fact) => (
+            <div key={fact.label} className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--md-sys-color-outline)]">{fact.label}</p>
+              <p className="mt-1 break-words text-sm text-[var(--md-sys-color-on-surface-variant)]">{fact.value}</p>
+            </div>
+          ))}
         </div>
       )}
     </section>

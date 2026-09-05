@@ -116,12 +116,15 @@ export function parseHimalayasResponse(json) {
     const url = cleanHimalayasUrl(item.applicationLink) || cleanHimalayasUrl(item.guid);
     if (!url) continue;
 
+    const description = [item.description, item.descriptionHtml, item.jobDescription]
+      .find(value => typeof value === 'string' && value.trim())?.trim() || '';
     jobs.push({
       title,
       url,
       company: cleanText(item.companyName),
       location: locationText(item.locationRestrictions),
       postedAt: toEpochMs(item.pubDate),
+      ...(description ? { description } : {}),
     });
   }
 

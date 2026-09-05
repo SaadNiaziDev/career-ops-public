@@ -15,9 +15,11 @@ either side without re-inferring who spoke:
 company: Acme Corp
 role: Instructional Designer
 round: behavioral
+round_no: 2
 date: 2026-06-01
 interviewer_role: Senior HR Partner
 source: debrief
+outcome: advanced
 ---
 
 ## Q1
@@ -27,7 +29,9 @@ source: debrief
 ```
 
 `round`: `screen | hiring-manager | technical | system-design | behavioral | onsite | final`.
+`round_no`: positive integer identifying the application round. Required for newly generated sessions.
 `source`: `debrief | practice | mock | manual`.
+`outcome`: `pending | advanced | rejected`. Practice and mock sessions use `pending`.
 
 ## Competency tags (optional)
 

@@ -3328,6 +3328,8 @@ console.log('\n13. Location filter — always_allow tier');
 try {
   const {
     buildLocationFilter,
+    needsRemoteRelocationReview,
+    hasRelocationEvidence,
     buildContentFilter,
     buildPostingAgeFilter,
     shouldDedupScanHistoryRow,
@@ -3514,6 +3516,31 @@ try {
     pass('relocation_override stays inert when disabled or absent (description is ignored)');
   } else {
     fail('relocation_override must not rescue when disabled or unconfigured');
+  }
+
+  // Remote listings with a geographic qualifier must show relocation/visa
+  // support. A bare/global remote label and the candidate's home region pass.
+  const remotePolicy = {
+    always_allow: ['Pakistan', 'Worldwide', 'Anywhere', 'Global', 'Work from anywhere'],
+    allow: ['Remote', 'Pakistan'],
+    block: ['India', 'US only', 'EU only'],
+    relocation_override: { enabled: true, keywords: ['visa sponsorship', 'relocation'] },
+  };
+  if (
+    needsRemoteRelocationReview('Remote', remotePolicy) === false &&
+    needsRemoteRelocationReview('Worldwide', remotePolicy) === false &&
+    needsRemoteRelocationReview('Remote, Pakistan', remotePolicy) === false &&
+    needsRemoteRelocationReview('Remote — United States', remotePolicy) === true &&
+    needsRemoteRelocationReview('Remote, Singapore', remotePolicy) === true &&
+    needsRemoteRelocationReview('USA', remotePolicy, true) === true &&
+    needsRemoteRelocationReview('Remote — US only', remotePolicy) === false &&
+    hasRelocationEvidence('We offer visa sponsorship for this role.', remotePolicy) === true &&
+    hasRelocationEvidence('No visa sponsorship is available.', remotePolicy) === false &&
+    hasRelocationEvidence('Great team and free lunch.', remotePolicy) === false
+  ) {
+    pass('qualified remote listings require positive relocation evidence while global/home-region remote passes');
+  } else {
+    fail('qualified remote location gate did not enforce positive relocation evidence');
   }
 
   if (

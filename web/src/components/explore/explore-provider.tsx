@@ -227,7 +227,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     setPartial(false);
     setError("");
     setAiTrace([]);
-    setStatus("Casting the net across the ATS network…");
+    setStatus("Casting the net across ATS and remote boards…");
     const init: Partial<Record<AtsSource, SourceState>> = {};
     for (const a of f.ats) init[a] = { state: "queued" };
     setSources(init);

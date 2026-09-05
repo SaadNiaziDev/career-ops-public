@@ -45,7 +45,7 @@ export function useCountUp(target: number): number {
   return Math.round(val);
 }
 
-function SourceChip({ ats, s }: { ats: AtsSource; s?: SourceState }) {
+function SourceChip({ ats, label, s }: { ats: AtsSource | "remote"; label?: string; s?: SourceState }) {
   const state = s?.state ?? "queued";
   const pct = s?.total ? Math.min(100, Math.round(((s.done ?? 0) / s.total) * 100)) : state === "swept" || state === "noisy" ? 100 : 0;
   return (
@@ -57,7 +57,7 @@ function SourceChip({ ats, s }: { ats: AtsSource; s?: SourceState }) {
       ) : (
         <span className="size-2.5 rounded-full border border-current opacity-40" />
       )}
-      <span className="text-[13px] font-medium text-foreground">{ATS_LABEL[ats]}</span>
+      <span className="text-[13px] font-medium text-foreground">{label ?? ATS_LABEL[ats as AtsSource]}</span>
       <div className="ml-auto flex flex-col items-end gap-1">
         {state === "noisy" && <span className="text-[10px] text-faint">~{s?.unreachable} skipped</span>}
         <div className="co-src__track">
@@ -95,11 +95,18 @@ export function DiscoveringState() {
           {ATS_SOURCES.map((a) => (
             <SourceChip key={a} ats={a} s={sources[a]} />
           ))}
+          {(sources as Partial<Record<string, SourceState>>).remote && (
+            <SourceChip
+              ats="remote"
+              label="Remote boards"
+              s={(sources as Partial<Record<string, SourceState>>).remote}
+            />
+          )}
         </div>
 
         <p className="flex items-center gap-2 text-[13px] text-faint">
           <MaterialSymbol name="progress_activity" size={16} className="animate-spin" />
-          {status || "Casting the net across the ATS network…"}
+          {status || "Casting the net across ATS and remote boards…"}
         </p>
 
         {phase !== "revealing" && (

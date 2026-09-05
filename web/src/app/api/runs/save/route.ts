@@ -10,10 +10,19 @@ type Body = {
   id?: string;
   title?: string;
   subtitle?: string;
+  kind?: string;
+  reportN?: string;
+  batchId?: string;
   page?: string;
   input?: string;
-  result?: { score: number | null; summary: string };
-  steps?: { kind: string; label: string }[];
+  status?: "running" | "done" | "error";
+  error?: string;
+  startedAt?: number;
+  endedAt?: number;
+  result?: { score: number | null; summary: string; tone?: string };
+  cost?: { tokens: number; usd?: number };
+  outputTruncated?: boolean;
+  steps?: { kind: string; label: string; ts?: number }[];
   output?: string;
 };
 
@@ -35,6 +44,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "mkdir failed" }, { status: 500 });
   }
   const safeId = String(b.id).replace(/[^a-z0-9_-]/gi, "");
+  if (!safeId) return NextResponse.json({ error: "invalid id" }, { status: 400 });
   const steps = (b.steps ?? []).map((s) => `- ${s.kind === "tool" ? `🔧 ${s.label}` : s.label}`).join("\n");
   const verdict = b.result?.score != null ? `${b.result.score}/5 — ${b.result.summary || ""}` : "—";
   const md = `# Web run · ${b.title || b.id}
@@ -50,8 +60,28 @@ ${steps}
 ## Output
 ${b.output || ""}
 `;
+  const snapshot = {
+    id: b.id,
+    title: b.title || b.id,
+    subtitle: b.subtitle,
+    kind: b.kind,
+    reportN: b.reportN,
+    batchId: b.batchId,
+    page: b.page,
+    input: b.input,
+    status: b.status === "error" ? "error" : "done",
+    error: b.error,
+    startedAt: b.startedAt ?? Date.now(),
+    endedAt: b.endedAt,
+    result: b.result,
+    cost: b.cost,
+    outputTruncated: b.outputTruncated ?? false,
+    steps: b.steps ?? [],
+    text: b.output || "",
+  };
   try {
     fs.writeFileSync(path.join(dir, `${safeId}.md`), md);
+    fs.writeFileSync(path.join(dir, `${safeId}.json`), JSON.stringify(snapshot, null, 2));
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "write failed" }, { status: 500 });

@@ -21,8 +21,36 @@ import { DEFAULT_FILTERS, cleanChips, type ExploreFilters } from "@/lib/explore"
  */
 type FilterLists = Pick<ExploreFilters, "positive" | "negative" | "allow" | "block" | "alwaysAllow">;
 
+const REMOTE_BOARD_PROVIDERS = new Set([
+  "weworkremotely",
+  "remotive",
+  "himalayas",
+  "remoteok",
+  "hackernews",
+  "jobicy",
+  "workingnomads",
+  "4dayweek",
+  "nodesk",
+  "jobspresso",
+]);
+
 function listFrom(v: unknown): string[] {
   return cleanChips(v);
+}
+
+function configuredRemoteBoards(): { name: string; provider: string; max_pages?: number }[] {
+  const portals = loadYaml("portals.yml");
+  const boards = portals?.job_boards;
+  if (!Array.isArray(boards)) return [];
+  return boards.flatMap((raw) => {
+    if (!raw || typeof raw !== "object") return [];
+    const board = raw as Record<string, unknown>;
+    const provider = typeof board.provider === "string" ? board.provider.trim().toLowerCase() : "";
+    const name = typeof board.name === "string" ? board.name.trim() : "";
+    if (board.enabled === false || !name || !REMOTE_BOARD_PROVIDERS.has(provider)) return [];
+    const maxPages = Number.isInteger(board.max_pages) && Number(board.max_pages) > 0 ? Number(board.max_pages) : undefined;
+    return [{ name, provider, ...(maxPages ? { max_pages: maxPages } : {}) }];
+  });
 }
 
 /** Serialize filters into a minimal, valid portals.yml. Scalars go through
@@ -43,6 +71,15 @@ export function serializePortals(f: FilterLists): string {
     out += block("always_allow", f.alwaysAllow);
     out += block("allow", f.allow);
     out += block("block", f.block);
+  }
+  const remoteBoards = configuredRemoteBoards();
+  if (remoteBoards.length) {
+    out += "job_boards:\n";
+    for (const board of remoteBoards) {
+      out += `  - name: ${JSON.stringify(board.name)}\n`;
+      out += `    provider: ${JSON.stringify(board.provider)}\n`;
+      if (board.max_pages) out += `    max_pages: ${board.max_pages}\n`;
+    }
   }
   return out;
 }

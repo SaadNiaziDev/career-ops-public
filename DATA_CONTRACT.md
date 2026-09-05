@@ -17,6 +17,7 @@ This fork is UI-first: the web app (`web/`) and Node scripts share the same file
 | `voice-dna.md` | Writing voice guardrail (optional) |
 | `article-digest.md` | Proof points from portfolio |
 | `interview-prep/story-bank.md` | STAR+R stories |
+| `interview-prep/question-bank.md` | Interview question bank with gap tracking |
 | `interview-prep/{company}-{role}.md` | Company-specific interview prep |
 | `interview-prep/sessions/*.md` | Session transcripts (gitignored except scaffold) |
 | `portals.yml` | Customized company / scan config |
@@ -26,6 +27,7 @@ This fork is UI-first: the web app (`web/`) and Node scripts share the same file
 | `data/scan-runs.tsv` | Per-run scan counters |
 | `data/follow-ups.md` | Follow-up history |
 | `data/contacts.tsv` | Outreach contacts linked to tracker rows |
+| `data/interview-rounds.tsv` | Per-tracker interview round schedule and status |
 | `data/drafts/*` | Cover letter, email, and contact outreach drafts |
 | `data/titles-suggestions.json` | CV-driven adjacent title suggestions (titles mode) |
 | `data/offers/*` | Received offers/contracts and prep reports (PII — gitignored) |

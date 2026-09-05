@@ -220,6 +220,7 @@ function ReportBody({
       {evidence.length > 0 && (
         <Md3Collapse
           className="report-toplevel-collapse"
+          defaultOpen
           title={
             <div className="flex items-center gap-2.5">
               <span className="report-section-icon">
@@ -384,6 +385,7 @@ export function ReportView({
                 role={app?.role}
                 url={url}
                 pdfReady={(app?.pdf ?? "").includes("✅")}
+                status={app?.status}
                 variant="rail"
               />
               {url && url.startsWith("http") && (

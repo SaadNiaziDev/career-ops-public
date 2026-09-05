@@ -222,6 +222,7 @@ Levels are additive — they are executed in order, and results are merged and d
    - Empty `allow` → passes (already cleared block).
    - Non-empty `allow` → must match at least one keyword.
    - **`relocation_override`** (optional): when enabled, a posting whose location would be rejected can still pass if the JD body (title + description) contains one of `relocation_override.keywords` (e.g. "visa sponsorship", "relocation package"). Requires description text — for Greenhouse boards, set `fetch_content: true` on the company entry. `block` still wins.
+   - A generic `Remote`/`Worldwide` label passes. A qualified remote label such as `Remote — United States` or `Remote, Singapore` requires positive relocation, visa, or sponsorship evidence. The scanner reads description text from the feed first, then fetches the posting page only when it is on the supplying ATS/board host; if evidence is unavailable, drop the job.
    - All matches are case-insensitive substring matches.
    - The location is persisted as the 7th column in `scan-history.tsv` for later auditing.
 

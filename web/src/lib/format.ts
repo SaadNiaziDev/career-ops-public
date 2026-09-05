@@ -197,7 +197,7 @@ function parseInlineMap(raw: string): Record<string, unknown> {
   if (!inner) return {};
   const out: Record<string, unknown> = {};
   for (const part of inner.split(",")) {
-    const m = part.match(/^([a-z_]+)\s*:\s*(.+)$/i);
+    const m = part.trim().match(/^([a-z_]+)\s*:\s*(.+)$/i);
     if (m) out[m[1].trim()] = parseYamlScalar(m[2]);
   }
   return out;
@@ -267,7 +267,7 @@ export function parseMachineSummary(md: string): MachineSummary | null {
     }
 
     if (key === "hard_stops" || key === "soft_gaps" || key === "top_strengths" || key === "discard_reasons") {
-      out[key] = [String(parseYamlScalar(rest) ?? "")];
+      out[key] = /^\[\s*\]$/.test(rest) ? [] : [String(parseYamlScalar(rest) ?? "")];
       continue;
     }
 

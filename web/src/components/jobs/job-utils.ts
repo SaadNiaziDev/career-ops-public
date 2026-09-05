@@ -18,8 +18,30 @@ const STEP_LABELS: Record<string, string> = {
   Task: "Working",
 };
 
+const JOB_LABELS: Record<string, string> = {
+  evaluate: "Evaluation",
+  pdf: "Tailored CV",
+  cover: "Cover letter",
+  email: "Application email",
+  contacto: "Recruiter outreach",
+  titles: "Adjacent titles",
+  scan: "Portal scan",
+  discover: "AI discovery",
+  "interview-prep": "Interview preparation",
+  "interview-questions": "Interview question bank",
+  "interview-plan": "Interview round plan",
+  "interview-practice": "Interview practice",
+  "interview-debrief": "Interview debrief",
+  "interview-redflag": "Interview red flags",
+};
+
 export function humanizeStep(label: string): string {
   return STEP_LABELS[label] ?? label;
+}
+
+export function humanizeJobKind(kind?: string): string {
+  if (!kind) return "Worker";
+  return JOB_LABELS[kind] ?? kind.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function isAuthError(job: Job): boolean {

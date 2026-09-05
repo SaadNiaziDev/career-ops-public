@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -12,6 +13,7 @@ import { ApplyButton } from "@/components/apply-button";
 import { CostBadge } from "@/components/cost/cost-badge";
 import type { DraftKind } from "@/lib/contacts";
 import { cn } from "@/lib/cn";
+import { canonStatus } from "@/lib/format";
 
 type DraftState = { kind: DraftKind; content: string } | null;
 
@@ -39,6 +41,7 @@ export function PipelineActions({
   role,
   url,
   pdfReady,
+  status,
   variant = "inline",
 }: {
   n: string;
@@ -46,6 +49,7 @@ export function PipelineActions({
   role?: string;
   url?: string;
   pdfReady: boolean;
+  status?: string;
   variant?: "inline" | "rail";
 }) {
   const { jobs, startJob } = useJobs();
@@ -54,6 +58,10 @@ export function PipelineActions({
   const [available, setAvailable] = useState<DraftKind[]>([]);
   const [notice, setNotice] = useState<{ tone: "info" | "warning" | "success"; text: string } | null>(null);
   const rail = variant === "rail";
+  const showInterview = (() => {
+    const c = canonStatus(status ?? "");
+    return c.includes("INTERVIEW") || c.includes("OFFER");
+  })();
 
   const flash = (tone: "info" | "warning" | "success", text: string) => {
     setNotice({ tone, text });
@@ -141,6 +149,12 @@ export function PipelineActions({
 
   const actions = (
     <>
+      {showInterview ? (
+        <Link href={`/pipeline/${n}/interview`} className={cn("md3-btn-outlined flex w-full items-center justify-center gap-2", rail && "w-full")}>
+          <MaterialSymbol name="psychology" size={18} />
+          Interview workspace
+        </Link>
+      ) : null}
       <GeneratePdfButton n={n} company={company} pdfReady={pdfReady} rail={rail} />
       {actionBtn("cover")}
       {actionBtn("email")}

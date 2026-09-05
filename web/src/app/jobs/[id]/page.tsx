@@ -20,6 +20,7 @@ import {
   fmtElapsed,
   fmtTokens,
   formatCollapsedStep,
+  humanizeJobKind,
   isAuthError,
   jobBackHref,
   jobDuration,
@@ -118,6 +119,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
       input: job.input!,
       page: job.page,
       batchId: job.batchId,
+      context: job.context,
     });
     if (newId) router.push(`/jobs/${newId}`);
     else setRetrying(false);
@@ -175,10 +177,18 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
               {job.subtitle && (
                 <p className="mb-0 text-[var(--md-sys-color-on-surface-variant)]">{job.subtitle}</p>
               )}
+              <p className="mt-1 text-xs text-[var(--md-sys-color-outline)]">{humanizeJobKind(job.kind)} · {job.steps.length} activity updates</p>
             </div>
 
             {job.status === "done" && job.result?.summary && (
               <p className="mb-0 text-[var(--md-sys-color-on-surface-variant)]">{job.result.summary}</p>
+            )}
+
+            {job.status === "error" && job.error && (
+              <div className="md3-alert md3-alert--warning">
+                <MaterialSymbol name="warning" size={18} className="shrink-0" />
+                <span>{job.error}</span>
+              </div>
             )}
 
             {artifacts.length > 0 && (
@@ -302,6 +312,9 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
             </button>
             {outputExpanded ? (
               <div className="md3-collapse__body">
+                {job.outputTruncated && (
+                  <p className="mb-4 text-xs text-[var(--md-sys-color-outline)]">Showing the latest 24,000 characters. The saved report remains the canonical full result.</p>
+                )}
                 <div className="report-prose">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.text}</ReactMarkdown>
                 </div>

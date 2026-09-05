@@ -143,11 +143,13 @@ export function parseNodeskFeed(xml, defaultCompany = 'NoDesk') {
 
     const { title, company } = splitTitle(rawTitle, fallback);
     const postedAt = toEpochMs(tagText(item, 'pubDate'));
+    const description = tagText(item, 'description');
     const job = {
       title,
       company,
       location: '',
       url,
+      ...(description ? { description } : {}),
     };
     if (postedAt !== undefined) job.postedAt = postedAt;
     jobs.push(job);

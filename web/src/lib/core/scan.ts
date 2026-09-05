@@ -9,7 +9,7 @@ export { ATS_SOURCES } from "@/lib/explore";
 
 /**
  * ACL for the discovery engine — orchestrates the REAL core scanner
- * `scan-ats-full.mjs` (reverse ATS discovery, a contract entry-point). We run it
+ * `scan-ats-full.mjs` (reverse ATS + configured remote-board discovery, a contract entry-point). We run it
  * with `--dry-run` so it writes NOTHING (the user reviews + chooses), point it at
  * an EPHEMERAL filter file (never the user's portals.yml), and surface its results.
  *
@@ -103,6 +103,7 @@ export function runDiscovery(filters: ExploreFilters, onEvent: (e: ScanEvent) =>
       ats.join(","),
       "--limit",
       String(Math.max(1, filters.limitPerAts || 150)),
+      "--boards",
     ];
     if (useJson) args.push("--json");
 

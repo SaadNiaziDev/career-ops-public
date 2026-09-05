@@ -43,9 +43,11 @@ const STAGE_TAB_ITEMS = [
 export function PipelineView({
   applications,
   inbox,
+  interviewProgress = {},
 }: {
   applications: Application[];
   inbox: InboxJob[];
+  interviewProgress?: Record<string, { done: number; total: number }>;
 }) {
   const params = useSearchParams();
   const router = useRouter();
@@ -312,6 +314,7 @@ export function PipelineView({
                 label={s.label}
                 stage={s.stage}
                 rows={byStage.buckets.get(s.key) ?? []}
+                interviewProgress={interviewProgress}
                 onSeeAll={() => goTable(s.key)}
               />
             ))}
@@ -320,6 +323,7 @@ export function PipelineView({
               stage="closed"
               rows={byStage.closed}
               showStatus
+              interviewProgress={interviewProgress}
               onSeeAll={() => goTable("ALL")}
             />
           </div>
@@ -424,7 +428,7 @@ export function PipelineView({
           {filtered.length > 0 ? (
             <div>
               {filtered.map((row) => (
-                <PipelineListRow key={row.n} row={row} />
+                <PipelineListRow key={row.n} row={row} interviewProgress={interviewProgress[row.n]} />
               ))}
             </div>
           ) : (
@@ -443,12 +447,14 @@ function BoardColumn({
   stage,
   rows,
   showStatus = false,
+  interviewProgress = {},
   onSeeAll,
 }: {
   label: string;
   stage: "evaluated" | "applied" | "responded" | "interview" | "offer" | "closed";
   rows: Application[];
   showStatus?: boolean;
+  interviewProgress?: Record<string, { done: number; total: number }>;
   onSeeAll: () => void;
 }) {
   const visible = rows.slice(0, BOARD_CAP);
@@ -460,7 +466,7 @@ function BoardColumn({
       </header>
       <div className="flex flex-col gap-2">
         {visible.map((row) => (
-          <BoardCard key={row.n} row={row} showStatus={showStatus} stage={stage} />
+          <BoardCard key={row.n} row={row} showStatus={showStatus} stage={stage} interviewProgress={interviewProgress[row.n]} />
         ))}
         {rows.length === 0 && (
           <div className="rounded-[var(--md-sys-shape-corner-large-increased)] border border-dashed border-[var(--md-sys-color-outline-variant)] px-3 py-6 text-center md-body-small text-[var(--md-sys-color-outline)]">
@@ -481,10 +487,12 @@ function BoardCard({
   row,
   showStatus,
   stage,
+  interviewProgress,
 }: {
   row: Application;
   showStatus: boolean;
   stage: string;
+  interviewProgress?: { done: number; total: number };
 }) {
   const hasScore = !!row.score && row.score.trim() !== "" && row.score.trim() !== "—";
   const href = `/pipeline/${row.n}`;
@@ -503,6 +511,15 @@ function BoardCard({
           <div className="min-w-0 flex-1">
             <span className="block truncate md-title-small text-inherit">{row.company}</span>
             <p className="mt-0.5 line-clamp-2 md-body-medium opacity-80">{row.role}</p>
+            {interviewProgress && interviewProgress.total > 0 ? (
+              <Link
+                href={`/pipeline/${row.n}/interview`}
+                className="pointer-events-auto mt-1 inline-flex items-center gap-1 rounded-[var(--md-sys-shape-corner-small)] bg-[var(--md-sys-color-tertiary-container)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--md-sys-color-on-tertiary-container)]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                R{Math.min(interviewProgress.done + 1, interviewProgress.total)}/{interviewProgress.total}
+              </Link>
+            ) : null}
           </div>
           {hasScore && <ScoreBadge score={row.score} inverted={stage === "offer"} />}
         </div>
@@ -539,7 +556,13 @@ function BoardCard({
   );
 }
 
-function PipelineListRow({ row }: { row: Application }) {
+function PipelineListRow({
+  row,
+  interviewProgress,
+}: {
+  row: Application;
+  interviewProgress?: { done: number; total: number };
+}) {
   const location = applicationLocationLabel(row);
   const href = `/pipeline/${row.n}`;
   return (
@@ -559,6 +582,15 @@ function PipelineListRow({ row }: { row: Application }) {
         </span>
         <p className="flex items-center gap-1 truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
           <span className="truncate">{row.role}</span>
+          {interviewProgress && interviewProgress.total > 0 ? (
+            <Link
+              href={`/pipeline/${row.n}/interview`}
+              className="pointer-events-auto shrink-0 rounded-[var(--md-sys-shape-corner-small)] bg-[var(--md-sys-color-tertiary-container)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--md-sys-color-on-tertiary-container)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              R{Math.min(interviewProgress.done + 1, interviewProgress.total)}/{interviewProgress.total}
+            </Link>
+          ) : null}
         </p>
       </div>
       <span className="pointer-events-none relative z-[1] hidden truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)] lg:block">{location}</span>

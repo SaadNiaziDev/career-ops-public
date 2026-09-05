@@ -129,6 +129,8 @@ location_filter:
 ```
 This is enforced in `scan.mjs` itself (hard filter, not best-effort). The web UI's free-text **Explore → AI search** is a separate, LLM-driven path — it's *instructed* to respect the same filter but isn't code-enforced the same way, so keep your search phrasing specific if you use it.
 
+Remote roles get one extra check: a plain `Remote`/`Worldwide` label passes, while a qualified label such as `Remote — United States` must have positive relocation, visa, or sponsorship language in the feed or trusted posting page. If the posting cannot provide that evidence, the scanner skips it.
+
 ### Everything else
 
 Full customization reference: [AGENTS.md](AGENTS.md) (mode routing, skill list) and [DATA_CONTRACT.md](DATA_CONTRACT.md) (which files are yours vs. system-managed).

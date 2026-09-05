@@ -30,7 +30,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'fs';
-import { pathToFileURL } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import path from 'path';
 import yaml from 'js-yaml';
 
@@ -39,10 +39,22 @@ import greenhouse from './providers/greenhouse.mjs';
 import lever from './providers/lever.mjs';
 import ashby from './providers/ashby.mjs';
 import workday from './providers/workday.mjs';
-import { buildTitleFilter, buildLocationFilter, loadSeenUrls, appendToPipeline, appendToScanHistory, loadBlacklist, matchedTitleKeywords } from './scan.mjs';
+import {
+  buildTitleFilter,
+  buildLocationFilter,
+  needsRemoteRelocationReview,
+  hasRelocationEvidence,
+  fetchRemoteJobDescription,
+  loadSeenUrls,
+  appendToPipeline,
+  appendToScanHistory,
+  loadBlacklist,
+  matchedTitleKeywords,
+} from './scan.mjs';
 import { attachFitScores } from './fit-score.mjs';
 import { SEED_SOURCES, toPortalEntry } from './seeds/vc-portfolios.mjs';
 import { normalizeCompany } from './tracker-utils.mjs';
+import { loadProviders, resolveProvider } from './providers/_registry.mjs';
 
 // ── Config ──────────────────────────────────────────────────────────
 
@@ -120,7 +132,7 @@ const SOURCES = {
 
 const KNOWN_FLAGS = [
   '--since', '--limit', '--ats', '--seeds', '--dry-run', '--liveness',
-  '--verbose', '--md-out', '--json', '--include-undated', '--include-blacklisted',
+  '--verbose', '--md-out', '--json', '--include-undated', '--include-blacklisted', '--boards',
   '--shuffle', '--help', '-h',
 ];
 
@@ -137,6 +149,7 @@ const USAGE = `Usage:
   node scan-ats-full.mjs --liveness           # Playwright-verify matches before writing
   node scan-ats-full.mjs --include-blacklisted # audit: let data/blacklist.md matches through, annotated
   node scan-ats-full.mjs --verbose            # log per-board fetch failures
+  node scan-ats-full.mjs --boards             # include configured remote job boards
   node scan-ats-full.mjs --md-out <dir>       # also write a dated markdown digest to <dir>
   node scan-ats-full.mjs --help               # print this usage block and exit`;
 
@@ -209,6 +222,7 @@ function parseArgs(argv) {
     json: args.includes('--json'),
     includeUndated: args.includes('--include-undated'),
     includeBlacklisted: args.includes('--include-blacklisted'),
+    boards: args.includes('--boards'),
     shuffle: args.includes('--shuffle'),
   };
 }
@@ -350,6 +364,8 @@ export async function runSeedScan(seedId, opts, ctx, seenUrls, label) {
   const cutoff = Date.now() - opts.sinceDays * 86_400_000;
   const offers = [];
   let errors = 0;
+  let remoteRelocationSkipped = 0;
+  const remoteDescriptionCache = new Map();
 
   await parallelEach(capped, CONCURRENCY, async (company) => {
     const entry = toPortalEntry(company);
@@ -380,6 +396,15 @@ export async function runSeedScan(seedId, opts, ctx, seenUrls, label) {
       if (dateClass === 'stale') continue;
       if (dateClass === 'undated' && !opts.includeUndated) continue;
       if (!opts.titleFilter(job.title)) continue;
+      const remoteReview = needsRemoteRelocationReview(job.location, opts.locationFilterConfig);
+      if (remoteReview && !hasRelocationEvidence(job.description, opts.locationFilterConfig)) {
+        const detail = await fetchRemoteJobDescription(job, provider.id, ctx, remoteDescriptionCache);
+        if (detail) job.description = detail;
+        if (!hasRelocationEvidence(job.description, opts.locationFilterConfig)) {
+          remoteRelocationSkipped++;
+          continue;
+        }
+      }
       if (!opts.locationFilter(job.location, job.description)) continue;
       if (seenUrls.has(job.url)) continue;
       seenUrls.add(job.url);
@@ -387,7 +412,7 @@ export async function runSeedScan(seedId, opts, ctx, seenUrls, label) {
     }
   });
 
-  return { offers, errors, total: capped.length };
+  return { offers, errors, total: capped.length, remoteRelocationSkipped };
 }
 
 // ── Parallel fetch with concurrency limit ───────────────────────────
@@ -458,10 +483,11 @@ async function main() {
   // Attach filters to opts so runSeedScan can use them without extra parameters.
   opts.titleFilter = titleFilter;
   opts.locationFilter = locationFilter;
+  opts.locationFilterConfig = config?.location_filter;
 
   const atsSummary = opts.ats.length ? `ats: ${opts.ats.join(', ')}` : '';
   const seedsSummary = opts.seeds.length ? `seeds: ${opts.seeds.join(', ')}` : '';
-  const sourcesSummary = [atsSummary, seedsSummary].filter(Boolean).join(' | ');
+  const sourcesSummary = [atsSummary, opts.boards ? 'configured remote boards' : '', seedsSummary].filter(Boolean).join(' | ');
   log(`Reverse ATS scan — ${sourcesSummary} | since ${opts.sinceDays}d${opts.limit < Infinity ? ` | limit ${opts.limit}/ats` : ''}${opts.shuffle ? ' | shuffled' : ''}${opts.includeUndated ? ' | +undated' : ''}${opts.liveness ? ' | liveness' : ''}${opts.dryRun ? ' | DRY RUN' : ''}`);
 
   const { seen: seenUrls } = loadSeenUrls();
@@ -475,9 +501,11 @@ async function main() {
   const date = new Date().toISOString().slice(0, 10);
 
   const newOffers = [];
+  const remoteDescriptionCache = new Map();
   let totalCompaniesScanned = 0;
   let totalCompaniesAvailable = 0;
   let totalErrors = 0;
+  let remoteRelocationSkipped = 0;
   let droppedNoDate = 0;
   let capHit = false;
   // Aggregated from providers/workday.mjs's jobs.workdayNoDateSkip tag — see
@@ -513,6 +541,15 @@ async function main() {
           if (dateClass === 'stale') continue;
           if (dateClass === 'undated' && !opts.includeUndated) { droppedNoDate++; continue; }
           if (!titleFilter(job.title)) continue;
+          const remoteReview = needsRemoteRelocationReview(job.location, config?.location_filter);
+          if (remoteReview && !hasRelocationEvidence(job.description, config?.location_filter)) {
+            const detail = await fetchRemoteJobDescription(job, name, ctx, remoteDescriptionCache);
+            if (detail) job.description = detail;
+            if (!hasRelocationEvidence(job.description, config?.location_filter)) {
+              remoteRelocationSkipped++;
+              continue;
+            }
+          }
           if (!locationFilter(job.location, job.description)) continue;
           if (seenUrls.has(job.url)) continue;
           seenUrls.add(job.url); // intra-scan dedup
@@ -533,6 +570,54 @@ async function main() {
     log(`\n  done (${errors} unreachable boards skipped)`);
   }
 
+  // Board providers expose broader remote feeds than the reverse ATS dataset.
+  // They are opt-in so the core CLI keeps its existing contract; the web
+  // Explore surface enables them and carries only the user's configured remote
+  // board entries into its ephemeral portals file.
+  if (opts.boards) {
+    const providersDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'providers');
+    const providers = await loadProviders(providersDir);
+    const configuredBoards = Array.isArray(config.job_boards) ? config.job_boards.filter(b => b && typeof b === 'object' && b.enabled !== false) : [];
+    totalCompaniesScanned += configuredBoards.length;
+    log(`\n⚙  remote — ${configuredBoards.length} companies`);
+    let done = 0;
+    let errors = 0;
+    await parallelEach(configuredBoards, Math.min(CONCURRENCY, 8), async (entry) => {
+      const resolved = resolveProvider(entry, providers);
+      try {
+        if (!resolved || resolved.error) throw new Error(resolved?.error || 'no provider matched');
+        const jobs = await resolved.provider.fetch(entry, ctx);
+        for (const job of jobs) {
+          if (!job.url || !job.title) continue;
+          // Remote aggregators often omit a publish date. Keep those postings
+          // with an explicit unknown date; a missing date is not a stale date.
+          if (classifyPostingDate(job, cutoff) === 'stale') continue;
+          if (!titleFilter(job.title)) continue;
+          const remoteReview = needsRemoteRelocationReview(job.location, config?.location_filter, true);
+          if (remoteReview && !hasRelocationEvidence(job.description, config?.location_filter)) {
+            const detail = await fetchRemoteJobDescription(job, resolved.provider.id, ctx, remoteDescriptionCache);
+            if (detail) job.description = detail;
+            if (!hasRelocationEvidence(job.description, config?.location_filter)) {
+              remoteRelocationSkipped++;
+              continue;
+            }
+          }
+          if (!locationFilter(job.location, job.description)) continue;
+          if (seenUrls.has(job.url)) continue;
+          seenUrls.add(job.url);
+          newOffers.push({ ...job, source: `${resolved.provider.id}-board`, dateStatus: job.postedAt ? 'dated' : 'unknown' });
+        }
+      } catch (err) {
+        errors++;
+        if (opts.verbose) console.error(`  ✗ remote/${entry.name}: ${err.message}`);
+      }
+      done++;
+      if (done === configuredBoards.length) progress(`  ${done}/${configuredBoards.length} scanned, ${newOffers.length} total matches\r`);
+    });
+    totalErrors += errors;
+    log(`\n  remote boards done (${errors} unreachable boards skipped)`);
+  }
+
   // ── VC portfolio seed sources (--seeds flag) ───────────────────────
   for (const seedId of opts.seeds) {
     const seedSource = SEED_SOURCES[seedId];
@@ -541,6 +626,7 @@ async function main() {
     if (result && result.offers) {
       totalCompaniesScanned += result.total || 0;
       totalErrors += result.errors || 0;
+      remoteRelocationSkipped += result.remoteRelocationSkipped || 0;
       newOffers.push(...result.offers);
       log(`  done — ${result.total} companies probed, ${result.offers.length} matches (${result.errors} errors)`);
     }
@@ -555,10 +641,11 @@ async function main() {
   offers.sort((a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0) || (b.postedAt || 0) - (a.postedAt || 0));
 
   log(`\n${'━'.repeat(45)}`);
-  log(`Reverse ATS Scan — ${date}`);
+  log(`${opts.boards ? 'Reverse ATS + Remote Network Scan' : 'Reverse ATS Scan'} — ${date}`);
   log(`${'━'.repeat(45)}`);
   log(`Companies scanned:  ${totalCompaniesScanned}${capHit ? ` of ${totalCompaniesAvailable} (capped)` : ''}`);
   log(`Unreachable boards: ${totalErrors}`);
+  if (remoteRelocationSkipped) log(`Restricted remote skipped: ${remoteRelocationSkipped}`);
   // noDateSkipJobs is a subset of droppedNoDate, not a separate pool: every
   // no-postedOn workday posting counted here also hits the per-job undated
   // filter in the scan loop above and gets dropped there too. Report it as
@@ -627,7 +714,7 @@ async function main() {
   if (opts.json) {
     process.stdout.write(JSON.stringify({
       date,
-      sources: opts.ats,
+      sources: [...opts.ats, ...(opts.boards ? ['remote'] : [])],
       sinceDays: opts.sinceDays,
       companiesAvailable: totalCompaniesAvailable,
       companiesScanned: totalCompaniesScanned,
@@ -635,6 +722,7 @@ async function main() {
       datasetStatus,
       postingsKept: offers.length,
       postingsDroppedNoDate: droppedNoDate,
+      postingsFilteredRemoteRelocation: remoteRelocationSkipped,
       postingsFilteredBlacklist: blacklistResult.filteredBlacklist,
       postingsAnnotatedBlacklisted: blacklistResult.annotatedBlacklisted,
       unreachableBoards: totalErrors,

@@ -3,7 +3,7 @@
 import type { Job } from "@/components/jobs/job-store";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { cn } from "@/lib/cn";
-import { fmtElapsed, fmtTokens, humanizeStep, isAuthError, useElapsed } from "@/components/jobs/job-utils";
+import { fmtElapsed, fmtTokens, humanizeJobKind, humanizeStep, isAuthError, useElapsed } from "@/components/jobs/job-utils";
 
 export const TONE = {
   good: {
@@ -48,7 +48,7 @@ export function WorkerCard({
   const elapsed = useElapsed(running, job.startedAt);
   const rawLast = job.steps[job.steps.length - 1]?.label;
   const last = rawLast ? humanizeStep(rawLast) : undefined;
-  const bottom = job.status === "done" && job.result?.summary ? job.result.summary : last;
+  const bottom = job.status === "error" ? job.error || last : job.status === "done" && job.result?.summary ? job.result.summary : last;
   const inline = variant === "inline";
   const hasScore = job.result?.score != null;
   const authError = isAuthError(job);
@@ -80,6 +80,7 @@ export function WorkerCard({
           <span className={cn("shrink-0", hasScore ? "ml-1" : "ml-auto")}>{trailing}</span>
         )}
       </div>
+      <div className={cn("mt-1 truncate text-faint", inline ? "text-xs" : "text-[10px]")}>{job.subtitle || humanizeJobKind(job.kind)}</div>
       <div className={cn("mt-1.5 w-full overflow-hidden rounded-full bg-surface-hover", inline ? "h-1.5" : "h-1")}>
         {job.status === "running" ? (
           <div className="job-indeterminate h-full w-full" />
@@ -88,8 +89,8 @@ export function WorkerCard({
         )}
       </div>
       {(bottom || running) && (
-        <div className={cn("mt-1 truncate text-faint", inline ? "text-xs" : "text-[10px]")}>
-          {running ? `${last ?? "Working"} · ${fmtElapsed(elapsed)}` : bottom}
+        <div className={cn("mt-1 truncate", inline ? "text-xs" : "text-[10px]", running ? "text-faint" : "text-muted")}>
+          {running ? `${last ?? "Working"} · ${fmtElapsed(elapsed)} · ${job.steps.length} updates` : bottom}
         </div>
       )}
       {authError && (

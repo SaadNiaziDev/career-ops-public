@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Application, InboxJob } from "@/lib/career-ops";
+import { canonStatus } from "@/lib/format";
 import type { DiscoveredOffer } from "@/lib/explore";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { DiscoveryCard } from "@/components/explore/discovery-card";
@@ -16,14 +17,17 @@ import { DossierHero } from "@/components/dossier/dossier-hero";
 import { DossierStat } from "@/components/dossier/dossier-stat";
 import { DossierSection } from "@/components/dossier/dossier-section";
 import { PageShell } from "@/components/dossier/page-shell";
+import { CompanyLogo } from "@/components/company-logo";
 
 export function TodayDashboard({
   applications,
   inbox,
+  interviewProgress = {},
 }: {
   applications: Application[];
   inbox: InboxJob[];
   inBetween: boolean;
+  interviewProgress?: Record<string, { done: number; total: number }>;
 }) {
   const [followups, setFollowups] = useState<FollowUp[]>([]);
   const [overdue, setOverdue] = useState(0);
@@ -62,11 +66,15 @@ export function TodayDashboard({
     () => applications.filter((a) => /^evaluat/i.test(a.status)).slice(0, 6),
     [applications],
   );
+  const interviewFocus = useMemo(
+    () => applications.filter((a) => ["INTERVIEW", "OFFER"].includes(canonStatus(a.status))).slice(0, 4),
+    [applications],
+  );
 
   const newThisWeek = fresh.length;
-  const allClear = newThisWeek === 0 && overdue === 0 && awaiting.length === 0;
+  const allClear = newThisWeek === 0 && overdue === 0 && awaiting.length === 0 && interviewFocus.length === 0;
   const inboxUrls = useMemo(() => new Set(inbox.map((j) => j.url)), [inbox]);
-  const actionCount = overdue + awaiting.length + Math.min(newThisWeek, 6);
+  const actionCount = overdue + awaiting.length + interviewFocus.length + Math.min(newThisWeek, 6);
 
   return (
     <PageShell width="default">
@@ -90,7 +98,7 @@ export function TodayDashboard({
         description={
           allClear
             ? "Scanning continues in the background — new matches appear here when they fit your profile."
-            : "Discovery, follow-ups, and scored roles in one place. Work top to bottom."
+            : "Discovery, follow-ups, scored roles, and interviews in one place. Work top to bottom."
         }
         actions={
           <>
@@ -143,6 +151,41 @@ export function TodayDashboard({
                 {awaiting.map((a) => (
                   <DecisionCard key={a.n} app={a} />
                 ))}
+              </div>
+            </DossierSection>
+          )}
+
+          {interviewFocus.length > 0 && (
+            <DossierSection
+              icon={<MaterialSymbol name="psychology" size={20} />}
+              title="Interview focus"
+              hint="Prepare the next conversation"
+            >
+              <div className="divide-y divide-[var(--md-sys-color-outline-variant)]">
+                {interviewFocus.map((a) => {
+                  const progress = interviewProgress[a.n];
+                  const nextRound = progress ? Math.min(progress.done + 1, progress.total) : 1;
+                  return (
+                    <Link
+                      key={a.n}
+                      href={`/pipeline/${a.n}/interview`}
+                      className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 hover:text-[var(--md-sys-color-primary)]"
+                    >
+                      <CompanyLogo name={a.company} size={30} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate md-title-small text-[var(--md-sys-color-on-surface)]">{a.company}</span>
+                        <span className="block truncate md-body-small text-[var(--md-sys-color-on-surface-variant)]">{a.role}</span>
+                      </span>
+                      <span className="shrink-0 text-right">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--md-sys-color-tertiary)]">{canonStatus(a.status)}</span>
+                        <span className="block text-xs text-[var(--md-sys-color-outline)]">
+                          {progress ? `Round ${nextRound}/${progress.total}` : "Start workspace"}
+                        </span>
+                      </span>
+                      <MaterialSymbol name="arrow_forward" size={18} className="shrink-0 text-[var(--md-sys-color-outline)]" />
+                    </Link>
+                  );
+                })}
               </div>
             </DossierSection>
           )}

@@ -93,10 +93,13 @@ export async function POST(req: Request) {
 
     if (result.code !== 0) {
       const notFound = /No application numbered/i.test(result.err);
-      return Response.json(
-        { error: result.err.trim().split("\n")[0] || "delete failed" },
-        { status: notFound ? 404 : 400 },
-      );
+      const missingDep = /ERR_MODULE_NOT_FOUND.*Cannot find package/i.test(result.err);
+      const error = missingDep
+        ? "Tracker script dependencies are missing — run `npm install` in the career-ops root, then retry."
+        : result.err.trim().split("\n").find((l) => l.startsWith("Error")) ||
+          result.err.trim().split("\n")[0] ||
+          "delete failed";
+      return Response.json({ error }, { status: notFound ? 404 : 400 });
     }
     return Response.json({ ok: true, dryRun, orphanReport: parseOrphan(result.err) });
   } finally {

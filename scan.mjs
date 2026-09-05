@@ -160,6 +160,181 @@ export function matchedTitleKeywords(title, titleFilter) {
 //       enabled: true
 //       keywords: ["visa sponsorship", "relocation package"]
 
+const DEFAULT_RELOCATION_SIGNALS = [
+  'visa sponsorship',
+  'sponsorship available',
+  'work visa',
+  'work permit',
+  'relocation package',
+  'relocation assistance',
+  'relocation support',
+  'willing to relocate',
+  'open to relocation',
+  'relocate',
+];
+
+// A bare "Remote" label is useful and intentionally passes. Once a provider
+// adds a qualifier ("Remote — US", "Remote, Europe", "Remote - Singapore"),
+// it is no longer safe to treat it as worldwide. Removing these generic terms
+// leaves the geographic or policy qualifier for the stricter review below.
+const GENERIC_REMOTE_LOCATION_RE = /\bremote(?:[-\s]+(?:first|friendly|work))?\b|\bwork\s+from\s+(?:home|anywhere)\b|\b(?:distributed|worldwide|anywhere|global(?:ly)?|international|flexible|location[-\s]+independent|all\s+locations|open\s+to\s+all\s+locations|no\s+location\s+preference)\b/gi;
+const GENERIC_REMOTE_LOCATION_CHECK_RE = new RegExp(GENERIC_REMOTE_LOCATION_RE.source, 'i');
+const REMOTE_BOARD_PROVIDER_IDS = new Set([
+  'weworkremotely', 'remotive', 'himalayas', 'remoteok', 'hackernews',
+  'jobicy', 'workingnomads', '4dayweek', 'nodesk', 'jobspresso',
+]);
+
+function isGenericRemoteKeyword(keyword) {
+  const lower = String(keyword).toLowerCase();
+  const remainder = lower.replace(GENERIC_REMOTE_LOCATION_RE, '').replace(/[^a-z0-9]+/g, '');
+  return GENERIC_REMOTE_LOCATION_CHECK_RE.test(lower) && remainder === '';
+}
+
+function locationMatchesConfiguredKeyword(location, values) {
+  const lower = typeof location === 'string' ? location.toLowerCase() : '';
+  return normalizeKeywordList(values).some(keyword => lower.includes(keyword));
+}
+
+/**
+ * Returns true for a remote label that carries a geographic or policy
+ * qualifier which needs to be checked against the job description. Explicit
+ * `block` matches stay hard rejects, and an explicitly allowed home region
+ * wins over the review gate.
+ *
+ * @param {string} location
+ * @param {object} locationFilter
+ * @param {boolean} [remoteSource] True for board-wide providers whose source
+ *   guarantees the posting is remote even when its location omits that word.
+ */
+export function needsRemoteRelocationReview(location, locationFilter, remoteSource = false) {
+  if (!locationFilter || typeof location !== 'string' || !location.trim()) return false;
+  const lower = location.toLowerCase();
+
+  const alwaysAllow = normalizeKeywordList(locationFilter.always_allow);
+  const allow = normalizeKeywordList(locationFilter.allow);
+  const block = normalizeKeywordList(locationFilter.block);
+  if (locationMatchesConfiguredKeyword(location, block)) return false;
+  if (locationMatchesConfiguredKeyword(location, alwaysAllow)) return false;
+
+  // A configured non-generic allow term (for example, Pakistan or Lahore)
+  // means the qualified location is already inside the candidate's target.
+  if ([...alwaysAllow, ...allow]
+    .filter(keyword => !isGenericRemoteKeyword(keyword))
+    .some(keyword => lower.includes(keyword))) return false;
+
+  // Board-wide remote providers sometimes return only "USA", "Europe", or
+  // another country without the word "Remote". The provider itself is enough
+  // to establish that this is a remote listing, so inspect any out-of-range
+  // location from that source before the ordinary filter drops it.
+  if (remoteSource && !allow.some(keyword => lower.includes(keyword))) return true;
+  if (!GENERIC_REMOTE_LOCATION_CHECK_RE.test(lower)) return false;
+
+  const remainder = lower
+    .replace(GENERIC_REMOTE_LOCATION_RE, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  return remainder.length > 0;
+}
+
+function positiveSignalMatch(text, keyword) {
+  let start = 0;
+  while (start < text.length) {
+    const at = text.indexOf(keyword, start);
+    if (at < 0) return false;
+    const prefix = text.slice(Math.max(0, at - 36), at);
+    if (!/(?:\bno\b|\bwithout\b|\bnever\b|\bnot\b|\bcannot\b|\bcan't\b|\bunable(?:\s+to)?\b|\bdo\s+not\b|\bdoes\s+not\b)\s+(?:(?:to|any|provide|offer|support|include|have|available(?:\s+for)?|eligible\s+for|currently)\s+)*$/i.test(prefix)) {
+      return true;
+    }
+    start = at + keyword.length;
+  }
+  return false;
+}
+
+/** Returns true when the configured relocation override has positive evidence. */
+export function hasRelocationEvidence(description, locationFilter) {
+  const override = locationFilter?.relocation_override;
+  if (!override || override.enabled === false) return false;
+  if (typeof description !== 'string' || !description.trim()) return false;
+  const keywords = [...new Set([
+    ...normalizeKeywordList(override.keywords),
+    ...DEFAULT_RELOCATION_SIGNALS,
+  ])];
+  const lower = description
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+  return keywords.some(keyword => positiveSignalMatch(lower, keyword));
+}
+
+// Detail pages are fetched only from the ATS/remote-board host that supplied
+// the posting. Redirects are refused, so a listing cannot turn this enrichment
+// request into an arbitrary outbound request.
+const REMOTE_DETAIL_HOSTS = {
+  greenhouse: ['boards.greenhouse.io', 'job-boards.greenhouse.io'],
+  lever: ['jobs.lever.co', 'jobs.eu.lever.co'],
+  ashby: ['jobs.ashbyhq.com'],
+  workday: ['myworkdayjobs.com'],
+  weworkremotely: ['weworkremotely.com'],
+  remotive: ['remotive.com'],
+  remoteok: ['remoteok.com'],
+  himalayas: ['himalayas.app'],
+  jobicy: ['jobicy.com', 'www.jobicy.com'],
+  workingnomads: ['www.workingnomads.com'],
+  '4dayweek': ['4dayweek.io'],
+  nodesk: ['nodesk.co'],
+  jobspresso: ['jobspresso.co'],
+};
+
+function trustedRemoteDetailUrl(url, providerId) {
+  let parsed;
+  try { parsed = new URL(url); } catch { return false; }
+  if (parsed.protocol !== 'https:') return false;
+  const hosts = REMOTE_DETAIL_HOSTS[providerId] || [];
+  return hosts.some(host => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`));
+}
+
+/**
+ * Fetch and flatten a posting page when a remote location needs review.
+ * Returns an empty string when the page is unavailable or outside the
+ * provider host allowlist; callers treat that as insufficient evidence.
+ */
+export async function fetchRemoteJobDescription(job, providerId, ctx, cache = new Map()) {
+  const url = typeof job?.url === 'string' ? job.url.trim() : '';
+  if (!url || !trustedRemoteDetailUrl(url, providerId) || !ctx?.fetchText) return '';
+  if (cache.has(url)) return cache.get(url);
+  try {
+    const html = await ctx.fetchText(url, {
+      redirect: 'error',
+      timeoutMs: 6_000,
+      headers: { accept: 'text/html, application/xhtml+xml' },
+    });
+    const text = typeof html === 'string'
+      ? html
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 400_000)
+      : '';
+    cache.set(url, text);
+    return text;
+  } catch {
+    cache.set(url, '');
+    return '';
+  }
+}
+
 // Normalize a keyword list from portals.yml: tolerates a bare string
 // (wrapped to a 1-item array), null/undefined (→ []), and non-string
 // entries (filtered out). Survivors are lowercased, trimmed, and any
@@ -222,9 +397,9 @@ export function buildPostingAgeFilter(maxAgeDays, now = Date.now()) {
 // Filters on the job DESCRIPTION text to separate same-titled roles with
 // different stacks (a "Software Engineer" listing that mentions "PHP" vs one
 // that mentions "Rust"). Semantics (case-insensitive substring, in order):
-//   - Empty / whitespace-only / non-string description → PASS. The scanner is
-//     zero-token and only sees descriptions a provider already returns in its
-//     list payload; providers without one must never be silently dropped.
+//   - Empty / whitespace-only / non-string description → PASS. The scanner
+//     still passes ordinary jobs when a provider has no description; a
+//     restricted remote job is handled by the relocation gate above.
 //   - any `negative` keyword present → reject
 //   - `positive` empty → pass (already cleared negatives)
 //   - `positive` non-empty → at least one keyword must be present
@@ -239,10 +414,9 @@ export function buildPostingAgeFilter(maxAgeDays, now = Date.now()) {
 // global `positive`/`negative` pair is the fallback for jobs whose matched
 // keyword(s) have no override entry.
 //
-// Provider support: only providers whose list API ships the description for
-// free (no extra per-job request, which would break the zero-token design)
-// populate `job.description`. Lever (`descriptionPlain`) does today; others
-// leave it empty and therefore always pass this filter.
+// Provider support: providers may ship description text in their list/API
+// payload. Restricted remote listings can also receive trusted detail-page
+// enrichment before this filter runs; ordinary listings remain zero-token.
 
 export function buildContentFilter(contentFilter) {
   if (!contentFilter) return () => true;
@@ -1554,12 +1728,14 @@ async function main() {
   let totalFilteredPostingAge = 0;
   let totalFilteredSalary = 0;
   let totalFilteredContent = 0;
+  let totalFilteredRemoteRelocation = 0;
   let totalFilteredBlacklist = 0;
   let annotatedBlacklisted = 0;
   let totalDupes = 0;
   const newOffers = [];
   const errors = [...resolveErrors];
   const emptyTargets = [];
+  const remoteDescriptionCache = new Map();
 
   const tasks = targets.map(company => async () => {
     let provider = company._provider;
@@ -1622,6 +1798,22 @@ async function main() {
         }
         if (classifyTier && skipTiers.includes(classifyTier(job.title))) {
           totalFilteredTier++;
+          continue;
+        }
+        const remoteReview = needsRemoteRelocationReview(
+          job.location,
+          config.location_filter,
+          Boolean(company._isBoard && REMOTE_BOARD_PROVIDER_IDS.has(provider.id)),
+        );
+        let remoteRelocationPass = true;
+        if (remoteReview && !hasRelocationEvidence(job.description, config.location_filter)) {
+          const detail = await fetchRemoteJobDescription(job, provider.id, ctx, remoteDescriptionCache);
+          if (detail) job.description = detail;
+          remoteRelocationPass = hasRelocationEvidence(job.description, config.location_filter);
+        }
+        if (!remoteRelocationPass) {
+          totalFilteredLocation++;
+          totalFilteredRemoteRelocation++;
           continue;
         }
         if (!locationFilter(job.location, job.description)) {
@@ -1778,6 +1970,9 @@ async function main() {
     console.log(`Filtered by tier:      ${totalFilteredTier} removed`);
   }
   console.log(`Filtered by location:  ${totalFilteredLocation} removed`);
+  if (totalFilteredRemoteRelocation > 0) {
+    console.log(`Remote relocation:     ${totalFilteredRemoteRelocation} restricted remote jobs skipped`);
+  }
   if (config.max_posting_age_days != null || totalFilteredPostingAge > 0) {
     console.log(`Filtered by age:       ${totalFilteredPostingAge} removed`);
   }

@@ -86,7 +86,8 @@ export function PipelineRowActions({
 
   const items: MenuItem[] = [
     { key: "view", icon: "visibility", label: "Open report", href: `/pipeline/${n}` },
-    { key: "pdf", icon: "description", label: "Generate CV PDF", onClick: () => run("pdf", `CV PDF · ${company}`), dividerBefore: true },
+    { key: "interview", icon: "psychology", label: "Interview workspace", href: `/pipeline/${n}/interview`, dividerBefore: true },
+    { key: "pdf", icon: "description", label: "Generate CV PDF", onClick: () => run("pdf", `CV PDF · ${company}`) },
     { key: "cover", icon: "description", label: "Cover letter", onClick: () => run("cover", `Cover · ${company}`) },
     { key: "email", icon: "mail", label: "Application email", onClick: () => run("email", `Email · ${company}`) },
     { key: "contacto", icon: "group", label: "Find contacts", onClick: () => run("contacto", `Contacts · ${company}`) },
