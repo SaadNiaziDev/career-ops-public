@@ -5,7 +5,9 @@
 // Workable's documented JSON API requires an auth token; the markdown feed
 // is the only no-auth public surface. Auto-detects from careers_url pattern
 // `https://apply.workable.com/<slug>`. A tracked_companies entry can also
-// set `provider: workable` explicitly to bypass detection.
+// set `provider: workable` explicitly to bypass detection. Large boards may
+// define `workable_queries` and `workable_locations` to use the feed's public
+// search parameters instead of receiving its unfiltered search notice.
 
 const ALLOWED_WORKABLE_HOSTS = new Set(['apply.workable.com']);
 
@@ -39,6 +41,28 @@ function resolveFeedUrl(entry) {
   return `https://apply.workable.com/${slug}/jobs.md`;
 }
 
+function resolveFeedUrls(entry) {
+  const base = resolveFeedUrl(entry);
+  if (!base) return [];
+  const queries = Array.isArray(entry.workable_queries)
+    ? entry.workable_queries.filter((value) => typeof value === 'string' && value.trim()).slice(0, 12)
+    : [];
+  const locations = Array.isArray(entry.workable_locations)
+    ? entry.workable_locations.filter((value) => typeof value === 'string' && value.trim()).slice(0, 12)
+    : [];
+  if (queries.length === 0 && locations.length === 0) return [base];
+
+  const queryValues = queries.length > 0 ? queries : [''];
+  return queryValues.map((query) => {
+    const url = new URL(base);
+    if (query) url.searchParams.set('query', query.trim());
+    locations.forEach((country, index) => {
+      url.searchParams.set(`location[${index}][country]`, country.trim());
+    });
+    return url.href;
+  });
+}
+
 /** @type {Provider} */
 export default {
   id: 'workable',
@@ -49,13 +73,17 @@ export default {
   },
 
   async fetch(entry, ctx) {
-    const feedUrl = resolveFeedUrl(entry);
-    if (!feedUrl) throw new Error(`workable: cannot derive feed URL for ${entry.name}`);
-    assertWorkableUrl(feedUrl);
-    // redirect:'error' prevents SSRF via server-side redirects; combined with
-    // assertWorkableUrl above it guarantees the final hostname stays in the allowlist.
-    const text = await ctx.fetchText(feedUrl, { redirect: 'error' });
-    return parseWorkableMarkdown(text, entry.name);
+    const feedUrls = resolveFeedUrls(entry);
+    if (feedUrls.length === 0) throw new Error(`workable: cannot derive feed URL for ${entry.name}`);
+    const jobsByUrl = new Map();
+    for (const feedUrl of feedUrls) {
+      assertWorkableUrl(feedUrl);
+      // redirect:'error' prevents SSRF via server-side redirects; combined with
+      // assertWorkableUrl above it guarantees the final hostname stays in the allowlist.
+      const text = await ctx.fetchText(feedUrl, { redirect: 'error' });
+      for (const job of parseWorkableMarkdown(text, entry.name)) jobsByUrl.set(job.url, job);
+    }
+    return [...jobsByUrl.values()];
   },
 };
 
@@ -70,7 +98,7 @@ export default {
  *
  * @param {string} text — markdown body
  * @param {string} companyName — value to write into job.company
- * @returns {Array<{title: string, url: string, company: string, location: string}>}
+ * @returns {Array<{title: string, url: string, company: string, location: string, postedAt?: number}>}
  */
 export function parseWorkableMarkdown(text, companyName) {
   if (typeof text !== 'string') return [];
@@ -97,7 +125,15 @@ export function parseWorkableMarkdown(text, companyName) {
       continue;
     }
 
-    jobs.push({ title, url, location, company: companyName });
+    const postedMatch = line.match(/\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*\[View\]/);
+    const postedAt = postedMatch ? Date.parse(`${postedMatch[1]}T00:00:00Z`) : NaN;
+    jobs.push({
+      title,
+      url,
+      location,
+      company: companyName,
+      ...(Number.isFinite(postedAt) ? { postedAt } : {}),
+    });
   }
   return jobs;
 }

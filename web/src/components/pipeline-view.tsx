@@ -65,7 +65,7 @@ export function PipelineView({
   const daysFilter: number | null = (DATE_WINDOWS as readonly number[]).includes(pDays) ? pDays : null;
   const locationFilter = params.get("location") ?? "";
   const pSort = params.get("sort") ?? "";
-  const sortKey: SortKey = (SORT_KEYS as readonly string[]).includes(pSort) ? (pSort as SortKey) : "score";
+  const sortKey: SortKey = (SORT_KEYS as readonly string[]).includes(pSort) ? (pSort as SortKey) : "date";
   const sortDir = params.get("dir") === "1" ? 1 : -1;
 
   const [q, setQ] = useState(params.get("q") ?? "");
@@ -410,8 +410,8 @@ export function PipelineView({
                     setParams({ sort, dir: dir === "asc" ? 1 : null });
                   }}
                   options={[
-                    { value: "score-desc", label: "Highest score" },
                     { value: "date-desc", label: "Newest evaluated" },
+                    { value: "score-desc", label: "Highest score" },
                     { value: "company-asc", label: "Company A–Z" },
                     { value: "role-asc", label: "Role A–Z" },
                   ]}

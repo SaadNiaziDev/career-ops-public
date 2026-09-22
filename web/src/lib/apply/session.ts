@@ -121,28 +121,30 @@ declare global {
   var __coIdleTimer: ReturnType<typeof setTimeout> | undefined;
 }
 const SESSIONS: Map<string, Session> = (globalThis.__coApplySessions ??= new Map());
+const IN_CODEX_SANDBOX = process.env.CODEX_SANDBOX === "seatbelt";
 
 async function headedBrowser(): Promise<Browser> {
   const b = globalThis.__coHeadedBrowser;
   if (b && b.isConnected()) return b;
-  let nb: Browser;
+  if (IN_CODEX_SANDBOX && process.platform === "darwin") {
+    throw new Error("Visible Chrome cannot start inside the Codex macOS sandbox. Run the web app outside Codex, or use Codex with -s danger-full-access for this session.");
+  }
+  // Playwright 1.57+ ships Chrome for Testing as its default `chromium`
+  // executable. On macOS, a headed launch of that cached app can abort inside
+  // AppKit before Playwright gets a page. Use the user's installed Chrome for
+  // headed application sessions and do not retry with the crash-prone bundled
+  // browser. Headless callers still use the bundled browser elsewhere.
   try {
-    nb = await chromium.launch({
+    const nb = await chromium.launch({
       channel: "chrome",
       headless: false,
       args: ["--window-position=-3200,-3200", "--window-size=1280,940"], // off-screen during fill; moved on-screen at handoff
     });
+    globalThis.__coHeadedBrowser = nb;
+    return nb;
   } catch {
-    // No system Google Chrome → fall back to Playwright's bundled Chromium if
-    // present; otherwise a clear, actionable error.
-    try {
-      nb = await chromium.launch({ headless: false, args: ["--window-position=-3200,-3200", "--window-size=1280,940"] });
-    } catch {
-      throw new Error("The apply feature needs Google Chrome. Install Chrome (or run: npx playwright install chromium) and try again.");
-    }
+    throw new Error("The apply feature needs installed Google Chrome. Open Chrome once, then retry; headless Chrome for Testing is not used for visible application sessions.");
   }
-  globalThis.__coHeadedBrowser = nb;
-  return nb;
 }
 
 /** Close the headed Chrome once no sessions have been active for a while, so we

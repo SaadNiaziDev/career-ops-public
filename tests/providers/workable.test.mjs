@@ -51,6 +51,12 @@ try {
     fail(`parseWorkableMarkdown should strip .md; got url=${JSON.stringify(jobs[0]?.url)}`);
   }
 
+  if (jobs[0]?.postedAt === Date.parse('2026-04-01T00:00:00Z')) {
+    pass('parseWorkableMarkdown extracts the posted date');
+  } else {
+    fail(`parseWorkableMarkdown postedAt = ${JSON.stringify(jobs[0]?.postedAt)}`);
+  }
+
   // Robustness
   if (parseWorkableMarkdown('', 'X').length === 0) pass('empty input → empty result');
   else fail('empty input should yield empty result');
@@ -73,6 +79,34 @@ try {
     },
   );
   pass('workable.fetch() reaches fetchText on the happy path (allowed hostname)');
+
+  const searchedUrls = [];
+  const searchedJobs = await workable.fetch(
+    {
+      name: 'LargeBoard',
+      careers_url: 'https://apply.workable.com/large-board',
+      workable_queries: ['full stack', 'node.js'],
+      workable_locations: ['Pakistan'],
+    },
+    {
+      transport: 'http',
+      fetchText: async (url) => {
+        searchedUrls.push(url);
+        return sampleMd;
+      },
+      fetchJson: async () => { throw new Error('fetchJson should not be called'); },
+    },
+  );
+  if (
+    searchedUrls.length === 2 &&
+    searchedUrls.every((url) => url.includes('location%5B0%5D%5Bcountry%5D=Pakistan')) &&
+    searchedUrls.some((url) => url.includes('query=full+stack')) &&
+    searchedJobs.length === 2
+  ) {
+    pass('workable.fetch() searches large boards and deduplicates results');
+  } else {
+    fail(`workable targeted search failed: urls=${JSON.stringify(searchedUrls)} jobs=${searchedJobs.length}`);
+  }
 
   // fetch() rejects an unresolvable careers_url (no apply.workable.com match in URL).
   let rejected = false;
@@ -141,4 +175,3 @@ try {
 } catch (e) {
   fail(`workable provider tests crashed: ${e.message}`);
 }
-

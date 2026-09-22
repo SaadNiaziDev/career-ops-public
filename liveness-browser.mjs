@@ -189,15 +189,17 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0 } = {}) {
 // Anti-bot results that a headed browser may be able to get past. A real (headed)
 // Chromium clears the JS/Cloudflare challenge that headless trips on (e.g. pracuj.pl).
 const CHALLENGE_CODES = new Set(['bot_challenge', 'access_blocked']);
+const IN_CODEX_SANDBOX = process.env.CODEX_SANDBOX === 'seatbelt';
 
 export function isChallengeResult(result) {
   return result?.result === 'uncertain' && CHALLENGE_CODES.has(result.code);
 }
 
 // Lazily owns a single headed browser/page, created only on first use and reused
-// across URLs. Headed Chromium needs a display, so launch can fail in headless/CI
-// environments — in that case get() returns null and callers degrade to the
-// headless result (challenge stays uncertain, never falsely expired).
+// across URLs. Playwright 1.57+ uses Chrome for Testing for its default headed
+// `chromium` launch; that cached app can abort during AppKit registration on
+// macOS. Use installed Chrome explicitly and degrade to the headless result if
+// it is unavailable (a challenge stays uncertain, never falsely expired).
 export function createHeadedPageProvider(chromium) {
   let browser = null;
   let page = null;
@@ -206,8 +208,15 @@ export function createHeadedPageProvider(chromium) {
     async get() {
       if (page) return page;
       if (launchFailed) return null;
+      // macOS aborts GUI app registration for Chromium-family processes
+      // launched from Codex's seatbelt sandbox. Keep the original headless
+      // result instead of starting a browser that will crash immediately.
+      if (IN_CODEX_SANDBOX && process.platform === 'darwin') {
+        launchFailed = true;
+        return null;
+      }
       try {
-        browser = await chromium.launch({ headless: false });
+        browser = await chromium.launch({ channel: 'chrome', headless: false });
         const context = await browser.newContext(LIVENESS_CONTEXT_OPTIONS);
         page = await context.newPage();
         return page;

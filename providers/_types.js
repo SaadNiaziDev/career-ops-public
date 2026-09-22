@@ -61,6 +61,8 @@
  * @property {string}             [provider]       Explicit provider id — bypasses detect().
  * @property {('http')}           [transport]      Default: 'http'. Reserved for future transports.
  * @property {number}             [max_pages]      Provider-specific pagination cap (avature, workday).
+ * @property {string[]}           [workable_queries] Workable only: bounded title/description searches for large boards.
+ * @property {string[]}           [workable_locations] Workable only: country filters applied to each configured query.
  * @property {string}             [offset_param]   avature only: pins the pagination query key and disables the
  *                                                 provider's jobOffset→offset self-heal. Rarely needed — an
  *                                                 escape hatch for a tenant the auto-switch can't resolve.
