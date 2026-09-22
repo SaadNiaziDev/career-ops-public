@@ -4,6 +4,7 @@ import type { Job } from "@/components/jobs/job-store";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { cn } from "@/lib/cn";
 import { fmtElapsed, fmtTokens, humanizeJobKind, humanizeStep, isAuthError, useElapsed } from "@/components/jobs/job-utils";
+import { isActiveState, isStuck } from "@/lib/jobs/run-policy";
 
 export const TONE = {
   good: {
@@ -29,8 +30,9 @@ export const TONE = {
 } as const;
 
 export function pillTone(j: Job): keyof typeof TONE {
-  if (j.status === "error") return "bad";
-  if (j.status === "done") return j.result?.tone ?? "muted";
+  if (j.state === "needs-attention") return "bad";
+  if (j.state === "completed") return j.result?.tone ?? "muted";
+  if (j.state === "interrupted") return "warn";
   return "muted";
 }
 
@@ -44,23 +46,27 @@ export function WorkerCard({
   trailing?: React.ReactNode;
 }) {
   const tone = TONE[pillTone(job)];
-  const running = job.status === "running";
+  const running = isActiveState(job.state);
   const elapsed = useElapsed(running, job.startedAt);
+  const inactiveFor = useElapsed(running, job.lastActivityAt);
+  const stuck = isStuck(job.state, job.lastActivityAt, job.lastActivityAt + inactiveFor);
   const rawLast = job.steps[job.steps.length - 1]?.label;
   const last = rawLast ? humanizeStep(rawLast) : undefined;
-  const bottom = job.status === "error" ? job.error || last : job.status === "done" && job.result?.summary ? job.result.summary : last;
+  const bottom = job.state === "needs-attention" || job.state === "interrupted" || job.state === "cancelled" ? job.error || last : job.state === "completed" && job.result?.summary ? job.result.summary : last;
   const inline = variant === "inline";
   const hasScore = job.result?.score != null;
   const authError = isAuthError(job);
-  const tokens = job.status === "done" ? job.cost?.tokens ?? 0 : 0;
+  const tokens = job.state === "completed" ? job.cost?.tokens ?? 0 : 0;
 
   return (
     <div className={cn(inline && "rounded-xl border border-border bg-surface/60 p-2.5")}>
       <div className="flex items-center gap-2">
-        {job.status === "running" ? (
+        {running ? (
           <MaterialSymbol name="progress_activity" size={14} className="shrink-0 animate-spin text-brand" />
-        ) : job.status === "error" ? (
+        ) : job.state === "needs-attention" || job.state === "interrupted" ? (
           <MaterialSymbol name="warning" size={14} className={cn("shrink-0", tone.icon)} />
+        ) : job.state === "cancelled" ? (
+          <MaterialSymbol name="cancel" size={14} className="shrink-0 text-[var(--md-sys-color-outline)]" />
         ) : (
           <MaterialSymbol name="check" size={14} className={cn("shrink-0", tone.icon)} />
         )}
@@ -82,7 +88,7 @@ export function WorkerCard({
       </div>
       <div className={cn("mt-1 truncate text-faint", inline ? "text-xs" : "text-[10px]")}>{job.subtitle || humanizeJobKind(job.kind)}</div>
       <div className={cn("mt-1.5 w-full overflow-hidden rounded-full bg-surface-hover", inline ? "h-1.5" : "h-1")}>
-        {job.status === "running" ? (
+        {running ? (
           <div className="job-indeterminate h-full w-full" />
         ) : (
           <div className={cn("h-full w-full rounded-full", tone.bar)} />
@@ -90,7 +96,7 @@ export function WorkerCard({
       </div>
       {(bottom || running) && (
         <div className={cn("mt-1 truncate", inline ? "text-xs" : "text-[10px]", running ? "text-faint" : "text-muted")}>
-          {running ? `${last ?? "Working"} · ${fmtElapsed(elapsed)} · ${job.steps.length} updates` : bottom}
+          {running ? `${stuck ? "No new activity" : last ?? "Working"} · ${fmtElapsed(elapsed)}${stuck ? ` · quiet for ${fmtElapsed(inactiveFor)}` : ""}` : bottom}
         </div>
       )}
       {authError && (
@@ -100,7 +106,7 @@ export function WorkerCard({
       )}
       {tokens > 0 && (
         <div className={cn("mt-1 text-faint tabular-nums", inline ? "text-xs" : "text-[10px]")}>
-          {fmtTokens(tokens)} tokens{job.cost?.usd != null ? ` · $${job.cost.usd.toFixed(2)}` : ""}
+          Technical usage: {fmtTokens(tokens)} model tokens{job.cost?.usd != null ? ` · estimated $${job.cost.usd.toFixed(2)}` : ""}
         </div>
       )}
     </div>

@@ -29,6 +29,7 @@ import {
   useElapsed,
 } from "@/components/jobs/job-utils";
 import { cn } from "@/lib/cn";
+import { isActiveState, isStuck, type RunState } from "@/lib/jobs/run-policy";
 
 const SCORE_BADGE_TONE: Record<string, "good" | "warn" | "bad" | "muted"> = {
   good: "good",
@@ -37,40 +38,37 @@ const SCORE_BADGE_TONE: Record<string, "good" | "warn" | "bad" | "muted"> = {
   muted: "muted",
 };
 
-function StatusTag({ status }: { status: "running" | "done" | "error" }) {
-  if (status === "running") {
+function StatusTag({ state }: { state: RunState }) {
+  if (state === "queued" || state === "running") {
     return (
       <Badge tone="muted" className="gap-1.5">
         <MaterialSymbol name="progress_activity" size={14} className="animate-spin" />
-        Working
+        {state === "queued" ? "Queued" : "Running"}
       </Badge>
     );
   }
-  if (status === "done") {
+  if (state === "completed") {
     return (
       <Badge tone="good" className="gap-1.5">
         <MaterialSymbol name="check_circle" size={14} filled />
-        Done
+        Completed
       </Badge>
     );
   }
-  return (
-    <Badge tone="bad" className="gap-1.5">
-      <MaterialSymbol name="cancel" size={14} />
-      Error
-    </Badge>
-  );
+  const label = state === "needs-attention" ? "Needs attention" : state === "cancelled" ? "Cancelled" : "Interrupted";
+  return <Badge tone={state === "needs-attention" ? "bad" : "warn"} className="gap-1.5"><MaterialSymbol name="cancel" size={14} />{label}</Badge>;
 }
 
 export default function JobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { jobs, startJob } = useJobs();
+  const { jobs, startJob, cancelJob } = useJobs();
   const { applications } = usePipeline();
   const router = useRouter();
   const [retrying, setRetrying] = useState(false);
   const job = jobs.find((j) => j.id === id);
-  const running = job?.status === "running";
+  const running = job ? isActiveState(job.state) : false;
   const elapsed = useElapsed(running ?? false, job?.startedAt ?? Date.now());
+  const inactiveFor = useElapsed(running, job?.lastActivityAt ?? Date.now());
   const artifacts = job ? resolveArtifacts(job, applications) : [];
   const reportN = job ? resolveReportNum(job, applications) : undefined;
   const steps = useMemo(() => (job ? collapseSteps(job.steps) : []), [job]);
@@ -105,9 +103,10 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
   const backHref = jobBackHref(job);
   const backLabel = backHref === "/pipeline" ? "Pipeline" : backHref === "/jobs" ? "Workers" : "Back";
   const duration = running ? elapsed : jobDuration(job);
+  const stuck = isStuck(job.state, job.lastActivityAt, job.lastActivityAt + inactiveFor);
   const authError = isAuthError(job);
-  const tokens = job.status === "done" ? job.cost?.tokens ?? 0 : 0;
-  const canRetry = job.status === "error" && !!job.kind && !!job.input;
+  const tokens = job.state === "completed" ? job.cost?.tokens ?? 0 : 0;
+  const canRetry = !isActiveState(job.state) && job.state !== "completed" && !!job.kind && !!job.input;
 
   const retry = () => {
     if (!canRetry || retrying) return;
@@ -150,17 +149,21 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
           <DossierInsetStack className="relative z-10 p-[var(--card-pad-y)] px-[var(--card-pad-x)]">
             <div className="flex w-full flex-wrap items-center justify-between gap-2.5">
               <div className="flex flex-wrap items-center gap-2.5">
-                <StatusTag status={job.status} />
+                <StatusTag state={job.state} />
                 {job.result?.score != null && (
                   <Badge tone={SCORE_BADGE_TONE[job.result.tone] ?? "muted"}>{job.result.score}/5</Badge>
                 )}
                 <span className="text-xs tabular-nums text-[var(--md-sys-color-on-surface-variant)]">
                   {fmtElapsed(duration)}
-                  {tokens > 0 && ` · ${fmtTokens(tokens)} tokens`}
-                  {job.cost?.usd != null && ` · $${job.cost.usd.toFixed(2)}`}
+                  {running && ` · last activity ${fmtElapsed(inactiveFor)} ago`}
                 </span>
               </div>
-              {canRetry && (
+              {running ? (
+                <Button variant="outline" size="sm" onClick={() => cancelJob(job.id)}>
+                  <MaterialSymbol name="stop_circle" size={16} />
+                  Cancel safely
+                </Button>
+              ) : canRetry && (
                 <Button variant="outline" size="sm" disabled={retrying} onClick={retry}>
                   {retrying ? (
                     <MaterialSymbol name="progress_activity" size={16} className="animate-spin" />
@@ -180,11 +183,18 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
               <p className="mt-1 text-xs text-[var(--md-sys-color-outline)]">{humanizeJobKind(job.kind)} · {job.steps.length} activity updates</p>
             </div>
 
-            {job.status === "done" && job.result?.summary && (
+            {stuck && (
+              <div className="md3-alert md3-alert--warning">
+                <MaterialSymbol name="schedule" size={18} className="shrink-0" />
+                <span>No meaningful update for {fmtElapsed(inactiveFor)}. The worker may be waiting on a site or CLI; cancelling is safe.</span>
+              </div>
+            )}
+
+            {job.state === "completed" && job.result?.summary && (
               <p className="mb-0 text-[var(--md-sys-color-on-surface-variant)]">{job.result.summary}</p>
             )}
 
-            {job.status === "error" && job.error && (
+            {(job.state === "needs-attention" || job.state === "interrupted" || job.state === "cancelled") && job.error && (
               <div className="md3-alert md3-alert--warning">
                 <MaterialSymbol name="warning" size={18} className="shrink-0" />
                 <span>{job.error}</span>
@@ -213,9 +223,6 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
                           {inner}
                         </Link>
                       )}
-                      {artifact.path ? (
-                        <code className="text-xs text-[var(--md-sys-color-on-surface-variant)]">{artifact.path}</code>
-                      ) : null}
                     </span>
                   );
                 })}
@@ -322,6 +329,13 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
             ) : null}
           </section>
         ) : null}
+
+        {tokens > 0 && (
+          <details className="rounded-xl border border-[var(--md-sys-color-outline-variant)] px-4 py-3 text-xs text-[var(--md-sys-color-on-surface-variant)]">
+            <summary className="cursor-pointer font-medium text-[var(--md-sys-color-on-surface)]">Technical usage</summary>
+            <p className="mt-2 mb-0">{fmtTokens(tokens)} model tokens processed{job.cost?.usd != null ? ` · estimated provider cost $${job.cost.usd.toFixed(2)}` : ""}.</p>
+          </details>
+        )}
       </DossierStack>
     </PageShell>
   );

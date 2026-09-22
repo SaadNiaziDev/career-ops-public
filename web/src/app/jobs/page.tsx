@@ -8,14 +8,16 @@ import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
 import { DossierStack } from "@/components/dossier/dossier-stack";
 import { usePipeline } from "@/components/pipeline/pipeline-provider";
 import { humanizeJobKind, jobDestinationHref, resolveReportNum } from "@/components/jobs/job-utils";
+import { isActiveState, type RunState } from "@/lib/jobs/run-policy";
 
-function StatusIcon({ status }: { status: "running" | "done" | "error" }) {
-  if (status === "running") {
+function StatusIcon({ state }: { state: RunState }) {
+  if (isActiveState(state)) {
     return <MaterialSymbol name="progress_activity" size={22} className="animate-spin text-[var(--md-sys-color-primary)]" />;
   }
-  if (status === "error") {
+  if (state === "needs-attention" || state === "interrupted") {
     return <MaterialSymbol name="warning" size={22} className="text-[var(--md-sys-color-error)]" />;
   }
+  if (state === "cancelled") return <MaterialSymbol name="cancel" size={22} className="text-[var(--md-sys-color-outline)]" />;
   return <MaterialSymbol name="check_circle" size={22} className="text-[var(--md-sys-color-tertiary)]" />;
 }
 
@@ -34,7 +36,7 @@ export default function JobsHistory() {
             </>
           }
           extra={
-            jobs.some((j) => j.status !== "running") ? (
+            jobs.some((j) => !isActiveState(j.state)) ? (
               <button type="button" onClick={clearFinished} className="md3-btn-outlined">
                 <MaterialSymbol name="delete" size={18} />
                 Clear finished
@@ -57,7 +59,7 @@ export default function JobsHistory() {
                   key={j.id}
                   className="flex min-h-[76px] items-center gap-4 border-b border-[var(--md-sys-color-outline-variant)] px-4 py-3 last:border-b-0"
                 >
-                  <StatusIcon status={j.status} />
+                  <StatusIcon state={j.state} />
                   <div className="min-w-0 flex-1">
                     <Link href={dest} className="block truncate md-title-small text-[var(--md-sys-color-on-surface)] hover:text-[var(--md-sys-color-primary)]">
                       {j.title}
@@ -73,7 +75,7 @@ export default function JobsHistory() {
                   {j.result?.score != null && (
                     <span className="md3-score-badge">{j.result.score}/5</span>
                   )}
-                  {j.status === "done" && reportN ? (
+                  {j.state === "completed" && reportN ? (
                     <Link
                       href={`/pipeline/${reportN}`}
                       className="hidden shrink-0 md-label-small text-[var(--md-sys-color-primary)] hover:underline sm:inline"
@@ -81,9 +83,9 @@ export default function JobsHistory() {
                       Report
                     </Link>
                   ) : (
-                    <span className="hidden capitalize md-body-small text-[var(--md-sys-color-outline)] sm:inline">{j.status}</span>
+                    <span className="hidden capitalize md-body-small text-[var(--md-sys-color-outline)] sm:inline">{j.state.replace("-", " ")}</span>
                   )}
-                  {j.status === "done" && dest !== `/jobs/${j.id}` ? (
+                  {j.state === "completed" && dest !== `/jobs/${j.id}` ? (
                     <Link href={`/jobs/${j.id}`} className="hidden shrink-0 md-label-small text-[var(--md-sys-color-outline)] hover:underline sm:inline">
                       Log
                     </Link>

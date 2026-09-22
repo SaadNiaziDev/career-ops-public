@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveCli } from "@/lib/clis";
 import { careerOpsRoot, readApplications, readMemory } from "@/lib/career-ops";
-import { acquireTrackerWrite, acquireVacancyRun, releaseTrackerWrite, releaseVacancyRun } from "@/lib/core/run-registry";
-import { normalizeVacancyUrl, vacancyIdFromUrl } from "@/lib/vacancy-identity";
+import { acquireRun, acquireTrackerWrite, attachRunCancellation, cancelRun, releaseRun, releaseTrackerWrite } from "@/lib/core/run-registry";
+import { artifactChanged, fatalExitMessage, intentKey } from "@/lib/jobs/run-policy";
+import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -220,16 +222,50 @@ function existingEvaluationForUrl(input: string): string | undefined {
   return readApplications().find((app) => app.url && normalizeVacancyUrl(app.url) === needle)?.n;
 }
 
+function openingPhase(kind: string): string {
+  if (kind === "evaluate") return "Verifying the vacancy";
+  if (kind === "pdf") return "Reading your profile and CV";
+  if (kind.startsWith("interview")) return "Reading interview context";
+  return "Reading your profile and instructions";
+}
+
+function commandPhase(command: unknown): string {
+  const value = typeof command === "string" ? command : "";
+  if (/check-liveness|browser-extract|web(fetch|search)|curl/i.test(value)) return "Verifying the vacancy";
+  if (/merge-tracker|tracker-additions|set-status/i.test(value)) return "Updating the pipeline";
+  if (/reports\/|reserve-report-num/i.test(value)) return "Writing the report";
+  if (/generate-pdf|playwright/i.test(value)) return "Rendering the document";
+  return "Running a local check";
+}
+
+function terminateProcess(pid: number | undefined, signal: NodeJS.Signals): void {
+  if (!pid) return;
+  try {
+    if (process.platform === "win32") process.kill(pid, signal);
+    else process.kill(-pid, signal);
+  } catch {
+    try { process.kill(pid, signal); } catch { /* process already stopped */ }
+  }
+}
+
+export async function DELETE(req: Request) {
+  const runId = new URL(req.url).searchParams.get("id") ?? "";
+  if (!/^job-[a-z0-9-]+$/i.test(runId)) return Response.json({ error: "valid run id required" }, { status: 400 });
+  return cancelRun(runId)
+    ? Response.json({ ok: true })
+    : Response.json({ error: "run is no longer active" }, { status: 404 });
+}
+
 export async function POST(req: Request) {
-  let body: { kind?: string; input?: string; cliId?: string; context?: InterviewContext };
+  let body: { kind?: string; input?: string; cliId?: string; runId?: string; context?: InterviewContext };
   try {
     body = await req.json();
   } catch {
     return new Response(JSON.stringify({ error: "bad json" }), { status: 400 });
   }
-  const { kind = "evaluate", input, cliId, context } = body;
-  if (!input || !cliId) {
-    return new Response(JSON.stringify({ error: "input and cliId required" }), { status: 400 });
+  const { kind = "evaluate", input, cliId, runId, context } = body;
+  if (!input || !cliId || !runId || !/^job-[a-z0-9-]+$/i.test(runId)) {
+    return new Response(JSON.stringify({ error: "input, cliId, and valid runId required" }), { status: 400 });
   }
   const resolved = resolveCli(cliId);
   if (!resolved) {
@@ -287,7 +323,6 @@ export async function POST(req: Request) {
     );
   }
 
-  const vacancyId = kind === "evaluate" ? vacancyIdFromUrl(input) : null;
   const existingReport = kind === "evaluate" ? existingEvaluationForUrl(input) : undefined;
   if (existingReport) {
     return streamEvents([
@@ -296,9 +331,12 @@ export async function POST(req: Request) {
       { type: "done", reportN: existingReport },
     ]);
   }
-  const vacancyToken = vacancyId ? acquireVacancyRun(vacancyId) : null;
-  if (vacancyToken?.existing !== undefined) {
-    return streamEvents([{ type: "error", msg: "This vacancy is already being evaluated. Open the running worker instead of starting another." }]);
+  const runRegistration = acquireRun(runId, intentKey(kind, input));
+  if (!runRegistration.accepted) {
+    return Response.json(
+      { error: "This task is already running.", existingRunId: runRegistration.existingRunId },
+      { status: 409 },
+    );
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -329,11 +367,14 @@ export async function POST(req: Request) {
   // For write-needing kinds, snapshot reports/ so we can verify the worker
   // actually persisted (non-Claude CLIs lack Write auth and silently no-op).
   const reportsDir = path.join(careerOpsRoot(), "reports");
-  const countReports = () => {
+  const reportSnapshot = () => {
     try {
-      return fs.readdirSync(reportsDir).filter((f) => f.endsWith(".md")).length;
+      return new Map(fs.readdirSync(reportsDir).filter((f) => f.endsWith(".md")).map((file) => {
+        const content = fs.readFileSync(path.join(reportsDir, file));
+        return [file, createHash("sha256").update(content).digest("hex")];
+      }));
     } catch {
-      return 0;
+      return new Map<string, string>();
     }
   };
   const findReportNumForInput = (needle: string): string | undefined => {
@@ -361,28 +402,49 @@ export async function POST(req: Request) {
     }
     return undefined;
   };
-  const hasReportForInput = (needle: string) => Boolean(findReportNumForInput(needle));
   const persists = kind === "evaluate";
-  const reportsBefore = persists ? countReports() : 0;
+  const reportsBefore = persists ? reportSnapshot() : new Map<string, string>();
   // Tracker-mutating runs hold a write token so a row delete can't race their merge
   // (tracker.mjs delete doesn't yet share a lock with merge-tracker — see run-registry).
   const writeToken = kind === "evaluate" || kind === "pdf" ? acquireTrackerWrite() : null;
 
-  const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
   const enc = new TextEncoder();
 
   // `closed` + kill timer in the OUTER scope so cancel() (client disconnect) can
   // flip `closed` before the child's late handlers run, and send() is try/catch'd —
   // otherwise a late enqueue onto a closed controller throws uncaught (see #1155).
   let closed = false;
+  let timedOut = false;
+  let cancelled = false;
+  let stopping = false;
+  let resourcesReleased = false;
   let killer: ReturnType<typeof setTimeout> | undefined;
+  let forceKiller: ReturnType<typeof setTimeout> | undefined;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    terminateProcess(child.pid, "SIGTERM");
+    forceKiller = setTimeout(() => terminateProcess(child.pid, "SIGKILL"), 5_000);
+  };
+  const releaseResources = () => {
+    if (resourcesReleased) return;
+    resourcesReleased = true;
+    if (killer) clearTimeout(killer);
+    if (writeToken !== null) releaseTrackerWrite(writeToken);
+    releaseRun(runId);
+  };
+  attachRunCancellation(runId, () => {
+    cancelled = true;
+    stop();
+  });
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let buf = "";
       let codexFinalText = "";
-      let codexCommandStarted = false;
       let emittedText = false; // any assistant text delta → the CLI actually ran
-      let sawError = false;
+      let announcedScoring = false;
+      let stderr = "";
       let lastTokens = 0; // per-run token cost from the Claude result event (#6) — local only
       let lastCostUsd: number | null = null;
       // pdf-mode tailors a full CV + renders it — give it more headroom. `evaluate`
@@ -400,21 +462,28 @@ export async function POST(req: Request) {
               ? 300_000
               : 285_000;
       killer = setTimeout(() => {
-        try { child.kill("SIGTERM"); } catch { /* ignore */ }
+        timedOut = true;
+        stop();
       }, killMs);
       const send = (obj: unknown) => {
         if (closed) return;
-        try { controller.enqueue(enc.encode(JSON.stringify(obj) + "\n")); } catch { closed = true; }
+        try {
+          controller.enqueue(enc.encode(JSON.stringify(obj) + "\n"));
+        } catch {
+          closed = true;
+          stop();
+        }
       };
       const close = () => {
+        if (forceKiller) clearTimeout(forceKiller);
+        releaseResources();
         if (!closed) {
           closed = true;
-          if (killer) clearTimeout(killer);
-          if (writeToken !== null) releaseTrackerWrite(writeToken);
-          if (vacancyId && vacancyToken) releaseVacancyRun(vacancyId, vacancyToken.token);
           try { controller.close(); } catch { /* */ }
         }
       };
+
+      send({ type: "status", label: openingPhase(kind) });
 
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
@@ -428,10 +497,7 @@ export async function POST(req: Request) {
             try {
               const ev = JSON.parse(line);
               if (ev.type === "item.started" && ev.item?.type === "command_execution") {
-                if (!codexCommandStarted) {
-                  codexCommandStarted = true;
-                  send({ type: "status", label: "Codex working" });
-                }
+                send({ type: "status", label: commandPhase(ev.item.command) });
               } else if (ev.type === "item.completed" && ev.item?.type === "agent_message") {
                 const text = ev.item.text;
                 if (typeof text === "string") {
@@ -466,6 +532,10 @@ export async function POST(req: Request) {
               if (e?.type === "content_block_start" && e.content_block?.type === "tool_use") {
                 send({ type: "tool", name: e.content_block.name });
               } else if (e?.type === "content_block_delta" && e.delta?.text) {
+                if (kind === "evaluate" && !announcedScoring) {
+                  announcedScoring = true;
+                  send({ type: "status", label: "Scoring the role against your profile" });
+                }
                 emittedText = true;
                 send({ type: "text", text: e.delta.text });
               }
@@ -485,38 +555,30 @@ export async function POST(req: Request) {
         }
       });
       child.stderr.on("data", (d: Buffer) => {
-        const s = d.toString();
-        // Widened: auth/login/quota failures are the most common real error and
-        // the old narrow regex missed them (silent false "success").
-        if (/error|denied|fatal|not found|unauthorized|forbidden|auth|login|credential|api[ -]?key|quota|rate limit|not authenticated/i.test(s)) {
-          sawError = true;
-          send({ type: "error", msg: s.trim().slice(0, 200) });
-        }
+        stderr = (stderr + d.toString()).slice(-8_000);
       });
-      child.on("error", (e) => { send({ type: "error", msg: e.message }); close(); });
-      child.on("close", (code) => {
+      child.on("error", (e) => { stderr = e.message; });
+      child.on("close", (code, signal) => {
         if (isCodex && codexFinalText) send({ type: "text", text: codexFinalText });
-        const wroteReport = countReports() > reportsBefore || hasReportForInput(input);
-        const cleanExit = code === 0; // non-zero OR null (killed/signal) = NOT clean
-        // Honesty gate (#9): a green "done" with a parsed score requires a CLEAN exit,
-        // real output, AND (for evaluations) a report actually written. Anything else
-        // is surfaced — an errored run must never be banked as a confident score.
-        if (!emittedText && !sawError && !cleanExit) {
-          send({ type: "error", msg: "The CLI exited with an error — is it installed and authenticated?" });
-        } else if (!emittedText && !sawError) {
-          send({ type: "error", msg: "The CLI produced no output — is it installed and authenticated? (career-ops is best on Claude Code.)" });
-        } else if (persists && !wroteReport) {
-          // The worker ran but never wrote the report/tracker row (e.g. a CLI
-          // without file-write authorization) — surface it instead of a fake score.
+        send({ type: "status", label: "Validating the saved result" });
+        const after = persists ? reportSnapshot() : new Map<string, string>();
+        const changedReport = persists && artifactChanged(reportsBefore, after)
+          ? [...after.keys()].filter((file) => reportsBefore.get(file) !== after.get(file)).find((file) => {
+              try { return fs.readFileSync(path.join(reportsDir, file), "utf8").includes(input.trim()); } catch { return false; }
+            })
+          : undefined;
+        const failure = fatalExitMessage({ code, signal, timedOut, cancelled, emittedOutput: emittedText, stderr });
+        if (cancelled) {
+          send({ type: "cancelled", msg: "Cancelled safely" });
+        } else if (failure) {
+          send({ type: "error", msg: failure });
+        } else if (persists && !changedReport) {
           send({ type: "error", msg: "This evaluation didn't save a report, so it's not in your tracker. Full evaluation is verified on Claude Code." });
-        } else if (!cleanExit || sawError) {
-          // Produced output (maybe even a report) but did NOT finish cleanly — flag it
-          // instead of recording a confident score off a half-finished run.
-          send({ type: "error", msg: "This run hit an error before finishing, so it isn't recorded as a confident result — re-run it to verify." });
         } else {
+          if (stderr.trim()) send({ type: "warning", msg: "The CLI reported a warning but completed successfully." });
           const reportN =
             kind === "evaluate"
-              ? findReportNumForInput(input)
+              ? changedReport?.match(/^(\d+)/)?.[1]
               : ["pdf", "cover", "email", "contacto", ...interviewKinds].includes(kind) && /^\d+$/.test(input.trim())
                 ? input.trim()
                 : findReportNumForInput(input);
@@ -527,10 +589,8 @@ export async function POST(req: Request) {
     },
     cancel() {
       closed = true;
-      if (killer) clearTimeout(killer);
-      if (writeToken !== null) releaseTrackerWrite(writeToken);
-      if (vacancyId && vacancyToken) releaseVacancyRun(vacancyId, vacancyToken.token);
-      try { child.kill("SIGTERM"); } catch { /* ignore */ }
+      cancelled = true;
+      stop();
     },
   });
 

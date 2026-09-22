@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { atomicWrite } from "@/lib/core/safe-write";
+import type { RunState } from "@/lib/jobs/run-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,10 +17,14 @@ type Body = {
   batchId?: string;
   page?: string;
   input?: string;
+  intentKey?: string;
+  state?: RunState;
   status?: "running" | "done" | "error";
   error?: string;
   startedAt?: number;
+  lastActivityAt?: number;
   endedAt?: number;
+  supersedesId?: string;
   result?: { score: number | null; summary: string; tone?: string };
   cost?: { tokens: number; usd?: number };
   outputTruncated?: boolean;
@@ -69,10 +75,14 @@ ${b.output || ""}
     batchId: b.batchId,
     page: b.page,
     input: b.input,
-    status: b.status === "error" ? "error" : "done",
+    intentKey: b.intentKey,
+    state: b.state ?? (b.status === "done" ? "completed" : "needs-attention"),
+    status: b.status === "done" ? "done" : "error",
     error: b.error,
     startedAt: b.startedAt ?? Date.now(),
+    lastActivityAt: b.lastActivityAt ?? b.endedAt ?? b.startedAt ?? Date.now(),
     endedAt: b.endedAt,
+    supersedesId: b.supersedesId,
     result: b.result,
     cost: b.cost,
     outputTruncated: b.outputTruncated ?? false,
@@ -80,8 +90,8 @@ ${b.output || ""}
     text: b.output || "",
   };
   try {
-    fs.writeFileSync(path.join(dir, `${safeId}.md`), md);
-    fs.writeFileSync(path.join(dir, `${safeId}.json`), JSON.stringify(snapshot, null, 2));
+    atomicWrite(path.join(dir, `${safeId}.md`), md);
+    atomicWrite(path.join(dir, `${safeId}.json`), JSON.stringify(snapshot, null, 2));
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "write failed" }, { status: 500 });
