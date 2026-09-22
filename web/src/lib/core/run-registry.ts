@@ -10,6 +10,7 @@
 
 let seq = 0;
 const writing = new Set<number>();
+const vacancyRuns = new Map<string, number>();
 
 /** Mark that a tracker-writing run has started; returns a token to release with. */
 export function acquireTrackerWrite(): number {
@@ -25,4 +26,16 @@ export function releaseTrackerWrite(token: number): void {
 /** True while any evaluation/pdf run that mutates applications.md is in flight. */
 export function isTrackerWriting(): boolean {
   return writing.size > 0;
+}
+
+export function acquireVacancyRun(vacancyId: string): { token: number; existing?: number } {
+  const existing = vacancyRuns.get(vacancyId);
+  if (existing !== undefined) return { token: existing, existing };
+  const token = ++seq;
+  vacancyRuns.set(vacancyId, token);
+  return { token };
+}
+
+export function releaseVacancyRun(vacancyId: string, token: number): void {
+  if (vacancyRuns.get(vacancyId) === token) vacancyRuns.delete(vacancyId);
 }

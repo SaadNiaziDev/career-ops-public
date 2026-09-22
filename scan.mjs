@@ -45,6 +45,7 @@ import { fingerprintText, findCrossListings } from './fingerprint-core.mjs';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 import { normalizeCompany } from './tracker-utils.mjs';
 import { attachFitScores } from './fit-score.mjs';
+import { normalizeVacancyUrl } from './vacancy-identity.mjs';
 
 try {
   const { config } = await import('dotenv');
@@ -759,7 +760,7 @@ export function loadSeenUrls(policy = {}) {
     for (const line of lines.slice(1)) { // skip header
       const [url, firstSeen, , , , status = 'added'] = line.split('\t');
       if (!url) continue;
-      if (shouldDedupScanHistoryRow({ firstSeen, status }, policy)) seen.add(url);
+      if (shouldDedupScanHistoryRow({ firstSeen, status }, policy)) seen.add(normalizeVacancyUrl(url) ?? url);
       else recheckEligible++;
     }
   }
@@ -768,7 +769,7 @@ export function loadSeenUrls(policy = {}) {
   if (existsSync(PIPELINE_PATH)) {
     const text = readFileSync(PIPELINE_PATH, 'utf-8');
     for (const match of text.matchAll(/- \[[ x]\] (https?:\/\/\S+)/g)) {
-      seen.add(match[1]);
+      seen.add(normalizeVacancyUrl(match[1]) ?? match[1]);
     }
   }
 
@@ -776,7 +777,14 @@ export function loadSeenUrls(policy = {}) {
   if (existsSync(APPLICATIONS_PATH)) {
     const text = readFileSync(APPLICATIONS_PATH, 'utf-8');
     for (const match of text.matchAll(/https?:\/\/[^\s|)]+/g)) {
-      seen.add(match[0]);
+      seen.add(normalizeVacancyUrl(match[0]) ?? match[0]);
+    }
+    for (const match of text.matchAll(/\]\((?:\.\.\/)?reports\/([^)]+\.md)\)/g)) {
+      const reportPath = path.join('reports', match[1]);
+      if (!existsSync(reportPath)) continue;
+      const report = readFileSync(reportPath, 'utf-8');
+      const url = report.match(/^\*\*URL:\*\*\s*<?(https?:\/\/[^\s>]+)>?/im)?.[1];
+      if (url) seen.add(normalizeVacancyUrl(url) ?? url);
     }
   }
 
@@ -1269,14 +1277,15 @@ export function appendToPipeline(offers) {
   // the same posting a prior scan already wrote.
   const existing = new Set();
   for (const match of text.matchAll(/- \[[ xX]\] (https?:\/\/\S+)/g)) {
-    existing.add(match[1]);
+    existing.add(normalizeVacancyUrl(match[1]) ?? match[1]);
   }
   const seenBatch = new Set();
   const fresh = [];
   for (const offer of offers) {
     const url = sanitizePipelineUrl(offer?.url);
-    if (!url || existing.has(url) || seenBatch.has(url)) continue;
-    seenBatch.add(url);
+    const key = normalizeVacancyUrl(url) ?? url;
+    if (!url || existing.has(key) || seenBatch.has(key)) continue;
+    seenBatch.add(key);
     fresh.push(offer);
   }
   if (fresh.length === 0) return [];
@@ -1832,7 +1841,8 @@ async function main() {
           totalFilteredContent++;
           continue;
         }
-        if (seenUrls.has(job.url)) {
+        const vacancyKey = normalizeVacancyUrl(job.url) ?? job.url;
+        if (seenUrls.has(vacancyKey)) {
           totalDupes++;
           continue;
         }
@@ -1851,7 +1861,7 @@ async function main() {
           continue;
         }
         // Mark as seen to avoid intra-scan dupes
-        seenUrls.add(job.url);
+        seenUrls.add(vacancyKey);
         seenCompanyRoles.add(key);
         // Tag with the company's careers domain so verify can offer a 404/410
         // rediscovery fallback. A null domain (no careers_url) marks the offer

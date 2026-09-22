@@ -25,6 +25,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, copyFileSync, rea
 import { join, dirname, resolve, relative, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
 import { normalizeReportLink } from './tracker-links.mjs';
+import { normalizeVacancyUrl } from './vacancy-identity.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -98,7 +99,7 @@ for (const line of readFileSync(STATE_FILE, 'utf-8').split(/\r?\n/)) {
   // "completed" and "skipped" (below --min-score) both produced a report.
   if (status !== 'completed' && status !== 'skipped') continue;
   if (!url || !url.trim()) continue;
-  DONE.set(url.trim(), { reportNum: (reportNum || '').trim(), score: (score || '').trim() });
+  DONE.set(normalizeVacancyUrl(url.trim()) ?? url.trim(), { reportNum: (reportNum || '').trim(), score: (score || '').trim() });
 }
 
 if (DONE.size === 0) {
@@ -189,7 +190,7 @@ if (procStart >= 0) {
     if (!m) continue;
     // "[num](path) | url | company | role | score | PDF x" — url is field 2
     const parts = m[1].split('|').map(s => s.trim());
-    if (parts[1]) procUrls.add(parts[1]);
+    if (parts[1]) procUrls.add(normalizeVacancyUrl(parts[1]) ?? parts[1]);
   }
 }
 
@@ -203,10 +204,11 @@ for (let i = pendStart + 1; i < pendEnd; i++) {
   if (!PENDING_ITEM_RE.test(lines[i])) continue; // blank lines, "- [!]" errors → keep
   const body = lines[i].replace(PENDING_ITEM_RE, '');
   const url = lineUrl(body);
-  const done = DONE.get(url);
+  const urlKey = normalizeVacancyUrl(url) ?? url;
+  const done = DONE.get(urlKey);
   if (!done) continue; // not processed → keep in Pendientes
 
-  if (procUrls.has(url)) {
+  if (procUrls.has(urlKey)) {
     // Already recorded in Procesadas — just drop the stale Pendientes copy.
     removeIdx.add(i);
     moved.push({ url, role: '(already in Procesadas)', dup: true });
@@ -230,7 +232,7 @@ for (let i = pendStart + 1; i < pendEnd; i++) {
   const reportLink = normalizeReportLink(`[${num}](reports/${reportFile})`, dirname(PIPELINE_FILE), CAREER_OPS);
   movedProcLines.push(`- [x] ${reportLink} | ${url} | ${company} | ${role} | ${score} | PDF ${pdf}`);
   moved.push({ url, company, role, num, score });
-  procUrls.add(url);
+  procUrls.add(urlKey);
   removeIdx.add(i);
 }
 

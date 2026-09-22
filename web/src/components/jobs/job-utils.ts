@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Job, JobStep } from "@/components/jobs/job-store";
 import type { Application } from "@/lib/career-ops";
+import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
 
 const STEP_LABELS: Record<string, string> = {
   WebFetch: "Reading the posting",
@@ -137,15 +138,7 @@ function companyFromPdfPath(path: string | undefined): string | undefined {
 }
 
 export function normalizePostingUrl(raw: string): string {
-  try {
-    const u = new URL(raw);
-    let host = u.hostname.replace(/^www\./, "").toLowerCase();
-    if (host === "job-boards.greenhouse.io") host = "boards.greenhouse.io";
-    const path = u.pathname.replace(/\/+$/, "").toLowerCase();
-    return `${host}${path}`;
-  } catch {
-    return raw.trim().toLowerCase().replace(/\/+$/, "");
-  }
+  return normalizeVacancyUrl(raw) ?? raw.trim().toLowerCase().replace(/\/+$/, "");
 }
 
 export function reportNumFromJob(job: Job): string | undefined {
