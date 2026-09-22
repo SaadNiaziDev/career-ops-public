@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ApplyField } from "@/lib/apply/extract";
 import type { ApplyIssue, DriveStep } from "@/lib/apply/issue";
+import { restoredAnswers, snapshotFields, type AnswerSource, type ApplicationSnapshot, type SnapshotState } from "@/lib/apply/snapshot";
 
 export type FillStep = { fieldId: string; label: string; ok: boolean; thumb?: string };
 type Meta = { needsConfirmation?: boolean };
@@ -22,11 +23,14 @@ type ApplyCtx = {
   issues: ApplyIssue[];
   driveSteps: DriveStep[];
   error: string;
-  open: (url: string, opts?: { prefill?: boolean; company?: string }) => Promise<void>;
+  snapshotState: SnapshotState | null;
+  snapshotSaving: boolean;
+  open: (url: string, opts?: { prefill?: boolean; company?: string; trackerNum?: string }) => Promise<void>;
   prefill: () => Promise<void>;
   setAnswer: (idOrLabel: string, value: string) => void;
   fill: () => Promise<void>;
   agentFill: () => Promise<void>;
+  confirmSubmitted: () => Promise<void>;
   reset: () => void;
 };
 
@@ -60,16 +64,69 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
   const [issues, setIssues] = useState<ApplyIssue[]>([]);
   const [driveSteps, setDriveSteps] = useState<DriveStep[]>([]);
   const [error, setError] = useState("");
+  const [snapshotState, setSnapshotState] = useState<SnapshotState | null>(null);
+  const [snapshotSaving, setSnapshotSaving] = useState(false);
   const sessionId = useRef<string | null>(null);
+  const trackerNum = useRef<string | null>(null);
   const companyRef = useRef<string>("");
   const fieldsRef = useRef<ApplyField[]>([]);
   fieldsRef.current = fields;
   const answersRef = useRef<Record<string, string>>({});
   answersRef.current = answers;
+  const sourcesRef = useRef<Record<string, AnswerSource>>({});
+  const urlRef = useRef("");
+  const answersDirty = useRef(false);
+  const answerVersion = useRef(0);
   // When a session opens with {prefill:true}, auto-fire prefill once fields are
   // ready — driven by an effect (not a fragile setTimeout) so it can't race the
   // session response or a navigation.
   const pendingPrefill = useRef(false);
+
+  const restoreSnapshot = useCallback(async (fs: ApplyField[]) => {
+    if (!trackerNum.current) return false;
+    const response = await fetch(`/api/apply/snapshot?tracker=${encodeURIComponent(trackerNum.current)}`);
+    const data = await response.json() as { snapshot?: ApplicationSnapshot | null };
+    if (!data.snapshot) return false;
+    const restored = restoredAnswers(data.snapshot, fs);
+    setAnswers(restored.answers);
+    sourcesRef.current = restored.sources;
+    setSnapshotState(data.snapshot.state);
+    pendingPrefill.current = false;
+    return true;
+  }, []);
+
+  const saveSnapshot = useCallback(async (state: SnapshotState) => {
+    if (!urlRef.current || fieldsRef.current.length === 0) return false;
+    const savedVersion = answerVersion.current;
+    setSnapshotSaving(true);
+    try {
+      const response = await fetch("/api/apply/snapshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          trackerNum: trackerNum.current,
+          sessionId: sessionId.current,
+          vacancyUrl: urlRef.current,
+          state,
+          fields: snapshotFields(fieldsRef.current, answersRef.current, sourcesRef.current),
+        }),
+      });
+      const data = await response.json() as { error?: string; trackerNum?: string };
+      if (!response.ok) {
+        if (response.status !== 404) setError(data.error || "Could not save the application snapshot.");
+        return false;
+      }
+      if (data.trackerNum) trackerNum.current = data.trackerNum;
+      if (answerVersion.current === savedVersion) answersDirty.current = false;
+      setSnapshotState(state);
+      return true;
+    } catch {
+      setError("Could not save the application snapshot.");
+      return false;
+    } finally {
+      setSnapshotSaving(false);
+    }
+  }, []);
 
   // Stream the agentic drive (the AI reaching the form live) and finalize the
   // session when it succeeds → fields ready → auto-prefill fires.
@@ -105,6 +162,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
           else if (ev.t === "done") {
             finished = true;
             setFields(ev.fields ?? []);
+            await restoreSnapshot(ev.fields ?? []);
             if (ev.title) setTitle(ev.title);
             setIssues(ev.issues ?? []);
             setStatus("ready"); // → the ready-effect auto-prefills if pending
@@ -123,11 +181,14 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       setError(`The agent couldn't reach the form: ${e instanceof Error ? e.message : "stream error"}.`);
       setStatus("error");
     }
-  }, []);
+  }, [restoreSnapshot]);
 
-  const open = useCallback(async (u: string, opts?: { prefill?: boolean; company?: string }) => {
+  const open = useCallback(async (u: string, opts?: { prefill?: boolean; company?: string; trackerNum?: string }) => {
     setStatus("opening");
     setError("");
+    setSnapshotState(null);
+    answersDirty.current = false;
+    answerVersion.current = 0;
     setFields([]);
     setAnswers({});
     setMeta({});
@@ -136,6 +197,8 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
     setIssues([]);
     setDriveSteps([]);
     setUrl(u);
+    urlRef.current = u;
+    trackerNum.current = opts?.trackerNum ?? null;
     setCompany(opts?.company ?? "");
     companyRef.current = opts?.company ?? "";
     pendingPrefill.current = false;
@@ -158,13 +221,14 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setFields(d.fields);
+      await restoreSnapshot(d.fields);
       setIssues(d.issues ?? []);
       setStatus("ready");
     } catch {
       setError("Could not open the form.");
       setStatus("error");
     }
-  }, []);
+  }, [drive, restoreSnapshot]);
 
   const prefill = useCallback(async () => {
     if (!sessionId.current) return;
@@ -181,7 +245,10 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       for (const [id, v] of Object.entries(raw)) {
         a[id] = v?.value ?? "";
         m[id] = { needsConfirmation: !!v?.needs_confirmation };
+        sourcesRef.current[id] = v?.needs_confirmation ? "ai" : "profile";
       }
+      answersDirty.current = true;
+      answerVersion.current += 1;
       setAnswers(a);
       setMeta(m);
     };
@@ -249,8 +316,19 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       fs.find((x) => x.id === idOrLabel) ||
       fs.find((x) => x.label.toLowerCase().includes(key)) ||
       fs.find((x) => key.includes(x.label.toLowerCase()) && x.label.length > 2);
-    if (f) setAnswers((prev) => ({ ...prev, [f.id]: value }));
+    if (f) {
+      sourcesRef.current[f.id] = "user";
+      answersDirty.current = true;
+      answerVersion.current += 1;
+      setAnswers((prev) => ({ ...prev, [f.id]: value }));
+    }
   }, []);
+
+  useEffect(() => {
+    if (!answersDirty.current || status !== "ready" || fields.length === 0 || Object.keys(answers).length === 0) return;
+    const timer = window.setTimeout(() => void saveSnapshot("draft"), 700);
+    return () => window.clearTimeout(timer);
+  }, [answers, fields.length, saveSnapshot, status]);
 
   const fill = useCallback(async () => {
     if (!sessionId.current) return;
@@ -274,6 +352,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       }
       if (d.navigated) setError("Heads up: the form's page changed during fill — review it carefully before submitting (career-ops never submits for you).");
       setStatus("done");
+      await saveSnapshot("filled");
       // ESCALATION ("si no va, full agente"): if deterministic fill clearly
       // didn't land (most fields failed / mismatched), let the agent fill it.
       const okCount = (d.steps ?? []).filter((s: FillStep) => s.ok).length;
@@ -286,7 +365,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       setError("Fill failed.");
       setStatus("error");
     }
-  }, [answers, fields]);
+  }, [answers, fields, saveSnapshot]);
 
   // FULL-AGENT FILL — the agent fills the real form turn-by-turn from the verified
   // answers, streamed (drive panel), never submits, then hands off. Used as the
@@ -328,6 +407,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
           else if (ev.t === "done") {
             setIssues((prev) => [...prev, { level: "info", code: "ai-filled", message: ev.filled ? "AI filled the form for you — review every answer on the real form, then submit it yourself." : "AI did its best but couldn't finish — check the real form before submitting." }]);
             setStatus("done");
+            await saveSnapshot("filled");
           } else if (ev.t === "error") {
             setError(ev.message || "The agent couldn't fill the form.");
             setStatus("error");
@@ -338,9 +418,15 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       setError(`The agent couldn't fill the form: ${e instanceof Error ? e.message : "stream error"}.`);
       setStatus("error");
     }
-  }, []);
+  }, [saveSnapshot]);
   const agentFillRef = useRef(agentFill);
   agentFillRef.current = agentFill;
+
+  const confirmSubmitted = useCallback(async () => {
+    if (!window.confirm("Confirm that you clicked Submit on the employer's form. This will mark the application Applied.")) return;
+    const saved = await saveSnapshot("submitted");
+    if (saved) setIssues((prev) => [...prev, { level: "info", code: "submission-recorded", message: "Submission recorded. Your exact answers and document version are saved in the report." }]);
+  }, [saveSnapshot]);
 
   const reset = useCallback(() => {
     if (sessionId.current) {
@@ -348,6 +434,11 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       void fetch("/api/apply/close", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: id }), keepalive: true }).catch(() => {});
     }
     sessionId.current = null;
+    trackerNum.current = null;
+    urlRef.current = "";
+    sourcesRef.current = {};
+    answersDirty.current = false;
+    answerVersion.current = 0;
     companyRef.current = "";
     pendingPrefill.current = false;
     setStatus("idle");
@@ -363,11 +454,13 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
     setIssues([]);
     setDriveSteps([]);
     setError("");
+    setSnapshotState(null);
+    setSnapshotSaving(false);
   }, []);
 
   const value = useMemo(
-    () => ({ status, url, title, company, fields, answers, meta, steps, shots, prefillLog, issues, driveSteps, error, open, prefill, setAnswer, fill, agentFill, reset }),
-    [status, url, title, company, fields, answers, meta, steps, shots, prefillLog, issues, driveSteps, error, open, prefill, setAnswer, fill, agentFill, reset],
+    () => ({ status, url, title, company, fields, answers, meta, steps, shots, prefillLog, issues, driveSteps, error, snapshotState, snapshotSaving, open, prefill, setAnswer, fill, agentFill, confirmSubmitted, reset }),
+    [status, url, title, company, fields, answers, meta, steps, shots, prefillLog, issues, driveSteps, error, snapshotState, snapshotSaving, open, prefill, setAnswer, fill, agentFill, confirmSubmitted, reset],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

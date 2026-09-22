@@ -288,6 +288,45 @@ export function getSession(id: string): Session | undefined {
   return SESSIONS.get(id);
 }
 
+export async function readSessionSnapshot(id: string): Promise<{
+  fields: Array<{ id: string; label: string; type: ApplyField["type"]; value: string }>;
+  files: Array<{ label: string; path: string; version: string }>;
+}> {
+  const session = SESSIONS.get(id);
+  if (!session) return { fields: [], files: [] };
+  const values = await session.frame.evaluate(() => {
+    const result: Record<string, string> = {};
+    const files: Array<{ id: string; name: string; size: number; modified: number }> = [];
+    for (const element of Array.from(document.querySelectorAll<HTMLElement>("[data-co-field]"))) {
+      const id = element.dataset.coField;
+      if (!id) continue;
+      if (element instanceof HTMLInputElement && element.type === "file") {
+        for (const file of Array.from(element.files ?? [])) files.push({ id, name: file.name, size: file.size, modified: file.lastModified });
+      } else if (element instanceof HTMLInputElement && element.type === "radio") {
+        if (element.checked) result[id] = element.dataset.coOption || element.value;
+      } else if (element instanceof HTMLInputElement && element.type === "checkbox") {
+        result[id] = element.checked ? "true" : "";
+      } else if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
+        result[id] = element.value;
+      }
+    }
+    return { result, files };
+  });
+  const byId = new Map(session.fields.map((field) => [field.id, field]));
+  return {
+    fields: Object.entries(values.result).flatMap(([id, value]) => {
+      const field = byId.get(id);
+      return field ? [{ id, label: field.label || field.nativeName || id, type: field.type, value }] : [];
+    }),
+    files: values.files.flatMap((file) => {
+      const field = byId.get(file.id);
+      if (!field) return [];
+      const modified = file.modified ? new Date(file.modified).toISOString() : "unknown modified time";
+      return [{ label: field.label || "Uploaded file", path: file.name, version: `${file.size} bytes; modified ${modified}` }];
+    }),
+  };
+}
+
 /** Open a bare headed page on a URL (for the agentic drive loop / validation),
  *  without the full extract pipeline. Caller must close the context. */
 export async function newDrivePage(url: string): Promise<{ page: Page; context: BrowserContext }> {
