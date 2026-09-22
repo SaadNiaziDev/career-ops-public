@@ -38,6 +38,42 @@ const DEFAULT_SECTION_TITLES = {
   skills: 'Skills',
 };
 
+const CONTRACT_KEYS = new Set([
+  'contract_version', 'lang', 'candidate', 'sections', 'summary', 'competencies',
+  'experience', 'projects', 'education', 'certifications', 'skills',
+]);
+
+/** Validate the stable content-only contract before any layout code runs. */
+function validateCvPayload(payload, { requireContract = false } = {}) {
+  const errors = [];
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { ok: false, errors: ['payload must be an object'] };
+  }
+  if (requireContract && payload.contract_version !== '1.0') errors.push('contract_version must be "1.0"');
+  for (const key of Object.keys(payload)) {
+    if (requireContract && !CONTRACT_KEYS.has(key)) errors.push(`unknown top-level field: ${key}`);
+  }
+  if (!payload.candidate || typeof payload.candidate !== 'object' || Array.isArray(payload.candidate)) {
+    errors.push('candidate must be an object');
+  } else {
+    if (!String(payload.candidate.name || '').trim()) errors.push('candidate.name is required');
+    if (!String(payload.candidate.headline || '').trim()) errors.push('candidate.headline is required');
+  }
+  if (!String(payload.summary || '').trim()) errors.push('summary is required');
+  for (const key of ['experience', 'education', 'skills']) {
+    if (!Array.isArray(payload[key])) errors.push(`${key} must be an array`);
+  }
+  if (Array.isArray(payload.experience) && payload.experience.length === 0) errors.push('experience must contain at least one entry');
+  for (const [index, entry] of (Array.isArray(payload.experience) ? payload.experience : []).entries()) {
+    if (!entry || typeof entry !== 'object') errors.push(`experience[${index}] must be an object`);
+    else if (!String(entry.company || '').trim() || !String(entry.role || '').trim()) errors.push(`experience[${index}] needs company and role`);
+  }
+  for (const key of ['competencies', 'projects', 'certifications']) {
+    if (payload[key] !== undefined && !Array.isArray(payload[key])) errors.push(`${key} must be an array`);
+  }
+  return { ok: errors.length === 0, errors };
+}
+
 // Escape user text for HTML text/attribute context. Covers the five characters
 // that change meaning in markup so tailored bullets containing &, <, >, quotes
 // (e.g. "R&D", "scaled 10x < budget", 'the "north star" metric') render as
@@ -300,7 +336,7 @@ function renderHtml(template, payload) {
   return html;
 }
 
-export { renderHtml, injectStyleTokens, buildStyleBlock, renderReport };
+export { renderHtml, injectStyleTokens, buildStyleBlock, renderReport, validateCvPayload };
 
 function countBullets(payload) {
   const ex = Array.isArray(payload.experience)
@@ -376,6 +412,12 @@ async function main() {
     payload = JSON.parse(await readFile(absInput, 'utf-8'));
   } catch (err) {
     console.error(`Failed to parse input JSON: ${err.message}`);
+    process.exit(1);
+  }
+
+  const validation = validateCvPayload(payload);
+  if (!validation.ok) {
+    console.error(`Invalid CV payload: ${validation.errors.join('; ')}`);
     process.exit(1);
   }
 

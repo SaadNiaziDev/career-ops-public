@@ -213,6 +213,29 @@ export type Application = {
   notes: string;
 };
 
+function reportsWithVerifiedPdf(): Set<string> {
+  const ready = new Set<string>();
+  const manifest = read("data/pdf-index.tsv");
+  if (!manifest) return ready;
+  for (const line of manifest.split("\n")) {
+    if (!line.trim() || line.startsWith("#")) continue;
+    const [report, pdf, , , , template, , , sourceReport, renderer] = line.split("\t");
+    if (!/^\d+$/.test(report) || !pdf || !template || !sourceReport || !renderer) continue;
+    const abs = path.resolve(careerOpsRoot(), pdf);
+    const rel = path.relative(careerOpsRoot(), abs);
+    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) continue;
+    let handle: number | undefined;
+    try {
+      const header = Buffer.alloc(5);
+      handle = fs.openSync(abs, "r");
+      fs.readSync(handle, header, 0, 5, 0);
+      if (fs.statSync(abs).size >= 1_000 && header.toString("ascii") === "%PDF-") ready.add(String(Number.parseInt(report, 10)));
+    } catch { /* stale manifest entry */ }
+    finally { if (handle !== undefined) fs.closeSync(handle); }
+  }
+  return ready;
+}
+
 /**
  * Parse data/applications.md — the tracker table (source of truth).
  * The header-aware parsing lives in tracker-table.mjs, which resolves headers
@@ -223,10 +246,13 @@ export type Application = {
 export function readApplications(): Application[] {
   const md = read("data/applications.md");
   if (!md) return [];
+  const pdfReady = reportsWithVerifiedPdf();
   return parseApplications(md, careerOpsRoot()).map((row: Application) => {
     const report = readReportDetails(row.n);
+    const reportNum = row.report.match(/\[(\d+)\]/)?.[1];
     return {
       ...row,
+      pdf: reportNum && pdfReady.has(String(Number.parseInt(reportNum, 10))) ? "✅" : row.pdf,
       url: report.url,
       location: row.location || report.location,
     };

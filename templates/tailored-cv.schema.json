@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://career-ops.local/schemas/tailored-cv-v1.json",
+  "title": "Career-Ops tailored CV content",
+  "type": "object",
+  "required": ["contract_version", "candidate", "summary", "experience", "education", "skills"],
+  "properties": {
+    "contract_version": { "const": "1.0" },
+    "lang": { "type": "string", "minLength": 2, "maxLength": 12 },
+    "candidate": {
+      "type": "object",
+      "required": ["name", "headline"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "headline": { "type": "string", "minLength": 1 },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "location": { "type": "string" },
+        "photo": { "type": "string" },
+        "linkedin": { "$ref": "#/$defs/link" },
+        "portfolio": { "$ref": "#/$defs/link" }
+      },
+      "additionalProperties": false
+    },
+    "sections": { "type": "object", "additionalProperties": { "type": "string" } },
+    "summary": { "type": "string", "minLength": 1 },
+    "competencies": { "type": "array", "items": { "type": "string" } },
+    "experience": { "type": "array", "items": { "$ref": "#/$defs/experience" }, "minItems": 1 },
+    "projects": { "type": "array", "items": { "type": "object" } },
+    "education": { "type": "array", "items": { "type": "object" } },
+    "certifications": { "type": "array", "items": { "type": "object" } },
+    "skills": { "type": "array", "items": { "type": "object" } }
+  },
+  "$defs": {
+    "link": {
+      "type": "object",
+      "required": ["url"],
+      "properties": { "url": { "type": "string" }, "display": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "experience": {
+      "type": "object",
+      "required": ["company", "role", "dates", "bullets"],
+      "properties": {
+        "company": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "location": { "type": "string" },
+        "dates": { "type": "string" },
+        "bullets": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

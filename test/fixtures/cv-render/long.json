@@ -1,0 +1,65 @@
+{
+  "contract_version": "1.0",
+  "lang": "en",
+  "candidate": {
+    "name": "Alex Rivera",
+    "headline": "Senior Platform Engineer",
+    "phone": "+1 555 0100",
+    "email": "alex@example.com",
+    "linkedin": { "url": "https://linkedin.com/in/alexrivera", "display": "linkedin.com/in/alexrivera" },
+    "portfolio": { "url": "https://example.com", "display": "example.com" },
+    "location": "Remote"
+  },
+  "summary": "Senior platform engineer focused on reliable systems, clear operational ownership, secure delivery pipelines, and developer workflows that reduce friction across growing product teams.",
+  "competencies": ["Platform Engineering", "SRE", "Observability", "Kubernetes", "Security", "Developer Experience", "Incident Response", "Cloud Architecture"],
+  "experience": [
+    {
+      "company": "Example Systems",
+      "role": "Senior Platform Engineer",
+      "location": "Remote",
+      "dates": "2021 - Present",
+      "bullets": [
+        "Designed deployment controls used across multiple product services.",
+        "Built observability standards for logs, metrics, traces, and alert ownership.",
+        "Partnered with application teams to simplify local development and releases.",
+        "Led incident reviews and converted findings into tested platform safeguards."
+      ]
+    },
+    {
+      "company": "Sample Cloud",
+      "role": "Software Engineer",
+      "location": "Hybrid",
+      "dates": "2018 - 2021",
+      "bullets": [
+        "Maintained internal services and delivery automation.",
+        "Documented operational playbooks and service ownership boundaries.",
+        "Improved test coverage for critical infrastructure changes."
+      ]
+    },
+    {
+      "company": "Demo Software",
+      "role": "Software Engineer",
+      "location": "On-site",
+      "dates": "2015 - 2018",
+      "bullets": [
+        "Built service integrations for operational teams.",
+        "Added automated checks for customer-facing workflows.",
+        "Supported production releases and documented recovery procedures.",
+        "Worked with product partners to clarify system requirements."
+      ]
+    }
+  ],
+  "projects": [
+    { "name": "Release Console", "badge": "Internal", "tech": "TypeScript, Kubernetes", "description": "A controlled deployment workflow with audit history." },
+    { "name": "Service Catalog", "tech": "Node.js, PostgreSQL", "description": "A searchable ownership and operational-readiness catalog." },
+    { "name": "Incident Timeline", "tech": "React, OpenTelemetry", "description": "A shared view of incident signals and response actions." },
+    { "name": "Runbook Library", "tech": "Markdown, Node.js", "description": "Versioned operational guidance with ownership and review dates." }
+  ],
+  "education": [{ "title": "BSc Computer Science", "org": "Example University", "year": "2018", "description": "Software systems and distributed computing." }],
+  "certifications": [{ "title": "Cloud Architecture", "org": "Example Institute", "year": "2024" }],
+  "skills": [
+    { "category": "Languages", "items": ["TypeScript", "Python", "SQL"] },
+    { "category": "Platform", "items": ["Kubernetes", "Docker", "Terraform", "OpenTelemetry"] },
+    { "category": "Data", "items": ["PostgreSQL", "Redis"] }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "contract_version": "1.0",
+  "lang": "en",
+  "candidate": {
+    "name": "Alex Rivera",
+    "headline": "Platform Engineer",
+    "email": "alex@example.com",
+    "location": "Remote"
+  },
+  "summary": "Platform engineer building reliable developer tooling and observable services.",
+  "competencies": ["Platform Engineering", "Observability", "Developer Experience"],
+  "experience": [
+    {
+      "company": "Example Systems",
+      "role": "Platform Engineer",
+      "dates": "2023 - Present",
+      "bullets": ["Improved deployment reliability through tested release automation."]
+    }
+  ],
+  "projects": [],
+  "education": [{ "title": "BSc Computer Science", "org": "Example University", "year": "2023" }],
+  "certifications": [],
+  "skills": [{ "category": "Tools", "items": ["TypeScript", "Docker", "PostgreSQL"] }]
+}

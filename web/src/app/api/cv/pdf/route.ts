@@ -44,14 +44,14 @@ export async function POST(req: Request) {
 
   const pageFormat = sanitizeCvPageFormat(body.pageFormat) ?? readCvSettings().pageFormat;
 
-  let html: string;
+  let rendered: ReturnType<typeof renderCvPreviewHtml>;
   try {
-    html = renderCvPreviewHtml({
+    rendered = renderCvPreviewHtml({
       markdown: md,
       template: sanitizeCvTemplate(body.template) ?? undefined,
       pageFormat,
       style: sanitizeCvStyle(body.style) as Record<string, string>,
-    }).html;
+    });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "render failed" }, { status: 500 });
   }
@@ -60,10 +60,15 @@ export async function POST(req: Request) {
   const htmlPath = path.join(os.tmpdir(), `co-cv-${stamp}.html`);
   const pdfPath = path.join(os.tmpdir(), `co-cv-${stamp}.pdf`);
   try {
-    fs.writeFileSync(htmlPath, html, "utf8");
+    fs.writeFileSync(htmlPath, rendered.html, "utf8");
     const r = spawnSync(
       process.execPath,
-      [rootScript("generate-pdf"), htmlPath, pdfPath, `--format=${pageFormat}`],
+      [
+        rootScript("generate-pdf"), htmlPath, pdfPath, `--format=${rendered.pageFormat}`,
+        `--template=${rendered.template}`, `--template-version=${rendered.templateVersion}`,
+        `--style-version=${rendered.styleVersion}`, `--renderer-version=${rendered.rendererVersion}`,
+        "--no-manifest",
+      ],
       { cwd: careerOpsRoot(), encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
     );
     if (r.status !== 0 || !fs.existsSync(pdfPath)) {

@@ -13,7 +13,15 @@ export type CvPreviewStats = {
   competencies: number;
 };
 
-export type CvPreviewResult = { html: string; template: string; stats?: CvPreviewStats };
+export type CvPreviewResult = {
+  html: string;
+  template: string;
+  templateVersion: string;
+  styleVersion: string;
+  rendererVersion: string;
+  pageFormat: "a4" | "letter";
+  stats?: CvPreviewStats;
+};
 
 /** Render cv markdown to HTML via the root cv-md-preview.mjs CLI (avoids Next bundler dynamic import). */
 export function renderCvPreviewHtml(opts: {

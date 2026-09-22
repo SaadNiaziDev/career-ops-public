@@ -22,13 +22,10 @@
 13. Inject keywords naturally into existing achievements (NEVER invent)
 14. Apply the six-second clarity gate from `modes/heuristics/recruiter-side.md`: top third must make target role, strongest fit, and proof obvious
 15. Read `name` from `config/profile.yml` → normalize to kebab-case lowercase (e.g. "John Doe" → "john-doe") → `{candidate}`
-16. Build the render payload (see the **JSON Input Schema** below) from the tailored content — emit compact structured JSON, **not** full HTML markup — and write it to `/tmp/cv-{candidate}-{company}.json`
-17. Run: `node build-cv-html.mjs /tmp/cv-{candidate}-{company}.json output/cv-{candidate}-{company}.html {template}` — where `{template}` is the path printed by **Selecting the template** below (omit the argument to use the base `cv-template.html`). The script merges the payload into that template, owning every tag, CSS class, and the HTML escaping. Write to `output/` (NOT a temp dir — the recorded HTML is what the dashboard's `D` hotkey regenerates from, so it must survive temp cleanup)
-18. Run the fact gate: `node verify-cv-facts.mjs output/cv-{candidate}-{company}.html`
-    - This is a hard gate before PDF rendering.
-    - If it fails, stop and fix the generated HTML by removing invented metrics or adding verified evidence to `cv.md`, `article-digest.md`, or `config/cv-facts.json`.
-19. Execute: `node generate-pdf.mjs output/cv-{candidate}-{company}.html output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4} --report={report number}` — `{report number}` is the NNN from the report filename/link (e.g. `008` for `reports/008-acme-….md`), not the tracker `#` column. Pass it whenever the application has (or will have) a report; it records the PDF↔report linkage in `data/pdf-index.tsv` so the dashboard can open and regenerate the exact PDF. Omit it only for one-off CVs with no tracker entry.
-20. Report: PDF path, number of pages, keyword coverage %, and any skill gaps from Step 4 still unaddressed
+16. Build the render payload (see the **Tailored-CV Content Contract** below) from the tailored content — emit compact structured JSON, **not** full HTML markup — and write it to `/tmp/cv-{candidate}-{company}.json`.
+17. Execute exactly one rendering command: `node render-cv.mjs /tmp/cv-{candidate}-{company}.json output/cv-{candidate}-{company}.html output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4} --report={report number}`. Use the NNN from the report filename/link (for example `008`), not the tracker row number. Omit `--report` only for a one-off CV with no report.
+18. `render-cv.mjs` is the only layout owner. It resolves the selected template and profile style, builds HTML, runs the fact gate, renders the PDF, verifies the PDF and expected sections, then records template/style/source-report metadata. If it fails, stop and surface the error. Never write or patch HTML/CSS yourself and never call `build-cv-html.mjs` or `generate-pdf.mjs` directly.
+19. Report: PDF path, number of pages, keyword coverage %, and any skill gaps from Step 4 still unaddressed
 
 ## ATS Rules (clean parsing)
 
@@ -84,28 +81,20 @@ Examples of legitimate reformulation:
 
 ### Selecting the template
 
-Resolve which template to fill with the shared resolver (do not hardcode `cv-template.html`):
-
-- If the user named a template this turn (e.g. "use the *modern* template"), run:
-  `node cv-templates.mjs resolve cv "<name>"`
-- Otherwise run: `node cv-templates.mjs resolve cv`
-  (this returns the `cv.template` default from `config/profile.yml`, or the base `cv-template.html` when unset).
-
-The command prints the absolute path of the template to fill; a non-zero exit means the named template is missing or invalid — surface that message to the user instead of silently falling back.
+`render-cv.mjs` resolves `config/profile.yml → cv.template`; do not hardcode a template path. If the user names a template this turn, pass `--template=<name>` to `render-cv.mjs`.
 
 To show the user their options (e.g. "what CV templates do I have?"), run `node cv-templates.mjs list cv` and present each `displayName`.
 
-`build-cv-html.mjs` fills that resolved template from the JSON payload you build — it owns every tag, CSS class, and the HTML escaping, so you **never emit full HTML markup** and do **not** escape `&`/`<`/`>`/quotes yourself. Pass the resolved path as the third argument (`node build-cv-html.mjs <input.json> <output.html> <template.html>`); omit it to fall back to the base `cv-template.html`. This is the HTML twin of `build-cv-latex.mjs` (see `modes/latex.md`) and cuts the PDF step's output tokens from full markup down to the compact payload below (#557).
+The renderer applies `cv.style`, paper size, typography, spacing, and template metadata from one resolved configuration. The payload contains content only.
 
-### JSON Input Schema
+### Tailored-CV Content Contract
 
-Write a JSON file with this structure, then run `node build-cv-html.mjs <input.json> <output.html> [template.html]` (the optional third argument is the template path from **Selecting the template**; omit it for the base `cv-template.html`).
+The machine-readable schema is `templates/tailored-cv.schema.json`. Write JSON with this structure:
 
 ```json
 {
+  "contract_version": "1.0",
   "lang": "en",
-  "page_format": "letter",
-  "style": { "accent_color": "#2563eb", "heading_color": "#1a1a2e", "density": "standard" },
   "candidate": {
     "name": "Jane Smith",
     "headline": "Senior Software Engineer",
@@ -157,8 +146,7 @@ Write a JSON file with this structure, then run `node build-cv-html.mjs <input.j
 | Field | Type | Notes |
 |-------|------|-------|
 | `lang` | string | CV language code (`en`, `es`, `ja`, `ar`). Drives language-specific CSS: `ja` enables a CJK font fallback so Japanese renders instead of tofu (□); `ar` enables RTL + Arabic fonts. Defaults to `en`. |
-| `page_format` | string | `letter` → `8.5in` page width, `a4` → `210mm`. Defaults to `letter`. Pass the SAME value to `generate-pdf.mjs --format`. |
-| `style` | object | Optional user style overrides. Copy `cv.style` from `config/profile.yml` **verbatim** when present; omit the key entirely when unset so each template keeps its native palette. Keys: `accent_color`, `heading_color`, `font_stack`, `margin`, `density` (`compact` / `standard` / `spacious`). Only keys the user set are applied. |
+| `contract_version` | string | Required. Must be `1.0`. |
 | `candidate.name` | string | From `profile.yml`. |
 | `candidate.headline` | string | Tailored target role shown below the candidate's name when the selected template supports it. |
 | `candidate.phone` | string | Optional — **omit or leave empty** to drop the `tel:` link and its separator (no empty cell). |
@@ -176,7 +164,7 @@ Write a JSON file with this structure, then run `node build-cv-html.mjs <input.j
 | `certifications[]` | object | `title`, `org`, `year`. |
 | `skills[]` | object | `category` + `items` (comma-separated string or string array). |
 
-`build-cv-html.mjs` errors out (non-zero exit) if any template placeholder is left unresolved, so a malformed payload fails loudly instead of shipping a broken CV. Run `node build-cv-html.mjs --test` for a self-test render.
+`render-cv.mjs` rejects unknown top-level fields, invalid content shapes, unresolved placeholders, fact-gate failures, unreadable PDFs, missing sections, or template mismatches.
 
 ### Profile photo (opt-in, market-specific)
 

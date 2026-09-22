@@ -53,9 +53,8 @@ Target: ${input}`;
     return `You are generating the user's ATS-optimized, TAILORED CV PDF for application #${input}, headless, on their machine. Run the REAL career-ops "pdf" mode — follow modes/pdf.md EXACTLY (do not improvise a format).
 1. Read modes/pdf.md, cv.md, config/profile.yml, and the evaluation report at reports/${input}-*.md (for the JD keywords + analysis).
 2. Tailor the CV per modes/pdf.md: inject the JD's keywords into the summary + first bullets, reorder experience by relevance, build the competency grid, pick the top 3–4 projects. NEVER invent skills — only reword REAL experience using the JD's vocabulary.
-3. Fill templates/cv-template.html's {{...}} placeholders with the tailored content; write the HTML to /tmp/cv-{candidate}-{company}.html (candidate = the profile name in kebab-case).
-4. Render the PDF: \`node generate-pdf.mjs /tmp/cv-{candidate}-{company}.html output/cv-{candidate}-{company}-${today}.pdf --format={letter for US/Canada companies, else a4}\`.
-5. Update the tracker: in data/applications.md, change the PDF column for row #${input} from ❌ to ✅.
+3. Write only the tailored-cv v1 JSON content contract. Never create or edit HTML/CSS.
+4. Run the single \`render-cv.mjs\` command from modes/pdf.md with \`--report=${input}\`; it owns template, style, HTML, PDF, verification, and the artifact manifest.
 Do not submit anything anywhere.
 
 End with EXACTLY one final line: VERDICT: {5 if the PDF was written, else 1}/5 — {the output/ path, ≤12 words}`;
@@ -222,6 +221,11 @@ function existingEvaluationForUrl(input: string): string | undefined {
   return readApplications().find((app) => app.url && normalizeVacancyUrl(app.url) === needle)?.n;
 }
 
+function reportNumberForApplication(input: string): string {
+  const app = readApplications().find((row) => String(row.n) === input.trim());
+  return app?.report.match(/\[(\d+)\]/)?.[1] ?? input.trim();
+}
+
 function openingPhase(kind: string): string {
   if (kind === "evaluate") return "Verifying the vacancy";
   if (kind === "pdf") return "Reading your profile and CV";
@@ -245,6 +249,29 @@ function terminateProcess(pid: number | undefined, signal: NodeJS.Signals): void
     else process.kill(-pid, signal);
   } catch {
     try { process.kill(pid, signal); } catch { /* process already stopped */ }
+  }
+}
+
+type PdfArtifact = { signature: string; template: string; sourceReport: string };
+
+function pdfArtifactForReport(report: string): PdfArtifact | null {
+  const normalized = report.trim().replace(/^0+(?=\d)/, "");
+  try {
+    const rows = fs.readFileSync(path.join(careerOpsRoot(), "data", "pdf-index.tsv"), "utf8").split("\n");
+    const fields = rows
+      .filter((line) => line.trim() && !line.startsWith("#"))
+      .map((line) => line.split("\t"))
+      .findLast((row) => row[0]?.trim().replace(/^0+(?=\d)/, "") === normalized);
+    if (!fields?.[1]) return null;
+    const pdfPath = path.resolve(careerOpsRoot(), fields[1]);
+    const relative = path.relative(careerOpsRoot(), pdfPath);
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return null;
+    const stat = fs.statSync(pdfPath);
+    const header = fs.readFileSync(pdfPath).subarray(0, 5).toString("ascii");
+    if (!stat.isFile() || stat.size < 1_000 || header !== "%PDF-") return null;
+    return { signature: `${stat.mtimeMs}:${stat.size}`, template: fields[5] || "", sourceReport: fields[8] || "" };
+  } catch {
+    return null;
   }
 }
 
@@ -281,7 +308,7 @@ export async function POST(req: Request) {
   const needsScript: Record<string, string> = {
     evaluate: "modes/oferta.md",
     "fix-portal": "verify-portals.mjs",
-    pdf: "generate-pdf.mjs",
+    pdf: "render-cv.mjs",
     cover: "modes/cover.md",
     email: "modes/email.md",
     contacto: "modes/contacto.md",
@@ -340,7 +367,8 @@ export async function POST(req: Request) {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const prompt = buildPrompt(kind, input, readMemory(), today, context);
+  const artifactInput = kind === "pdf" ? reportNumberForApplication(input) : input;
+  const prompt = buildPrompt(kind, artifactInput, readMemory(), today, context);
 
   const isClaude = cliId === "claude";
   const isCodex = cliId === "codex";
@@ -404,9 +432,10 @@ export async function POST(req: Request) {
   };
   const persists = kind === "evaluate";
   const reportsBefore = persists ? reportSnapshot() : new Map<string, string>();
+  const pdfBefore = kind === "pdf" ? pdfArtifactForReport(artifactInput) : null;
   // Tracker-mutating runs hold a write token so a row delete can't race their merge
   // (tracker.mjs delete doesn't yet share a lock with merge-tracker — see run-registry).
-  const writeToken = kind === "evaluate" || kind === "pdf" ? acquireTrackerWrite() : null;
+  const writeToken = kind === "evaluate" ? acquireTrackerWrite() : null;
 
   const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
   const enc = new TextEncoder();
@@ -574,6 +603,14 @@ export async function POST(req: Request) {
           send({ type: "error", msg: failure });
         } else if (persists && !changedReport) {
           send({ type: "error", msg: "This evaluation didn't save a report, so it's not in your tracker. Full evaluation is verified on Claude Code." });
+        } else if (kind === "pdf") {
+          const artifact = pdfArtifactForReport(artifactInput);
+          if (!artifact || artifact.signature === pdfBefore?.signature || !artifact.template || !artifact.sourceReport) {
+            send({ type: "error", msg: "The worker finished, but no newly verified CV artifact was recorded. Open the worker log for the failed render step." });
+          } else {
+            if (stderr.trim()) send({ type: "warning", msg: "The CLI reported a warning but completed successfully." });
+            send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd, reportN: artifactInput });
+          }
         } else {
           if (stderr.trim()) send({ type: "warning", msg: "The CLI reported a warning but completed successfully." });
           const reportN =
