@@ -5,6 +5,7 @@ import { atomicWrite } from "@/lib/core/safe-write";
 import { parseApplications } from "@/lib/tracker-table.mjs";
 import { parseMachineSummary } from "@/lib/format";
 import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
+import { onboardingVerificationPending } from "@/lib/onboarding/readiness-state";
 
 /**
  * Resolve the career-ops "home" — the directory holding the user's sibling
@@ -296,6 +297,7 @@ export function doctorState(): {
   missing: string[];
   hasCv: boolean;
   hasData: boolean;
+  verificationPending: boolean;
 } {
   const has = (rel: string) => {
     try {
@@ -313,9 +315,11 @@ export function doctorState(): {
   const missing = prereqs.filter(([rel]) => !has(rel)).map(([, label]) => label);
   const hasCv = has("cv.md");
   const hasData = readApplications().length > 0 || readInbox().some((j) => !j.done);
+  const verificationPending = onboardingVerificationPending(careerOpsRoot());
+  if (verificationPending) missing.push("setup verification");
   const onboardingNeeded = missing.length > 0;
-  const phase: LifecyclePhase = !hasCv ? "first-run" : onboardingNeeded ? "in-between" : "established";
-  return { phase, onboardingNeeded, missing, hasCv, hasData };
+  const phase: LifecyclePhase = !hasCv || verificationPending ? "first-run" : onboardingNeeded ? "in-between" : "established";
+  return { phase, onboardingNeeded, missing, hasCv, hasData, verificationPending };
 }
 
 export type PipelineSummary = {

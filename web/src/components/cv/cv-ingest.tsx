@@ -13,7 +13,6 @@ import { cn } from "@/lib/cn";
 import { instrumentSerif } from "@/lib/fonts";
 import { cvReadiness, parseCvStream, seedFromCvMarkdown, type CvSeed } from "@/lib/cv/quality";
 import { cliDisplayName, resolveCliIdForRun } from "@/lib/cli-config";
-import { markPhaseComplete } from "@/lib/product-tour";
 
 type Phase = "input" | "parsing" | "review" | "saving" | "error";
 
@@ -24,12 +23,21 @@ const STYLE = `
 @keyframes co-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 `;
 
+async function requestJson(url: string, init?: RequestInit) {
+  const response = await fetch(url, init);
+  const data = await response.json().catch(() => ({})) as { error?: string };
+  if (!response.ok) throw new Error(data.error || `${url} failed (${response.status})`);
+  return data;
+}
+
 export function CvIngest({
   onSaved,
+  onSetupError,
   afterSave = "home",
   cliId: cliIdProp = null,
 }: {
   onSaved?: () => void;
+  onSetupError?: (message: string) => void;
   afterSave?: "home" | "stay";
   cliId?: string | null;
 }) {
@@ -159,28 +167,20 @@ export function CvIngest({
     setSaveErr("");
     setPhase("saving");
     try {
-      const r = await fetch("/api/cv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: md }) });
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        setSaveErr(d.error || "Couldn't save your CV — try again.");
-        setPhase("review");
-        return;
-      }
-    } catch {
-      setSaveErr("Couldn't save your CV — check your connection and try again.");
+      await requestJson("/api/cv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: md }) });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Couldn't save your CV — check your connection and try again.";
+      setSaveErr(message);
+      onSetupError?.(message);
       setPhase("review");
       return;
     }
     const merged: CvSeed = { ...seedFromCvMarkdown(md), ...(seed || {}) };
     const roles = merged.roles?.length ? merged.roles : merged.title ? [merged.title] : [];
     try {
-      await fetch("/api/doctor");
-    } catch {
-      /* auto-copy templates */
-    }
-    if (merged.name || merged.email || merged.location || roles.length) {
-      try {
-        await fetch("/api/profile", {
+      await requestJson("/api/doctor");
+      if (merged.name || merged.email || merged.location || roles.length) {
+        await requestJson("/api/profile", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -190,28 +190,23 @@ export function CvIngest({
             roles: roles.length ? roles : undefined,
           }),
         });
-      } catch {
-        /* best-effort */
       }
-    }
-    if (roles.length) {
-      try {
-        await fetch("/api/portals", {
+      if (roles.length) {
+        await requestJson("/api/portals", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ roles, location: merged.location ? [merged.location] : undefined }),
         });
-      } catch {
-        /* best-effort */
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Setup files could not be saved.";
+      setSaveErr(message);
+      onSetupError?.(message);
+      setPhase("review");
+      return;
     }
     onSaved?.();
-    try {
-      markPhaseComplete("onboarding");
-      window.dispatchEvent(new CustomEvent("co-cv-saved"));
-    } catch {
-      /* tour progress best-effort */
-    }
+    window.dispatchEvent(new CustomEvent("co-cv-saved"));
     if (afterSave === "stay") return;
     router.push("/");
     router.refresh();
