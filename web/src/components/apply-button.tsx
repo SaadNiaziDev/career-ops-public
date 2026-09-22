@@ -42,7 +42,7 @@ export function ApplyButton({
       icon="send"
       className={cn(rail && "w-full")}
       onClick={() => {
-        apply.open(url!, { prefill: true, company });
+        apply.open(url!, { prefill: true, company, trackerNum: n });
         router.push("/apply");
       }}
     >

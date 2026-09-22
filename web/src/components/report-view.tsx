@@ -124,6 +124,9 @@ function splitSections(body: string): { intro: string; sections: Section[] } {
 }
 
 function SectionCollapse({ section, compact = false }: { section: Section; compact?: boolean }) {
+  const content = section.heading === "Application Answers"
+    ? section.content.replace(/```application-answers-json[\s\S]*?```/g, "").trim()
+    : section.content;
   return (
     <Md3Collapse
       className="report-section-collapse"
@@ -135,14 +138,14 @@ function SectionCollapse({ section, compact = false }: { section: Section; compa
             {section.letter && <span className="report-letter-badge">{section.letter}</span>}
             <div className="min-w-0">
               <strong className="text-sm">{cleanHeading(section.heading)}</strong>
-              <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">{preview(section.content)}</p>
+              <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">{preview(content)}</p>
             </div>
           </div>
         )
       }
     >
       <article className={cn("report-prose-compact", compact && "opacity-80")}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
       </article>
     </Md3Collapse>
   );

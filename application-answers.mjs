@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { writeFileAtomic } from './tracker-utils.mjs';
 
 export const APPLICATION_ANSWERS_HEADING = '## Application Answers';
 
-const VALID_STATES = new Set(['filled', 'submitted']);
+const VALID_STATES = new Set(['draft', 'filled', 'submitted']);
+const SENSITIVE_FIELD = /password|passcode|captcha|cookie|auth(?:entication|orization)?\s*token|access\s*token|secret|one[- ]?time\s*(?:code|password)|\botp\b/i;
 
 function inline(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 
-function valueText(value) {
-  if (Array.isArray(value)) return value.map(inline).filter(Boolean).join(', ');
-  return String(value ?? '').trim();
+function markdownInline(value) {
+  return inline(value).replace(/([\\`*_[\]<>])/g, '\\$1');
 }
 
 function pick(object, keys) {
@@ -45,55 +46,65 @@ function normalizeDate(date) {
   return inline(date || new Date().toISOString().slice(0, 10));
 }
 
+function normalizeTimestamp(value) {
+  const timestamp = inline(value);
+  return timestamp && !Number.isNaN(Date.parse(timestamp)) ? new Date(timestamp).toISOString() : '';
+}
+
 function quoteBlock(value) {
-  const text = String(value ?? '').replace(/\r\n/g, '\n').trim();
+  const text = (Array.isArray(value) ? value.map(inline).filter(Boolean).join(', ') : String(value ?? ''))
+    .replace(/\r\n/g, '\n').trim();
   if (!text) return '> Not recorded.';
   return text.split('\n').map((line) => `> ${line}`).join('\n');
-}
-
-function qaLines(entries, { labelKeys, valueKeys, fallback }) {
-  if (entries.length === 0) return ['- None captured.'];
-
-  return entries.flatMap((entry, index) => {
-    const label = inline(pick(entry, labelKeys)) || `${fallback} ${index + 1}`;
-    const answer = pick(entry, valueKeys);
-    return [
-      `${index + 1}. **${label}**`,
-      '',
-      quoteBlock(answer),
-      '',
-    ];
-  }).slice(0, -1);
-}
-
-function compactLines(entries, { labelKeys, valueKeys, fallback }) {
-  if (entries.length === 0) return ['- None captured.'];
-
-  return entries.map((entry, index) => {
-    const label = inline(pick(entry, labelKeys)) || `${fallback} ${index + 1}`;
-    const value = valueText(pick(entry, valueKeys)) || 'Not recorded';
-    return `${index + 1}. **${label}:** ${value}`;
-  });
 }
 
 function fileLines(entries) {
   if (entries.length === 0) return ['- None captured.'];
 
   return entries.map((entry, index) => {
-    const label = inline(pick(entry, ['field', 'name', 'label', 'type'])) || `File ${index + 1}`;
-    const file = inline(pick(entry, ['path', 'file', 'filename', 'url'])) || 'Not recorded';
-    const version = inline(pick(entry, ['version', 'variant']));
-    return `${index + 1}. **${label}:** ${version ? `${file} (${version})` : file}`;
+    const label = markdownInline(pick(entry, ['field', 'name', 'label', 'type'])) || `File ${index + 1}`;
+    const file = markdownInline(pick(entry, ['path', 'file', 'filename', 'url'])) || 'Not recorded';
+    const version = markdownInline(pick(entry, ['version', 'variant']));
+    const hash = markdownInline(pick(entry, ['hash', 'sha256']));
+    const details = [version, hash ? `sha256:${hash}` : ''].filter(Boolean).join(', ');
+    return `${index + 1}. **${label}:** ${file}${details ? ` (${details})` : ''}`;
   });
+}
+
+function normalizedFields(snapshot) {
+  const fields = list(snapshot.fields).filter((field) => {
+    const label = inline(pick(field, ['label', 'field', 'question', 'prompt']));
+    const type = inline(field?.type);
+    return !SENSITIVE_FIELD.test(`${label} ${type}`);
+  });
+  if (fields.length > 0) return fields;
+  return [
+    ...list(snapshot.freeText ?? snapshot.freeTextAnswers ?? snapshot.answers).map((field) => ({ ...field, type: 'textarea' })),
+    ...list(snapshot.selections ?? snapshot.selectedOptions).map((field) => ({ ...field, type: field.type || 'select' })),
+    ...list(snapshot.fieldValues ?? snapshot.otherFields).map((field) => ({ ...field, type: field.type || 'text' })),
+  ].filter((field) => !SENSITIVE_FIELD.test(`${inline(pick(field, ['label', 'field', 'question', 'prompt']))} ${inline(field?.type)}`));
+}
+
+function fieldLines(entries) {
+  if (entries.length === 0) return ['- None captured.'];
+  return entries.flatMap((entry, index) => {
+    const label = markdownInline(pick(entry, ['label', 'field', 'question', 'prompt'])) || `Field ${index + 1}`;
+    const type = markdownInline(entry?.type || 'text');
+    const source = markdownInline(entry?.source || 'user');
+    const value = pick(entry, ['value', 'answer', 'response', 'selection', 'selected', 'text']);
+    return [`${index + 1}. **${label}** — ${type}; source: ${source}`, '', quoteBlock(value), ''];
+  }).slice(0, -1);
 }
 
 export function normalizeApplicationAnswersSnapshot(snapshot = {}) {
   return {
     date: normalizeDate(snapshot.date),
     state: normalizeState(snapshot.state),
-    freeText: list(snapshot.freeText ?? snapshot.freeTextAnswers ?? snapshot.answers),
-    selections: list(snapshot.selections ?? snapshot.selectedOptions),
-    fieldValues: list(snapshot.fieldValues ?? snapshot.otherFields ?? snapshot.fields),
+    vacancyUrl: inline(snapshot.vacancyUrl ?? snapshot.url),
+    atsVendor: inline(snapshot.atsVendor ?? snapshot.vendor),
+    filledAt: normalizeTimestamp(snapshot.filledAt),
+    submittedAt: normalizeTimestamp(snapshot.submittedAt),
+    fields: normalizedFields(snapshot),
     files: list(snapshot.files ?? snapshot.uploads ?? snapshot.filesUsed),
   };
 }
@@ -105,34 +116,22 @@ export function formatApplicationAnswersSection(snapshot = {}) {
     '',
     `**Date:** ${normalized.date}`,
     `**State:** ${normalized.state}`,
+    `**Vacancy URL:** ${normalized.vacancyUrl || 'Not recorded'}`,
+    `**ATS/vendor:** ${normalized.atsVendor || 'Unknown'}`,
+    `**Filled at:** ${normalized.filledAt || 'Not yet filled'}`,
+    `**Submitted at:** ${normalized.submittedAt || 'Not submitted'}`,
     '',
-    '### Free-text answers',
+    '### Exact field values',
     '',
-    ...qaLines(normalized.freeText, {
-      labelKeys: ['question', 'field', 'label', 'prompt'],
-      valueKeys: ['answer', 'response', 'value', 'text'],
-      fallback: 'Answer',
-    }),
-    '',
-    '### Selections made',
-    '',
-    ...compactLines(normalized.selections, {
-      labelKeys: ['question', 'field', 'label', 'prompt'],
-      valueKeys: ['selection', 'selected', 'answer', 'value', 'options'],
-      fallback: 'Selection',
-    }),
-    '',
-    '### Other field values',
-    '',
-    ...compactLines(normalized.fieldValues, {
-      labelKeys: ['question', 'field', 'label', 'prompt'],
-      valueKeys: ['answer', 'response', 'value', 'text'],
-      fallback: 'Field',
-    }),
+    ...fieldLines(normalized.fields),
     '',
     '### Files used',
     '',
     ...fileLines(normalized.files),
+    '',
+    '```application-answers-json',
+    JSON.stringify(normalized),
+    '```',
   ];
 
   return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
@@ -140,7 +139,7 @@ export function formatApplicationAnswersSection(snapshot = {}) {
 
 export function upsertApplicationAnswersSection(reportText, snapshot = {}) {
   const report = String(reportText ?? '').replace(/\r\n/g, '\n');
-  const section = formatApplicationAnswersSection(snapshot).trimEnd();
+  let section = formatApplicationAnswersSection(snapshot).trimEnd();
   const heading = /^## Application Answers\s*$/m.exec(report);
 
   if (!heading) {
@@ -151,6 +150,14 @@ export function upsertApplicationAnswersSection(reportText, snapshot = {}) {
   const afterHeading = start + heading[0].length;
   const nextHeading = /^## .+$/m.exec(report.slice(afterHeading));
   const end = nextHeading ? afterHeading + nextHeading.index : report.length;
+  const previous = report.slice(start, end).trim();
+  const wasSubmitted = /^\*\*State:\*\*\s*submitted\s*$/mi.test(previous);
+  const previousHistory = previous.match(/^### Previous submitted snapshot[\s\S]*$/m)?.[0];
+  if (wasSubmitted && previous !== section && !section.includes(previous)) {
+    section += `\n\n### Previous submitted snapshot\n\n${previous.replace(/^## Application Answers\s*$/m, '#### Submitted version')}`;
+  } else if (previousHistory && !section.includes(previousHistory)) {
+    section += `\n\n${previousHistory}`;
+  }
   const before = report.slice(0, start).trimEnd();
   const after = report.slice(end).trimStart();
 
@@ -176,9 +183,9 @@ function parseArgs(argv) {
 
 function usage() {
   return [
-    'Usage: node application-answers.mjs --report <report.md> --input <answers.json> [--state filled|submitted] [--date YYYY-MM-DD]',
+    'Usage: node application-answers.mjs --report <report.md> --input <answers.json> [--state draft|filled|submitted] [--date YYYY-MM-DD]',
     '',
-    'The input JSON may contain: freeText, selections, fieldValues, files, date, state.',
+    'The input JSON may contain: fields, freeText, selections, fieldValues, files, timestamps, URL, vendor, date, and state.',
   ].join('\n');
 }
 
@@ -210,7 +217,7 @@ async function main() {
   };
   const reportPath = resolve(args.report);
   const updated = upsertApplicationAnswersSection(readFileSync(reportPath, 'utf-8'), snapshot);
-  writeFileSync(reportPath, updated, 'utf-8');
+  writeFileAtomic(reportPath, updated);
 
   const normalized = normalizeApplicationAnswersSnapshot(snapshot);
   console.log(JSON.stringify({ report: reportPath, date: normalized.date, state: normalized.state }, null, 2));

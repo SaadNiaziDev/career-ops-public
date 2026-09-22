@@ -168,6 +168,13 @@ export function ApplyView() {
             ))}
           </div>
 
+          {(a.snapshotSaving || a.snapshotState) && (
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--md-sys-color-on-surface-variant)]">
+              <MaterialSymbol name={a.snapshotSaving ? "sync" : "save"} size={14} className={a.snapshotSaving ? "animate-spin" : ""} />
+              {a.snapshotSaving ? "Saving your answer snapshot…" : `Answer snapshot saved as ${a.snapshotState}.`}
+            </p>
+          )}
+
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <Md3ActionButton variant="filled" onClick={a.fill} disabled={filling || prefilling} loading={filling} icon={filling ? undefined : "arrow_outward"}>
               {filling ? "Filling the real form…" : "Fill the real form & review"}
@@ -217,6 +224,22 @@ export function ApplyView() {
                   <span className="font-medium">The real form is now in front, pre-filled.</span>{" "}
                   <span className="text-[var(--md-sys-color-on-surface-variant)]">Review it and click Submit yourself — career-ops never submits for you.</span>
                 </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[color-mix(in_srgb,var(--md-sys-color-on-surface)_12%,transparent)] pt-3">
+                <Md3ActionButton
+                  variant="filled"
+                  icon={a.snapshotState === "submitted" ? "verified" : "task_alt"}
+                  onClick={a.confirmSubmitted}
+                  disabled={a.snapshotSaving || a.snapshotState === "submitted"}
+                  loading={a.snapshotSaving}
+                >
+                  {a.snapshotState === "submitted" ? "Submission recorded" : "I submitted this application"}
+                </Md3ActionButton>
+                <span className="text-xs text-[var(--md-sys-color-on-surface-variant)]">
+                  {a.snapshotState === "submitted"
+                    ? "Tracker marked Applied; answers and files saved."
+                    : "Only confirm after the employer shows a success message."}
+                </span>
               </div>
             </div>
           )}
