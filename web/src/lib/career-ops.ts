@@ -4,6 +4,7 @@ import yaml from "js-yaml";
 import { atomicWrite } from "@/lib/core/safe-write";
 import { parseApplications } from "@/lib/tracker-table.mjs";
 import { parseMachineSummary } from "@/lib/format";
+import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
 
 /**
  * Resolve the career-ops "home" — the directory holding the user's sibling
@@ -93,9 +94,10 @@ export function readInbox(): InboxJob[] {
       compensation: extras[1] || undefined, // optional 5th column (#1017); 6th+ ignored
       fitScore: Number.isFinite(fitScore) ? fitScore : undefined,
     };
-    const prevIdx = byUrl.get(job.url);
+    const key = normalizeVacancyUrl(job.url) ?? job.url;
+    const prevIdx = byUrl.get(key);
     if (prevIdx === undefined) {
-      byUrl.set(job.url, jobs.length);
+      byUrl.set(key, jobs.length);
       jobs.push(job);
       continue;
     }
@@ -126,7 +128,8 @@ export function readScanDates(): Map<string, string> {
     const url = line.slice(0, tab);
     const firstSeen = line.slice(tab + 1).split("\t")[0]?.trim();
     // keep the EARLIEST first_seen if a url recurs (it's "first" seen, after all)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(firstSeen) && !dates.has(url)) dates.set(url, firstSeen);
+    const key = normalizeVacancyUrl(url) ?? url;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(firstSeen) && !dates.has(key)) dates.set(key, firstSeen);
   }
   return dates;
 }
@@ -156,8 +159,9 @@ function readScanMeta(): Map<string, { firstSeen: string; portal: string }> {
     if (!line || (i === 0 && line.startsWith("url\t"))) continue;
     const cols = line.split("\t");
     const [url, firstSeen, portal] = cols;
-    if (!url || !/^\d{4}-\d{2}-\d{2}$/.test(firstSeen ?? "") || meta.has(url)) continue;
-    meta.set(url, { firstSeen, portal: portal ?? "" });
+    const key = normalizeVacancyUrl(url) ?? url;
+    if (!url || !/^\d{4}-\d{2}-\d{2}$/.test(firstSeen ?? "") || meta.has(key)) continue;
+    meta.set(key, { firstSeen, portal: portal ?? "" });
   }
   return meta;
 }
@@ -179,7 +183,7 @@ export function recentScanFinds({ days = 14, limit = 30 } = {}): {
   const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
   const scanned = pending
     .map((j) => {
-      const m = meta.get(j.url);
+      const m = meta.get(normalizeVacancyUrl(j.url) ?? j.url);
       return { ...j, firstSeen: m?.firstSeen ?? "", source: scanSourceLabel(m?.portal ?? "") };
     })
     .filter((j): j is ScanFind => !!j.firstSeen && j.firstSeen >= cutoff)
@@ -324,13 +328,15 @@ export type PipelineSummary = {
 export function pipelineSummary(): PipelineSummary {
   const root = careerOpsRoot();
   const scanDates = readScanDates();
+  const applications = readApplications();
+  const evaluatedUrls = new Set(applications.map((a) => (a.url ? normalizeVacancyUrl(a.url) : null)).filter(Boolean));
   return {
     root,
     rootExists: fs.existsSync(root),
-    // join the freshness date (first_seen) onto each raw posting — the inbox's
-    // triage view orders/faceted-filters on it entirely client-side.
-    inbox: readInbox().map((j) => ({ ...j, postedAt: scanDates.get(j.url) })),
-    applications: readApplications(),
+    inbox: readInbox()
+      .filter((j) => !evaluatedUrls.has(normalizeVacancyUrl(j.url) ?? ""))
+      .map((j) => ({ ...j, postedAt: scanDates.get(normalizeVacancyUrl(j.url) ?? j.url) })),
+    applications,
   };
 }
 

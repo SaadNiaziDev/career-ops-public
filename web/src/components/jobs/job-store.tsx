@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { scoreTone } from "@/lib/format";
+import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
 
 export type JobStep = { kind: "tool" | "status"; label: string; ts: number };
 export type JobResult = { score: number | null; summary: string; tone: "good" | "warn" | "bad" | "muted" };
@@ -138,6 +139,11 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
 
   const startJob = useCallback(
     (opts: StartOpts): string | null => {
+      const inputKey = opts.kind === "evaluate" ? normalizeVacancyUrl(opts.input) : null;
+      if (inputKey) {
+        const existing = jobs.find((j) => j.kind === "evaluate" && j.input && normalizeVacancyUrl(j.input) === inputKey && j.status !== "error");
+        if (existing) return existing.id;
+      }
       let cliId: string | null = null;
       try {
         const raw = localStorage.getItem(CONFIG_KEY);
@@ -288,7 +294,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
 
       return id;
     },
-    [patch],
+    [jobs, patch],
   );
 
   const removeJob = useCallback((id: string) => setJobs((js) => js.filter((j) => j.id !== id)), []);

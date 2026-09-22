@@ -2,8 +2,9 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveCli } from "@/lib/clis";
-import { careerOpsRoot, readMemory } from "@/lib/career-ops";
-import { acquireTrackerWrite, releaseTrackerWrite } from "@/lib/core/run-registry";
+import { careerOpsRoot, readApplications, readMemory } from "@/lib/career-ops";
+import { acquireTrackerWrite, acquireVacancyRun, releaseTrackerWrite, releaseVacancyRun } from "@/lib/core/run-registry";
+import { normalizeVacancyUrl, vacancyIdFromUrl } from "@/lib/vacancy-identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -194,6 +195,31 @@ VERDICT: {score}/5 — {reason in 12 words or fewer}
 Posting URL: ${input}`;
 }
 
+function streamEvents(events: unknown[]): Response {
+  const enc = new TextEncoder();
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const event of events) controller.enqueue(enc.encode(`${JSON.stringify(event)}\n`));
+        controller.close();
+      },
+    }),
+    {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+      },
+    },
+  );
+}
+
+function existingEvaluationForUrl(input: string): string | undefined {
+  const needle = normalizeVacancyUrl(input);
+  if (!needle) return undefined;
+  return readApplications().find((app) => app.url && normalizeVacancyUrl(app.url) === needle)?.n;
+}
+
 export async function POST(req: Request) {
   let body: { kind?: string; input?: string; cliId?: string; context?: InterviewContext };
   try {
@@ -259,6 +285,20 @@ export async function POST(req: Request) {
       JSON.stringify({ error: "Add your CV first so I can score this against you — drop it on the home page." }),
       { status: 400, headers: { "Content-Type": "application/json" } },
     );
+  }
+
+  const vacancyId = kind === "evaluate" ? vacancyIdFromUrl(input) : null;
+  const existingReport = kind === "evaluate" ? existingEvaluationForUrl(input) : undefined;
+  if (existingReport) {
+    return streamEvents([
+      { type: "status", label: `Already evaluated as #${parseInt(existingReport, 10)}` },
+      { type: "text", text: `Already evaluated as #${parseInt(existingReport, 10)}.` },
+      { type: "done", reportN: existingReport },
+    ]);
+  }
+  const vacancyToken = vacancyId ? acquireVacancyRun(vacancyId) : null;
+  if (vacancyToken?.existing !== undefined) {
+    return streamEvents([{ type: "error", msg: "This vacancy is already being evaluated. Open the running worker instead of starting another." }]);
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -371,6 +411,7 @@ export async function POST(req: Request) {
           closed = true;
           if (killer) clearTimeout(killer);
           if (writeToken !== null) releaseTrackerWrite(writeToken);
+          if (vacancyId && vacancyToken) releaseVacancyRun(vacancyId, vacancyToken.token);
           try { controller.close(); } catch { /* */ }
         }
       };
@@ -488,6 +529,7 @@ export async function POST(req: Request) {
       closed = true;
       if (killer) clearTimeout(killer);
       if (writeToken !== null) releaseTrackerWrite(writeToken);
+      if (vacancyId && vacancyToken) releaseVacancyRun(vacancyId, vacancyToken.token);
       try { child.kill("SIGTERM"); } catch { /* ignore */ }
     },
   });
