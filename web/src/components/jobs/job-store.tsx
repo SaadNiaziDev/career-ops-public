@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { scoreTone } from "@/lib/format";
-import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
+import { intentKey, isActiveState, stateFromLegacyStatus, type RunState } from "@/lib/jobs/run-policy";
 
 export type JobStep = { kind: "tool" | "status"; label: string; ts: number };
 export type JobResult = { score: number | null; summary: string; tone: "good" | "warn" | "bad" | "muted" };
@@ -17,6 +17,8 @@ export type Job = {
   reportN?: string; // tracker/report number once the worker persists reports/{n}-*.md
   batchId?: string; // groups jobs fired together (e.g. "evaluate all Anthropic")
   context?: Record<string, unknown>;
+  intentKey: string;
+  state: RunState;
   status: "running" | "done" | "error";
   steps: JobStep[];
   text: string;
@@ -25,7 +27,9 @@ export type Job = {
   outputTruncated?: boolean;
   cost?: { tokens: number; usd?: number }; // per-run token cost (Claude result event) — local only
   startedAt: number;
+  lastActivityAt: number;
   endedAt?: number;
+  supersedesId?: string;
 };
 
 type StartOpts = {
@@ -41,6 +45,7 @@ type StartOpts = {
 type Ctx = {
   jobs: Job[];
   startJob: (opts: StartOpts) => string | null;
+  cancelJob: (id: string) => void;
   removeJob: (id: string) => void;
   clearFinished: () => void;
 };
@@ -83,6 +88,10 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const seq = useRef(0);
   const loaded = useRef(false);
+  const jobsRef = useRef<Job[]>([]);
+  const controllers = useRef(new Map<string, AbortController>());
+  const cancelled = useRef(new Set<string>());
+  jobsRef.current = jobs;
 
   // restore history
   useEffect(() => {
@@ -91,7 +100,12 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
       const arr = raw ? JSON.parse(raw) : null;
       if (Array.isArray(arr)) {
         // anything left "running" from a previous session is stale → mark interrupted
-        const restored: Job[] = arr.map((j: Job) => (j.status === "running" ? { ...j, status: "error" as const, error: "Interrupted (page reloaded)", steps: [...(j.steps || []), { kind: "status", label: "Interrupted (page reloaded)", ts: Date.now() }] } : j));
+        const restored: Job[] = arr.map((j: Job) => {
+          const state = j.state ?? stateFromLegacyStatus(j.status);
+          if (!isActiveState(state)) return { ...j, state, intentKey: j.intentKey ?? intentKey(j.kind ?? "worker", j.input ?? ""), lastActivityAt: j.lastActivityAt ?? j.endedAt ?? j.startedAt };
+          const now = Date.now();
+          return { ...j, state: "interrupted", status: "error", error: "Interrupted when this page closed. Retry resumes with the same task identity.", endedAt: now, lastActivityAt: now, intentKey: j.intentKey ?? intentKey(j.kind ?? "worker", j.input ?? ""), steps: [...(j.steps || []), { kind: "status", label: "Interrupted by page reload", ts: now }] };
+        });
         setJobs((current) => {
           const byId = new Map(current.map((j) => [j.id, j]));
           for (const job of restored) if (job?.id && !byId.has(job.id)) byId.set(job.id, job);
@@ -115,7 +129,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
           const byId = new Map(current.map((j) => [j.id, j]));
           for (const run of data.runs as Job[]) {
             if (!run?.id || run.status === "running" || byId.has(run.id)) continue;
-            byId.set(run.id, run);
+            byId.set(run.id, { ...run, state: run.state ?? stateFromLegacyStatus(run.status), intentKey: run.intentKey ?? intentKey(run.kind ?? "worker", run.input ?? ""), lastActivityAt: run.lastActivityAt ?? run.endedAt ?? run.startedAt });
           }
           return [...byId.values()].sort((a, b) => b.startedAt - a.startedAt).slice(0, 40);
         });
@@ -139,11 +153,9 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
 
   const startJob = useCallback(
     (opts: StartOpts): string | null => {
-      const inputKey = opts.kind === "evaluate" ? normalizeVacancyUrl(opts.input) : null;
-      if (inputKey) {
-        const existing = jobs.find((j) => j.kind === "evaluate" && j.input && normalizeVacancyUrl(j.input) === inputKey && j.status !== "error");
-        if (existing) return existing.id;
-      }
+      const taskIntent = intentKey(opts.kind, opts.input);
+      const existing = jobsRef.current.find((job) => job.intentKey === taskIntent && isActiveState(job.state));
+      if (existing) return existing.id;
       let cliId: string | null = null;
       try {
         const raw = localStorage.getItem(CONFIG_KEY);
@@ -152,6 +164,8 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         cliId = null;
       }
       const id = `job-${Date.now()}-${seq.current++}`;
+      const startedAt = Date.now();
+      const superseded = jobsRef.current.find((job) => job.intentKey === taskIntent && !isActiveState(job.state));
       const job: Job = {
         id,
         title: opts.title,
@@ -161,25 +175,30 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         kind: opts.kind,
         batchId: opts.batchId,
         context: opts.context,
+        intentKey: taskIntent,
+        state: "queued",
         status: "running",
-        steps: [{ kind: "status", label: "Starting…", ts: Date.now() }],
+        steps: [{ kind: "status", label: "Queued", ts: startedAt }],
         text: "",
-        startedAt: Date.now(),
+        startedAt,
+        lastActivityAt: startedAt,
+        supersedesId: superseded?.id,
       };
+      jobsRef.current = [job, ...jobsRef.current];
       setJobs((js) => [job, ...js]);
 
       if (!cliId) {
         const endedAt = Date.now();
         const error = "No CLI configured — open Config";
         const steps = [
-          { kind: "status" as const, label: "Starting…", ts: job.startedAt },
+          { kind: "status" as const, label: "Queued", ts: job.startedAt },
           { kind: "status" as const, label: error, ts: endedAt },
         ];
-        patch(id, (j) => ({ ...j, status: "error", error, endedAt, steps }));
+        patch(id, (j) => ({ ...j, state: "needs-attention", status: "error", error, endedAt, lastActivityAt: endedAt, steps }));
         fetch("/api/runs/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, title: opts.title, subtitle: opts.subtitle, kind: opts.kind, batchId: opts.batchId, page: opts.page, input: opts.input, status: "error", error, startedAt: job.startedAt, endedAt, steps, output: "" }),
+          body: JSON.stringify({ ...job, state: "needs-attention", status: "error", error, endedAt, steps, output: "" }),
         }).catch(() => {});
         return id;
       }
@@ -197,9 +216,12 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
           const n = latchReportNum(hay);
           if (n) reportN = n;
         };
-        const finish = (status: "done" | "error", lastLabel?: string) => {
+        const finish = (state: RunState, lastLabel?: string) => {
           if (finished) return;
+          if (cancelled.current.has(id) && state !== "cancelled") return;
           finished = true;
+          controllers.current.delete(id);
+          const status = state === "completed" ? "done" as const : "error" as const;
           const result = status === "done" ? parseVerdict(verdictLine || text) : undefined;
           const cost = doneTokens > 0 ? { tokens: doneTokens, usd: doneCostUsd ?? undefined } : undefined;
           const error = status === "error" ? lastLabel || "Worker failed" : undefined;
@@ -208,6 +230,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
           const finalSteps = lastLabel ? [...steps, { kind: "status" as const, label: lastLabel, ts: endedAt }] : steps;
           patch(id, (j) => ({
             ...j,
+            state,
             status,
             result,
             error,
@@ -215,6 +238,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
             reportN,
             outputTruncated,
             endedAt,
+            lastActivityAt: endedAt,
             steps: lastLabel ? [...j.steps, { kind: "status", label: lastLabel, ts: endedAt }] : j.steps,
           }));
           // Persist both successful and failed runs so the worker log is a
@@ -222,7 +246,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
           fetch("/api/runs/save", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, title: opts.title, subtitle: opts.subtitle, kind: opts.kind, batchId: opts.batchId, reportN, page: opts.page, input: opts.input, status, error, startedAt: job.startedAt, endedAt, result, cost, steps: finalSteps, output: text, outputTruncated }),
+            body: JSON.stringify({ ...job, state, status, error, reportN, endedAt, lastActivityAt: endedAt, result, cost, steps: finalSteps, output: text, outputTruncated }),
           }).catch(() => {});
           if (status === "done") {
             // Tell server-snapshot surfaces (Today, pipeline) to refetch — the
@@ -234,14 +258,17 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         };
 
         try {
+          const controller = new AbortController();
+          controllers.current.set(id, controller);
           const res = await fetch("/api/run", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ kind: opts.kind, input: opts.input, cliId, context: opts.context }),
+            body: JSON.stringify({ kind: opts.kind, input: opts.input, cliId, runId: id, context: opts.context }),
+            signal: controller.signal,
           });
           if (!res.ok || !res.body) {
             const e = await res.json().catch(() => ({}));
-            finish("error", e.error || "Failed to start");
+            finish("needs-attention", e.error || "Failed to start");
             return;
           }
           const reader = res.body.getReader();
@@ -258,12 +285,13 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
               if (!line) continue;
               try {
                 const ev = JSON.parse(line);
+                const activityAt = Date.now();
                 if (ev.type === "tool") {
-                  steps.push({ kind: "tool", label: ev.name, ts: Date.now() });
-                  patch(id, (j) => ({ ...j, steps: [...j.steps, { kind: "tool", label: ev.name, ts: Date.now() }] }));
+                  steps.push({ kind: "tool", label: ev.name, ts: activityAt });
+                  patch(id, (j) => ({ ...j, state: "running", lastActivityAt: activityAt, steps: [...j.steps, { kind: "tool", label: ev.name, ts: activityAt }] }));
                 } else if (ev.type === "status") {
-                  steps.push({ kind: "status", label: ev.label, ts: Date.now() });
-                  patch(id, (j) => ({ ...j, steps: [...j.steps, { kind: "status", label: ev.label, ts: Date.now() }] }));
+                  steps.push({ kind: "status", label: ev.label, ts: activityAt });
+                  patch(id, (j) => ({ ...j, state: "running", lastActivityAt: activityAt, steps: [...j.steps, { kind: "status", label: ev.label, ts: activityAt }] }));
                 } else if (ev.type === "text") {
                   const full = text + ev.text;
                   const vm = full.match(/VERDICT:[^\n]*/i);
@@ -271,14 +299,21 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
                   latchReport(full);
                   outputTruncated = full.length > MAX_JOB_OUTPUT;
                   text = full.slice(-MAX_JOB_OUTPUT);
-                  patch(id, (j) => ({ ...j, text, reportN, outputTruncated }));
+                  patch(id, (j) => ({ ...j, state: "running", text, reportN, outputTruncated, lastActivityAt: activityAt }));
+                } else if (ev.type === "warning") {
+                  const label = ev.msg || "Worker warning";
+                  steps.push({ kind: "status", label, ts: activityAt });
+                  patch(id, (j) => ({ ...j, lastActivityAt: activityAt, steps: [...j.steps, { kind: "status", label, ts: activityAt }] }));
                 } else if (ev.type === "done") {
                   // finish happens on stream-close; capture the per-run cost it carries
                   if (typeof ev.tokens === "number") doneTokens = ev.tokens;
                   if (typeof ev.costUsd === "number") doneCostUsd = ev.costUsd;
                   if (typeof ev.reportN === "string" && ev.reportN.trim()) reportN = ev.reportN.trim();
                 } else if (ev.type === "error") {
-                  finish("error", ev.msg || "Error");
+                  finish("needs-attention", ev.msg || "Worker needs attention");
+                  return;
+                } else if (ev.type === "cancelled") {
+                  finish("cancelled", ev.msg || "Cancelled safely");
                   return;
                 }
               } catch {
@@ -286,19 +321,33 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
               }
             }
           }
-          finish("done", "Done");
+          finish("completed", "Completed");
         } catch {
-          finish("error", "Connection error");
+          finish("needs-attention", "Connection interrupted. Retry safely when ready.");
         }
       })();
 
       return id;
     },
-    [jobs, patch],
+    [patch],
   );
 
-  const removeJob = useCallback((id: string) => setJobs((js) => js.filter((j) => j.id !== id)), []);
-  const clearFinished = useCallback(() => setJobs((js) => js.filter((j) => j.status === "running")), []);
+  const cancelJob = useCallback((id: string) => {
+    const job = jobsRef.current.find((item) => item.id === id);
+    if (!job || !isActiveState(job.state)) return;
+    const endedAt = Date.now();
+    cancelled.current.add(id);
+    patch(id, (item) => ({ ...item, state: "cancelled", status: "error", error: "Cancelled safely", endedAt, lastActivityAt: endedAt, steps: [...item.steps, { kind: "status", label: "Cancelled safely", ts: endedAt }] }));
+    void fetch(`/api/run?id=${encodeURIComponent(id)}`, { method: "DELETE" }).finally(() => {
+      controllers.current.get(id)?.abort();
+      controllers.current.delete(id);
+    });
+    const steps = [...job.steps, { kind: "status" as const, label: "Cancelled safely", ts: endedAt }];
+    void fetch("/api/runs/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...job, state: "cancelled", status: "error", error: "Cancelled safely", endedAt, lastActivityAt: endedAt, steps, output: job.text }) });
+  }, [patch]);
 
-  return <JobsContext.Provider value={{ jobs, startJob, removeJob, clearFinished }}>{children}</JobsContext.Provider>;
+  const removeJob = useCallback((id: string) => setJobs((js) => js.filter((j) => j.id !== id)), []);
+  const clearFinished = useCallback(() => setJobs((js) => js.filter((j) => isActiveState(j.state))), []);
+
+  return <JobsContext.Provider value={{ jobs, startJob, cancelJob, removeJob, clearFinished }}>{children}</JobsContext.Provider>;
 }

@@ -46,8 +46,8 @@ export function humanizeJobKind(kind?: string): string {
 }
 
 export function isAuthError(job: Job): boolean {
-  if (job.status !== "error") return false;
-  const hay = `${job.steps[job.steps.length - 1]?.label ?? ""} ${job.text}`.toLowerCase();
+  if (job.state !== "needs-attention") return false;
+  const hay = `${job.error ?? ""} ${job.steps[job.steps.length - 1]?.label ?? ""} ${job.text}`.toLowerCase();
   return /auth|login|sign[ -]?in|credential|api[ -]?key|unauthorized|not authenticated|installed and authenticated/.test(hay);
 }
 
@@ -176,7 +176,7 @@ export function resolveReportNum(job: Job, applications: Application[] = []): st
 }
 
 export function resolveArtifacts(job: Job, applications: Application[] = []): JobArtifact[] {
-  if (job.status !== "done") return [];
+  if (job.state !== "completed") return [];
 
   const artifacts: JobArtifact[] = [];
   const reportN = resolveReportNum(job, applications);
@@ -218,7 +218,7 @@ export function resolveArtifact(job: Job, applications: Application[] = []): Job
 }
 
 export function jobDestinationHref(job: Job, applications: Application[] = []): string {
-  if (job.status === "done") {
+  if (job.state === "completed") {
     const n = resolveReportNum(job, applications);
     if (n && ["evaluate", "pdf", "cover", "email", "contacto"].includes(job.kind ?? "")) {
       return `/pipeline/${n}`;

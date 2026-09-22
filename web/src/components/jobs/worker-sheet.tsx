@@ -9,6 +9,7 @@ import { MaterialSymbol } from "@/components/material-symbol";
 import { cn } from "@/lib/cn";
 import { usePipeline } from "@/components/pipeline/pipeline-provider";
 import { jobDestinationHref, resolveReportNum } from "@/components/jobs/job-utils";
+import { isActiveState } from "@/lib/jobs/run-policy";
 
 type WorkersUiCtx = {
   open: boolean;
@@ -32,7 +33,7 @@ export function WorkersUiProvider({ children }: { children: React.ReactNode }) {
 
 /** Shared worker card list — used by the desktop sheet and the mobile drawer. */
 export function WorkerTray({ className }: { className?: string }) {
-  const { jobs, removeJob, clearFinished } = useJobs();
+  const { jobs, cancelJob, removeJob, clearFinished } = useJobs();
   const { applications } = usePipeline();
   const pathname = usePathname();
   if (jobs.length === 0) {
@@ -42,7 +43,7 @@ export function WorkerTray({ className }: { className?: string }) {
       </div>
     );
   }
-  const running = jobs.filter((j) => j.status === "running").length;
+  const running = jobs.filter((j) => isActiveState(j.state)).length;
   const finished = jobs.length - running;
 
   return (
@@ -97,10 +98,11 @@ export function WorkerTray({ className }: { className?: string }) {
                       type="button"
                       onClick={(e) => {
                         e.preventDefault();
-                        removeJob(j.id);
+                        if (isActiveState(j.state)) cancelJob(j.id);
+                        else removeJob(j.id);
                       }}
                       className="text-[var(--md-sys-color-outline)] opacity-0 transition-opacity hover:text-[var(--md-sys-color-on-surface)] group-hover:opacity-100"
-                      aria-label="Dismiss job"
+                      aria-label={isActiveState(j.state) ? "Cancel job" : "Dismiss job"}
                     >
                       <MaterialSymbol name="close" size={14} />
                     </button>
@@ -119,7 +121,7 @@ export function WorkerTray({ className }: { className?: string }) {
 export function WorkerSheet() {
   const { open, setOpen } = useWorkersUi();
   const { jobs } = useJobs();
-  const running = jobs.filter((j) => j.status === "running").length;
+  const running = jobs.filter((j) => isActiveState(j.state)).length;
 
   useEffect(() => {
     if (!open) return;
@@ -191,7 +193,7 @@ export function WorkerSheet() {
 export function AmbientWorkerBar() {
   const { open, setOpen } = useWorkersUi();
   const { jobs } = useJobs();
-  const running = jobs.filter((j) => j.status === "running").length;
+  const running = jobs.filter((j) => isActiveState(j.state)).length;
   if (running === 0 || open) return null;
 
   return (
