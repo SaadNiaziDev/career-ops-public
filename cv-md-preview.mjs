@@ -9,7 +9,7 @@ import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import { renderHtml } from './build-cv-html.mjs';
-import { resolveTemplate } from './cv-templates.mjs';
+import { resolveCvRenderConfig, stampCvRenderMetadata } from './cv-render-config.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PROFILE = process.env.CAREER_OPS_PROFILE || join(ROOT, 'config', 'profile.yml');
@@ -211,13 +211,15 @@ export function renderCvPreview(md, opts = {}) {
     }
   }
   const payload = markdownToPreviewPayload(md, profile);
-  payload.style = opts.style || profile?.cv?.style || {};
-  // An explicit page format wins over the profile, so the CV studio can preview
-  // A4 against Letter without writing to profile.yml first.
-  if (opts.pageFormat === 'a4' || opts.pageFormat === 'letter') payload.page_format = opts.pageFormat;
-  const templateName = opts.template || profile?.cv?.template || 'standard';
-  const templatePath = resolveTemplate('cv', templateName, { profilePath, fallback: true });
-  const template = readFileSync(templatePath, 'utf-8');
+  const config = resolveCvRenderConfig({
+    profilePath,
+    template: opts.template,
+    pageFormat: opts.pageFormat,
+    style: opts.style,
+  });
+  payload.style = config.style;
+  payload.page_format = config.pageFormat;
+  const template = readFileSync(config.templatePath, 'utf-8');
   // What the section parser actually found — lets callers tell "rendered fine" from
   // "rendered a header because the markdown uses non-standard headings".
   const stats = {
@@ -228,7 +230,15 @@ export function renderCvPreview(md, opts = {}) {
     skills: payload.skills.length,
     competencies: payload.competencies.length,
   };
-  return { html: renderHtml(template, payload), template: templateName, templatePath, stats };
+  return {
+    html: stampCvRenderMetadata(renderHtml(template, payload), config),
+    template: config.template,
+    templateVersion: config.templateVersion,
+    styleVersion: config.styleVersion,
+    rendererVersion: config.rendererVersion,
+    pageFormat: config.pageFormat,
+    stats,
+  };
 }
 
 function readStdin() {
@@ -275,7 +285,7 @@ if (isMain) {
       profilePath: opts.profilePath,
     });
     if (opts.json) {
-      process.stdout.write(JSON.stringify({ html: result.html, template: result.template, stats: result.stats }) + '\n');
+      process.stdout.write(JSON.stringify(result) + '\n');
     } else {
       process.stdout.write(result.html);
     }

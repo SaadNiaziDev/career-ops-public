@@ -1,0 +1,14 @@
+{
+  "short": {
+    "academic": "84056ce8cb8aa87d9447195d15ec6a33ed177e9a127787b2ead18c51c652f0f4",
+    "compact": "5df82736ba85f718ac77cc159ca218488f30b11678712f8f08e40657ae08d41e",
+    "modern": "2f0e4426dbe0b9e6ac6ccda3826667dd7ab7b082e9447a50a1426eb4318c2bf5",
+    "standard": "a15c8a46bbf288054f7dfb41a1abc4abddac4fcf057e6be057dad846ef356135"
+  },
+  "long": {
+    "academic": "4f71d31e03c22c5bc9d86fa85c1e2fc925d509837d6c45ca25f4336ea41ec0a6",
+    "compact": "93e6e65d5d32aec78263770037291dbfc661acadc78dd16ac877d0432768b471",
+    "modern": "78ff71aa4d20c82fa6fb819d36661a0a3f238427a219417d0fc95c7d8bde3d4d",
+    "standard": "03b7a3fe300634a70a188be8c3aba7e8dc5fd45afc891d2ce8d0c71b62e2fd53"
+  }
+}

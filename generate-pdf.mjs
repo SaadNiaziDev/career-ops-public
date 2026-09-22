@@ -244,8 +244,8 @@ export function injectPrintPageCss(html, format = 'a4') {
  * CVs supersede stale entries). The file is gitignored: it references
  * gitignored output/ artifacts and is meaningless on another machine.
  */
-function updatePDFManifest(reportNum, pdfPath, htmlPath, format) {
-  const manifestPath = resolve(__dirname, 'data', 'pdf-index.tsv');
+function updatePDFManifest(reportNum, pdfPath, htmlPath, format, metadata = {}) {
+  const manifestPath = metadata.manifestPath || resolve(__dirname, 'data', 'pdf-index.tsv');
   const toRel = (p) => relative(__dirname, p).split(sep).join('/');
   const relPDF = toRel(pdfPath);
   const relHTML = repoRelativeManifestPath(htmlPath);
@@ -265,16 +265,22 @@ function updatePDFManifest(reportNum, pdfPath, htmlPath, format) {
     });
   }
 
-  lines.push([reportNum || '', relPDF, relHTML, format, date].join('\t'));
+  lines.push([
+    reportNum || '', relPDF, relHTML, format, date,
+    metadata.template || '', metadata.templateVersion || '', metadata.styleVersion || '',
+    metadata.sourceReport || '', metadata.rendererVersion || '',
+  ].join('\t'));
 
   mkdirSync(dirname(manifestPath), { recursive: true });
   writeFileSync(
     manifestPath,
-    '# report\tpdf\thtml\tformat\tdate — written by generate-pdf.mjs, do not edit\n' +
+    '# report\tpdf\thtml\tformat\tdate\ttemplate\ttemplate_version\tstyle_version\tsource_report\trenderer_version — written by generate-pdf.mjs, do not edit\n' +
       lines.join('\n') + '\n'
   );
   return relPDF;
 }
+
+export { updatePDFManifest };
 
 /**
  * CLI entrypoint that reads an HTML file, applies ATS-safe normalization, and
@@ -286,7 +292,8 @@ async function generatePDF() {
   const args = process.argv.slice(2);
 
   // Parse arguments
-  let inputPath, outputPath, format = 'a4', reportNum = '', allowReorder = false;
+  let inputPath, outputPath, format = 'a4', reportNum = '', allowReorder = false, skipManifest = false;
+  const metadata = {};
 
   for (const arg of args) {
     if (arg.startsWith('--format=')) {
@@ -295,6 +302,16 @@ async function generatePDF() {
       reportNum = arg.split('=')[1].trim();
     } else if (arg === '--allow-reorder') {
       allowReorder = true;
+    } else if (arg === '--no-manifest') {
+      skipManifest = true;
+    } else if (arg.startsWith('--template=')) {
+      metadata.template = arg.slice('--template='.length);
+    } else if (arg.startsWith('--template-version=')) {
+      metadata.templateVersion = arg.slice('--template-version='.length);
+    } else if (arg.startsWith('--style-version=')) {
+      metadata.styleVersion = arg.slice('--style-version='.length);
+    } else if (arg.startsWith('--renderer-version=')) {
+      metadata.rendererVersion = arg.slice('--renderer-version='.length);
     } else if (!inputPath) {
       inputPath = arg;
     } else if (!outputPath) {
@@ -361,7 +378,7 @@ async function generatePDF() {
     console.log(`🧹 ATS normalization: ${totalReplacements} replacements (${breakdown})`);
   }
 
-  return renderHtmlToPdf(html, outputPath, { format, baseDir: dirname(inputPath), reportNum, inputPath });
+  return renderHtmlToPdf(html, outputPath, { format, baseDir: dirname(inputPath), reportNum, inputPath, skipManifest, ...metadata });
 }
 
 /**
@@ -422,6 +439,13 @@ export async function inlineLocalFonts(html) {
  *   baseDir?: string,
  *   reportNum?: string,
  *   inputPath?: string,
+ *   template?: string,
+ *   templateVersion?: string,
+ *   styleVersion?: string,
+ *   rendererVersion?: string,
+ *   sourceReport?: string,
+ *   expectedSections?: string[],
+ *   requireManifest?: boolean,
  *   launchBrowser?: (options: {headless: boolean}) => Promise<import('playwright').Browser>
  * }} [opts]
  * @returns {Promise<{outputPath: string, pageCount: number, size: number}>}
@@ -457,6 +481,15 @@ export async function renderHtmlToPdf(html, outputPath, opts = {}) {
     // Wait for fonts and images to settle
     await page.evaluate(() => document.fonts.ready);
 
+    const renderedText = await page.locator('body').textContent() || '';
+    for (const section of opts.expectedSections || []) {
+      if (!renderedText.includes(section)) throw new Error(`Rendered CV is missing expected section: ${section}`);
+    }
+    if (opts.template) {
+      const selected = await page.locator('meta[name="career-ops-template"]').getAttribute('content');
+      if (selected !== opts.template) throw new Error(`Rendered CV template mismatch: expected ${opts.template}, found ${selected || 'none'}`);
+    }
+
     // Generate PDF
     const pdfBuffer = await page.pdf({
       printBackground: true,
@@ -468,6 +501,10 @@ export async function renderHtmlToPdf(html, outputPath, opts = {}) {
       },
       preferCSSPageSize: true,
     });
+
+    if (pdfBuffer.length < 1_000 || !pdfBuffer.subarray(0, 5).equals(Buffer.from('%PDF-')) || !pdfBuffer.subarray(-1_024).includes(Buffer.from('%%EOF'))) {
+      throw new Error('Generated PDF is missing a readable PDF header or trailer');
+    }
 
     // Write PDF
     await writeFile(outputPath, pdfBuffer);
@@ -481,10 +518,12 @@ export async function renderHtmlToPdf(html, outputPath, opts = {}) {
     console.log(`📦 Size: ${(pdfBuffer.length / 1024).toFixed(1)} KB`);
 
     try {
-      updatePDFManifest(reportNum, outputPath, inputPath, format);
+      if (opts.skipManifest) return { outputPath, pageCount, size: pdfBuffer.length };
+      updatePDFManifest(reportNum, outputPath, inputPath, format, opts);
       console.log(`🔗 Manifest: data/pdf-index.tsv updated${reportNum ? ` (report ${reportNum})` : ' (no --report given)'}`);
     } catch (err) {
-      // The PDF itself succeeded — never fail the run over manifest bookkeeping.
+      if (opts.requireManifest) throw err;
+      // Legacy direct renders keep succeeding even if optional manifest bookkeeping fails.
       console.error(`⚠️  Manifest update failed: ${err.message}`);
     }
 
