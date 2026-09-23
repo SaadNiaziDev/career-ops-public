@@ -68,6 +68,7 @@ const SYSTEM_PATHS = [
   'scripts/parsers/',
   'vacancy-identity.mjs',
   'vacancy-identity.test.mjs',
+  'package-lock.json',
   'modes/README.md',
   'modes/_shared.md',
   'modes/_profile.template.md',
