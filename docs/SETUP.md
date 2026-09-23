@@ -22,6 +22,16 @@ npm run web:dev
 
 Open http://localhost:3000. On first run, a setup wizard walks you through **(1) picking an AI CLI** and **(2) adding your CV** (PDF, `.md`, or paste). See [README.md](../README.md#how-to-get-cvmd-and-the-other-markdown-files) for other ways to gather the markdown files.
 
+The web server binds to `127.0.0.1` by default. Each launch creates a random session token; the first local page load receives it in an HttpOnly, SameSite=Strict cookie, and every API route requires that cookie. State-changing API requests must also have a same-origin `Origin` and Fetch Metadata header. Do not start Next.js directly, since the launcher supplies the session token.
+
+Remote access is disabled unless explicitly enabled. Only expose it on a trusted network through a TLS-terminating reverse proxy, and allowlist the exact hostname sent in `Host`:
+
+```bash
+CAREER_OPS_ALLOW_REMOTE=1 CAREER_OPS_HOST=0.0.0.0 CAREER_OPS_ALLOWED_HOSTS=career.example.com npm run web:dev
+```
+
+Do not use this opt-in on an untrusted network or without TLS. Direct LAN access is not recommended.
+
 Or set it up by hand:
 
 1. Copy `templates/portals.example.yml` → `portals.yml` (`node doctor.mjs --json` also copies this)
