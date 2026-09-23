@@ -4,11 +4,11 @@
   "private": true,
   "description": "Official web experience for career-ops — local-first.",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/start-local.mjs dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/start-local.mjs start",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test test-clean-chips.mjs test-interview-shared.mjs test-format.mjs test-vacancy-identity.mjs test-apply-snapshot.mjs test-run-policy.mjs test-run-registry.mjs test-onboarding-readiness.mjs"
+    "test": "node --experimental-strip-types --test test-clean-chips.mjs test-interview-shared.mjs test-format.mjs test-vacancy-identity.mjs test-apply-snapshot.mjs test-run-policy.mjs test-run-registry.mjs test-onboarding-readiness.mjs test-api-security.mjs"
   },
   "dependencies": {
     "@paper-design/shaders-react": "^0.0.77",
