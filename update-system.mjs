@@ -58,6 +58,7 @@ export const REEXEC_BUFFER_TIMEOUT_MS = parsePositiveInt(process.env.CAREER_OPS_
 
 // System layer paths — ONLY these files get updated
 const SYSTEM_PATHS = [
+  'package-lock.json',
   'modes/README.md',
   'modes/_shared.md',
   'modes/_profile.template.md',
