@@ -72,3 +72,5 @@ For one-shot workers, use `codex exec`. See [docs/CODEX.md](CODEX.md).
 ## Personal data stays local
 
 Never commit `cv.md`, `config/profile.yml`, `portals.yml`, `modes/_profile.md`, tracker files, reports, or outputs. See `DATA_CONTRACT.md`.
+
+CSV exports prefix formula-leading text with an apostrophe before quoting, so spreadsheet apps display it as text; ordinary values, numbers, and dates remain unchanged.
