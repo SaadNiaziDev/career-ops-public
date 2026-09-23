@@ -193,9 +193,9 @@ export function isAtsPosting(url) {
  * @returns {Promise<{ result: 'active' | 'expired', code: string, reason: string } | null>}
  *   null = not a known ATS posting, or inconclusive → caller should fall back to Playwright.
  */
-export async function checkLivenessViaApi(url) {
+export async function checkLivenessViaApi(url, { fetcher, lookup } = {}) {
   try {
-    await validatePublicUrl(url);
+    await validatePublicUrl(url, { lookup });
   } catch {
     return null;
   }
@@ -214,7 +214,7 @@ export async function checkLivenessViaApi(url) {
         method: 'GET',
         headers: { 'user-agent': 'career-ops-liveness/1.0', accept: 'application/json' },
         signal: controller.signal,
-      }, { maxRedirects: 0 });
+      }, { fetcher, lookup, maxRedirects: 0 });
     } catch {
       return null; // network / timeout / redirect → inconclusive, let Playwright decide
     }

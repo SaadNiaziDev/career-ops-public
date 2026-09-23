@@ -457,26 +457,31 @@ try {
   // or an aborted timeout — same code path) is inconclusive → null. Mock global.fetch
   // so no network is hit; restore it in finally.
   const origFetch = globalThis.fetch;
+  const testLookup = async () => [{ address: '8.8.8.8', family: 4 }];
+  const checkWithMockedFetch = (url) => checkLivenessViaApi(url, {
+    fetcher: globalThis.fetch,
+    lookup: testLookup,
+  });
   try {
     globalThis.fetch = async () => ({ status: 200, json: async () => ({ jobs: [{ id: AS_UUID, isListed: true }] }) });
-    const cvAshbyLive = await checkLivenessViaApi(`https://jobs.ashbyhq.com/deepgram/${AS_UUID}`);
+    const cvAshbyLive = await checkWithMockedFetch(`https://jobs.ashbyhq.com/deepgram/${AS_UUID}`);
     globalThis.fetch = async () => ({ status: 200, json: async () => ({ jobs: [] }) });
-    const cvAshbyGone = await checkLivenessViaApi(`https://jobs.ashbyhq.com/deepgram/${AS_UUID}`);
+    const cvAshbyGone = await checkWithMockedFetch(`https://jobs.ashbyhq.com/deepgram/${AS_UUID}`);
     // 200 but a malformed board (no `jobs` array): interpret returns null, so the
     // orchestration must fall through to null (→ Playwright), not a false verdict.
     globalThis.fetch = async () => ({ status: 200, json: async () => ({}) });
-    const cvAshbyMalformed = await checkLivenessViaApi(`https://jobs.ashbyhq.com/deepgram/${AS_UUID}`);
+    const cvAshbyMalformed = await checkWithMockedFetch(`https://jobs.ashbyhq.com/deepgram/${AS_UUID}`);
     globalThis.fetch = async () => ({ status: 200 });
-    const cvGhLive = await checkLivenessViaApi('https://boards.greenhouse.io/acme/jobs/4567890');
+    const cvGhLive = await checkWithMockedFetch('https://boards.greenhouse.io/acme/jobs/4567890');
     globalThis.fetch = async () => ({ status: 404 });
-    const cvGone = await checkLivenessViaApi('https://boards.greenhouse.io/acme/jobs/4567890');
+    const cvGone = await checkWithMockedFetch('https://boards.greenhouse.io/acme/jobs/4567890');
     globalThis.fetch = async () => { throw new Error('network down'); };
-    const cvErr = await checkLivenessViaApi('https://boards.greenhouse.io/acme/jobs/4567890');
+    const cvErr = await checkWithMockedFetch('https://boards.greenhouse.io/acme/jobs/4567890');
     const wdUrl = 'https://acme.wd1.myworkdayjobs.com/External/job/Toronto-ON-CAN/Agentic-AI-Engineer_R260010125';
     globalThis.fetch = async () => ({ status: 200 });
-    const cvWdLive = await checkLivenessViaApi(wdUrl);
+    const cvWdLive = await checkWithMockedFetch(wdUrl);
     globalThis.fetch = async () => ({ status: 404 });
-    const cvWdGone = await checkLivenessViaApi(wdUrl);
+    const cvWdGone = await checkWithMockedFetch(wdUrl);
     if (cvAshbyLive?.result === 'active' && cvAshbyLive?.code === 'ashby_api_ok'
         && cvAshbyGone?.result === 'expired' && cvAshbyGone?.code === 'ashby_api_unlisted'
         && cvAshbyMalformed === null
