@@ -1,9 +1,10 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { extractCodexAgentText, resolveCli } from "@/lib/clis";
 import { careerOpsRoot, readMemory } from "@/lib/career-ops";
 import { getSession } from "@/lib/apply/session";
+import { spawnSandboxedWorker, workerRoots } from "@/lib/worker-sandbox";
+import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -128,10 +129,10 @@ export async function POST(req: Request) {
         .map((f) => `${f.id}\t${f.type}${f.required ? "*" : ""}\t${f.label}${f.options ? `\t[options: ${f.options.join(" | ")}]` : ""}`)
         .join("\n");
       const mem = readMemory().trim();
-      const prompt = `You are pre-filling a job application for the user (company/role: ${s.title}). Read cv.md and config/profile.yml; if a matching report for this company exists in reports/, read it too. Ground EVERY answer in the REAL candidate — never invent facts.${mem ? `\n\nDurable notes about the user:\n${mem}` : ""}
+      const prompt = withPromptSecurityHeader(`You are pre-filling a job application for the user (company/role): ${untrustedContent("job title", s.title)}. Read cv.md and config/profile.yml; if a matching report for this company exists in reports/, read it too. Ground EVERY answer in the REAL candidate — never invent facts.${mem ? `\n\nDurable notes about the user:\n${untrustedContent("user profile notes", mem)}` : ""}
 
 FIELDS (id ⇥ type ⇥ label ⇥ options):
-${fieldsList}
+${untrustedContent("external application form", fieldsList)}
 
 For each field give the best answer:
 - identity/contact (name, email, phone, github, linkedin, location) → from profile/cv.
@@ -139,7 +140,7 @@ For each field give the best answer:
 - select/radio → choose the best-matching option using the EXACT option text from the list.
 - NEVER fill legal / visa / work-authorization / salary / demographic / sensitive fields → set needs_confirmation:true and value:"".
 
-Output ONLY a compact JSON object mapping each field id → {"value": "...", "needs_confirmation": boolean}. No prose, no markdown, no code fence.`;
+Output ONLY a compact JSON object mapping each field id → {"value": "...", "needs_confirmation": boolean}. No prose, no markdown, no code fence.`);
 
       log(`Form: "${s.title}" · ${s.fields.length} fields · prompt ${prompt.length} chars · memory ${mem.length} chars`);
       log(`Planner: ${cliId} (${binPath})`);
@@ -156,9 +157,17 @@ Output ONLY a compact JSON object mapping each field id → {"value": "...", "ne
       const killMs = Math.min(300_000, 150_000 + s.fields.length * 6_000);
       log(`Spawning planner (timeout ${Math.round(killMs / 1000)}s)…`);
 
+      let child;
+      try {
+        const root = careerOpsRoot();
+        const roots = workerRoots("form-prefill", root, s.title);
+        child = await spawnSandboxedWorker({ cliId: resolved.spec.id, task: "form-prefill", binPath, args, cwd: root, scopeRoot: root, ...roots });
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "Worker sandbox could not be started.");
+      }
+
       const result = await new Promise<{ buf: string; code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
         // stdin = /dev/null so the CLI doesn't wait 3s for piped input.
-        const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"] });
         let buf = "";
         let firstByteAt = 0;
         const hb = setInterval(() => {

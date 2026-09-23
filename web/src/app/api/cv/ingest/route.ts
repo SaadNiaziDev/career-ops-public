@@ -1,10 +1,12 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { resolveCli, resolveDefaultCli } from "@/lib/clis";
 import { careerOpsRoot } from "@/lib/career-ops";
 import { extractPdfText } from "@/lib/cv/pdf-text.mjs";
 import { localCvStream } from "@/lib/cv/quality";
+import { spawnSandboxedWorker, workerRoots } from "@/lib/worker-sandbox";
+import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
 
 // Parse a CV (pasted text or an uploaded PDF) into clean cv.md markdown.
 // PDFs are extracted locally first so any CLI (or no CLI) can continue — the
@@ -55,7 +57,7 @@ OUTPUT PROTOCOL:
 ${source}`;
 }
 
-const TEXT_SRC = (t: string) => `SOURCE (the user's CV, pasted as text — convert it):\n"""\n${t.slice(0, 24000)}\n"""`;
+const TEXT_SRC = (t: string) => `SOURCE (the user's CV, pasted as text — convert it):\n${untrustedContent("uploaded CV", t.slice(0, 24000))}`;
 
 function localResponse(markdown: string, trace = "Reading your CV…") {
   return new Response(localCvStream(markdown, trace), {
@@ -116,7 +118,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Connect an AI CLI in Config, or paste / drop a .md file." }, { status: 404 });
   }
   const { spec, binPath, cliId: activeCliId } = active;
-  const prompt = ingestPrompt(promptSource);
+  const prompt = withPromptSecurityHeader(ingestPrompt(promptSource));
   const isClaude = activeCliId === "claude";
   const isCodex = activeCliId === "codex";
   const args = isClaude
@@ -138,9 +140,11 @@ export async function POST(req: Request) {
 
   let child;
   try {
-    child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+    const root = careerOpsRoot();
+    const roots = workerRoots("cv-ingest", root);
+    child = await spawnSandboxedWorker({ cliId: activeCliId, task: "cv-ingest", binPath, args, cwd: os.tmpdir(), scopeRoot: root, ...roots });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : "failed to start the CLI" }, { status: 500 });
+    return Response.json({ error: e instanceof Error ? e.message : "failed to start the sandboxed CLI" }, { status: 503 });
   }
 
   const encoder = new TextEncoder();
