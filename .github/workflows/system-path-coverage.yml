@@ -1,0 +1,17 @@
+name: System path coverage
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  system-path-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check updater path coverage
+        run: node validate-system-paths-coverage.mjs

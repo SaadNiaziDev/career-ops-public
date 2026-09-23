@@ -94,6 +94,12 @@ Local-first job search automation: pipeline tracking, offer evaluation, CV/PDF g
 
 Full script inventory: see `README.md` and `package.json` scripts.
 
+### Agent references
+
+- Issues and specs: `docs/agents/issue-tracker.md`
+- Triage labels: `docs/agents/triage-labels.md`
+- Domain documentation: `docs/agents/domain.md`
+
 ### First Run — Onboarding (IMPORTANT)
 
 Before anything else:
