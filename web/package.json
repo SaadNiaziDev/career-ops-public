@@ -8,9 +8,10 @@
     "build": "next build",
     "start": "node scripts/start-local.mjs start",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test test-clean-chips.mjs test-interview-shared.mjs test-format.mjs test-vacancy-identity.mjs test-apply-snapshot.mjs test-run-policy.mjs test-run-registry.mjs test-onboarding-readiness.mjs test-csv-safety.mjs test-public-url-policy.mjs test-api-security.mjs"
+    "test": "node --experimental-strip-types --test test-clean-chips.mjs test-interview-shared.mjs test-format.mjs test-vacancy-identity.mjs test-apply-snapshot.mjs test-run-policy.mjs test-run-registry.mjs test-onboarding-readiness.mjs test-csv-safety.mjs test-public-url-policy.mjs test-api-security.mjs test-worker-sandbox.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "^0.0.77",
     "@paper-design/shaders-react": "^0.0.77",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -1,10 +1,12 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { resolveCli } from "@/lib/clis";
 import { careerOpsRoot, readMemory } from "@/lib/career-ops";
 import { assembleDedupContext } from "@/lib/core/discover";
 import { USAGE_MARK } from "@/lib/explore";
+import { spawnSandboxedWorker, workerRoots } from "@/lib/worker-sandbox";
+import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
 
 // AI search orchestrates modes/discover.md by running the USER'S configured CLI
 // headless (CLI-agnostic, like the assistant). Web hunting is slow → generous
@@ -57,9 +59,9 @@ export async function POST(req: Request) {
 
   const { lines } = assembleDedupContext();
   const memory = readMemory();
-  const memoryLine = memory.trim() ? `\n\nWHAT YOU KNOW ABOUT THE USER (persistent memory):\n${memory.trim()}` : "";
-  const knownBlock = lines.length ? `\n\n--- ALREADY KNOWN (dedup — do NOT propose these) ---\n${lines.join("\n")}` : "";
-  const prompt = `${mode}${OUTPUT_CONTRACT}${memoryLine}${knownBlock}\n\n--- USER INTENT ---\n${query}\n`;
+  const memoryLine = memory.trim() ? `\n\nWHAT YOU KNOW ABOUT THE USER (persistent memory):\n${untrustedContent("user profile notes", memory.trim())}` : "";
+  const knownBlock = lines.length ? `\n\n--- ALREADY KNOWN (dedup — do NOT propose these) ---\n${untrustedContent("existing pipeline data", lines.join("\n"))}` : "";
+  const prompt = withPromptSecurityHeader(`${mode}${OUTPUT_CONTRACT}${memoryLine}${knownBlock}\n\n--- USER INTENT ---\n${untrustedContent("search request", query)}\n`);
 
   const isClaude = cliId === "claude";
   const isCodex = cliId === "codex";
@@ -80,7 +82,14 @@ export async function POST(req: Request) {
       ]
     : spec.args(prompt);
 
-  const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+  const root = careerOpsRoot();
+  let child;
+  try {
+    const roots = workerRoots("discover", root);
+    child = await spawnSandboxedWorker({ cliId, task: "discover", binPath, args, cwd: os.tmpdir(), scopeRoot: root, ...roots });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Worker sandbox could not be started." }, { status: 503 });
+  }
 
   const encoder = new TextEncoder();
   // `closed` + kill timer in the OUTER scope so cancel() can flip `closed` before

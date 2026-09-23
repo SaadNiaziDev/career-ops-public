@@ -1,7 +1,9 @@
-import { spawn } from "node:child_process";
+import os from "node:os";
 import type { Frame } from "playwright-core";
 import { extractCodexAgentText, resolveCli } from "@/lib/clis";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { spawnSandboxedWorker } from "@/lib/worker-sandbox";
+import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
 import type { ApplyField } from "./extract";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,22 +69,28 @@ function buildPrompt(title: string, cands: Cand[]): string {
   const lines = cands
     .map((c) => `[${c.n}] tag=${c.tag} type=${c.type}${c.req ? " required" : ""}${c.name ? ` name="${c.name}"` : ""}${c.placeholder ? ` placeholder="${c.placeholder}"` : ""}${c.aria ? ` aria="${c.aria}"` : ""}${c.opts.length ? ` options=[${c.opts.slice(0, 12).join(" | ")}]` : ""} | context: "${c.ctx}"`)
     .join("\n");
-  return `You are interpreting a LIVE job-application form (${title}) so it can be re-rendered cleanly. Below is EVERY interactive control with its surrounding text. For EACH control decide:
+  return withPromptSecurityHeader(`You are interpreting a LIVE job-application form (${untrustedContent("external page title", title)}) so it can be re-rendered cleanly. Below is EVERY interactive control with its surrounding text. For EACH control decide:
 - "skip": true if it is NOT a real application field to fill (a search/filter box, navigation, cookie/consent control, social-login button, or decorative widget).
 - otherwise give: "label" (the human question in plain words, cleaned of asterisks/option text), "type" (one of: text, email, tel, url, number, date, textarea, select, radio, checkbox, file), "options" (ONLY for select/radio — the exact visible option texts), "required" (boolean).
 Infer the TYPE from meaning (e.g. a "Resume/CV" upload = file; a custom dropdown = select; "Why us?" = textarea). Use the EXACT option texts shown.
 
 CONTROLS:
-${lines}
+${untrustedContent("external application form", lines)}
 
 Return ONLY a JSON array, no prose, no code fence:
-[{"n":0,"skip":false,"label":"First Name","type":"text","options":[],"required":true}, ...]`;
+[{"n":0,"skip":false,"label":"First Name","type":"text","options":[],"required":true}, ...]`);
 }
 
-function runPlanner(binPath: string, isClaude: boolean, argsFor: (p: string) => string[], prompt: string): Promise<string> {
+async function runPlanner(cliId: string, binPath: string, argsFor: (p: string) => string[], prompt: string): Promise<string> {
+  const isClaude = cliId === "claude";
   const args = isClaude ? ["-p", prompt, "--permission-mode", "acceptEdits", "--strict-mcp-config", "--allowedTools", "Read", "--disallowedTools", "Bash,Write,Edit,NotebookEdit,Task,WebFetch,WebSearch"] : argsFor(prompt);
+  let child;
+  try {
+    child = await spawnSandboxedWorker({ cliId, task: "form-interpret", binPath, args, cwd: os.tmpdir(), scopeRoot: careerOpsRoot(), readRoots: [], writeRoots: [] });
+  } catch {
+    return "";
+  }
   return new Promise((resolve) => {
-    const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"] });
     let buf = "";
     child.stdout.on("data", (d: Buffer) => (buf += d.toString()));
     child.stderr.on("data", () => {});
@@ -115,7 +123,7 @@ export async function agentInterpretForm(frame: Frame, cliId: string, title: str
   const cands = await captureCandidates(frame).catch(() => [] as Cand[]);
   if (!cands.length) return [];
 
-  const out = await runPlanner(resolved.binPath, cliId === "claude", resolved.spec.args, buildPrompt(title, cands));
+  const out = await runPlanner(cliId, resolved.binPath, resolved.spec.args, buildPrompt(title, cands));
   const plannerText = cliId === "codex" ? extractCodexAgentText(out) : out;
   const m = plannerText.match(/\[[\s\S]*\]/);
   if (!m) return [];

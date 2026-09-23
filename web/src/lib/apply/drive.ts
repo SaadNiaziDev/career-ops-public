@@ -1,7 +1,9 @@
-import { spawn } from "node:child_process";
+import os from "node:os";
 import type { Page, Frame } from "playwright-core";
 import { extractCodexAgentText, resolveCli, type CliSpec } from "@/lib/clis";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { spawnSandboxedWorker } from "@/lib/worker-sandbox";
+import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
 import { dropNewTabs } from "./diagnose";
 import type { DriveStep } from "./issue";
 
@@ -56,15 +58,20 @@ async function snapshot(frame: Frame): Promise<{ text: string; n: number }> {
 
 /** One planner turn. Claude uses resume for cheap loop context; other CLIs get
  *  the full current snapshot each turn and return a single JSON action. */
-function plannerTurn(spec: CliSpec, binPath: string, cliId: string, prompt: string, resumeId: string | null): Promise<{ out: string; sessionId: string | null }> {
+async function plannerTurn(spec: CliSpec, binPath: string, cliId: string, prompt: string, resumeId: string | null): Promise<{ out: string; sessionId: string | null }> {
   const isClaude = cliId === "claude";
   const isCodex = cliId === "codex";
   const base = resumeId ? ["-p", "--resume", resumeId, prompt] : ["-p", prompt];
   const args = isClaude
     ? [...base, "--output-format", "json", "--strict-mcp-config", "--disallowedTools", "Bash,Read,Write,Edit,NotebookEdit,Task,WebFetch,WebSearch,Glob,Grep"]
     : spec.args(prompt);
+  let child;
+  try {
+    child = await spawnSandboxedWorker({ cliId, task: "form-interpret", binPath, args, cwd: os.tmpdir(), scopeRoot: careerOpsRoot(), readRoots: [], writeRoots: [] });
+  } catch {
+    return { out: "", sessionId: null };
+  }
   return new Promise((resolve) => {
-    const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"] });
     let buf = "";
     child.stdout.on("data", (d: Buffer) => (buf += d.toString()));
     child.stderr.on("data", () => {});
@@ -135,7 +142,7 @@ export async function driveSession(
       return undefined;
     }
   };
-  const answersBlock = (answers ?? []).filter((a) => a.value?.trim()).map((a) => `- "${a.label}": ${a.value.replace(/\s+/g, " ").slice(0, 300)}`).join("\n");
+  const answersBlock = untrustedContent("user-provided application answers", (answers ?? []).filter((a) => a.value?.trim()).map((a) => `- "${a.label}": ${a.value.replace(/\s+/g, " ").slice(0, 300)}`).join("\n"));
   const goalText =
     goal === "reach"
       ? `Your goal: navigate to the actual fillable JOB APPLICATION form (click 'Apply', pass any interstitial/pre-screen, reach the page with the Name/Email/Resume fields). Do NOT fill anything yet. Reply {"action":"reached_form"} once the form with those fields is visible.`
@@ -153,7 +160,7 @@ ${answersBlock || "(no answers provided — just reach/observe)"}`;
     const snap = await snapshot(frame).catch(() => ({ text: "", n: 0 }));
     const prompt =
       turn === 1
-        ? `You are an agent driving a real web browser for a job seeker (we execute your actions; the human submits at the end). ${goalText}
+        ? withPromptSecurityHeader(`You are an agent driving a real web browser for a job seeker (we execute your actions; the human submits at the end). ${goalText}
 You NEVER submit a form — there is no submit action; the human does that.
 Reply with EXACTLY ONE action as a JSON object, nothing else:
   {"action":"click","ref":"e3"}            click an element
@@ -163,15 +170,15 @@ Reply with EXACTLY ONE action as a JSON object, nothing else:
   ${stopVerb}
   {"action":"stuck","reason":"…"}            you can't proceed (login/captcha/dead-end)
 
-Page: "${await page.title().catch(() => "")}" (${page.url()})
+Page: ${untrustedContent("external page title and URL", `${await page.title().catch(() => "")} (${page.url()})`)}
 Elements:
-${snap.text}`
-        : `New page state after your last action.
-Page: "${await page.title().catch(() => "")}" (${page.url()})
+${untrustedContent("external browser snapshot", snap.text)}`)
+        : withPromptSecurityHeader(`New page state after your last action.
+Page: ${untrustedContent("external page title and URL", `${await page.title().catch(() => "")} (${page.url()})`)}
 Elements:
-${snap.text}
+${untrustedContent("external browser snapshot", snap.text)}
 
-Reply ONE action JSON.`;
+Reply ONE action JSON.`);
 
     const { out, sessionId } = await plannerTurn(resolved.spec, resolved.binPath, cliId, prompt, resumeId);
     if (sessionId) resumeId = sessionId;
