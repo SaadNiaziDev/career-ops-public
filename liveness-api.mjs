@@ -26,6 +26,7 @@
  * host plus path segments extracted from the posting URL with a strict charset
  * (no slashes / traversal), and server-side redirects are refused.
  */
+import { fetchPublicUrl, validatePublicUrl } from './public-url-policy.mjs';
 
 const TIMEOUT_MS = 8_000;
 // Strict path-segment charset. Anything with a slash, dot-dot, or other char is
@@ -193,6 +194,11 @@ export function isAtsPosting(url) {
  *   null = not a known ATS posting, or inconclusive → caller should fall back to Playwright.
  */
 export async function checkLivenessViaApi(url) {
+  try {
+    await validatePublicUrl(url);
+  } catch {
+    return null;
+  }
   const resolved = resolveAtsApi(url);
   if (!resolved) return null;
   const { ats, apiUrl, parts, interpret, timeoutMs } = resolved;
@@ -204,12 +210,11 @@ export async function checkLivenessViaApi(url) {
   try {
     let res;
     try {
-      res = await fetch(apiUrl, {
+      res = await fetchPublicUrl(apiUrl, {
         method: 'GET',
         headers: { 'user-agent': 'career-ops-liveness/1.0', accept: 'application/json' },
-        redirect: 'error', // refuse server-side redirects (SSRF + ambiguity guard)
         signal: controller.signal,
-      });
+      }, { maxRedirects: 0 });
     } catch {
       return null; // network / timeout / redirect → inconclusive, let Playwright decide
     }

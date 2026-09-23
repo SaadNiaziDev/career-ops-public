@@ -1,4 +1,5 @@
 import { appendPortalsCompany } from "@/lib/portals-keywords";
+import { validatePublicUrl } from "@/lib/public-url-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,16 +17,16 @@ export async function POST(req: Request) {
   if (!name) return Response.json({ error: "company name required" }, { status: 400 });
   if (!careersUrl) return Response.json({ error: "careers URL required" }, { status: 400 });
   try {
-    new URL(careersUrl);
+    await validatePublicUrl(careersUrl);
   } catch {
-    return Response.json({ error: "careers URL is not a valid URL" }, { status: 400 });
+    return Response.json({ error: "careers URL must be a public HTTP(S) URL" }, { status: 400 });
   }
   const api = String(body.api ?? "").trim();
   if (api) {
     try {
-      new URL(api);
+      await validatePublicUrl(api);
     } catch {
-      return Response.json({ error: "ATS URL is not a valid URL" }, { status: 400 });
+      return Response.json({ error: "ATS URL must be a public HTTP(S) URL" }, { status: 400 });
     }
   }
 

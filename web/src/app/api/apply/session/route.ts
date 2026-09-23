@@ -1,4 +1,5 @@
 import { openSession } from "@/lib/apply/session";
+import { validatePublicUrl } from "@/lib/public-url-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,11 @@ export async function POST(req: Request) {
     return Response.json({ error: "bad json" }, { status: 400 });
   }
   const url = (body.url ?? "").trim();
-  if (!/^https?:\/\//i.test(url)) return Response.json({ error: "A valid application URL (https://…) is required" }, { status: 400 });
+  try {
+    await validatePublicUrl(url);
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "A public HTTP(S) application URL is required" }, { status: 400 });
+  }
   try {
     const session = await openSession(url, body.cliId, body.agent, body._noApplyBtn);
     return Response.json(session);

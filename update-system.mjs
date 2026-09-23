@@ -58,6 +58,11 @@ export const REEXEC_BUFFER_TIMEOUT_MS = parsePositiveInt(process.env.CAREER_OPS_
 
 // System layer paths — ONLY these files get updated
 const SYSTEM_PATHS = [
+  'public-url-policy.mjs',
+  'public-url-policy.d.mts',
+  'web/src/lib/public-url-policy.mjs',
+  'web/src/lib/public-url-policy.d.mts',
+  'web/src/lib/public-url-policy.ts',
   'modes/README.md',
   'modes/_shared.md',
   'modes/_profile.template.md',

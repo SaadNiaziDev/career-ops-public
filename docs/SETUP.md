@@ -72,3 +72,5 @@ For one-shot workers, use `codex exec`. See [docs/CODEX.md](CODEX.md).
 ## Personal data stays local
 
 Never commit `cv.md`, `config/profile.yml`, `portals.yml`, `modes/_profile.md`, tracker files, reports, or outputs. See `DATA_CONTRACT.md`.
+
+Web routes that fetch or open supplied URLs allow public HTTP(S) destinations only. Local/private addresses, credentials in URLs, unsupported schemes, and unsafe redirects are rejected.
