@@ -88,6 +88,19 @@ test('simple text/plain writes are rejected before route handling', async () => 
   assert.equal(response.status, 415);
 });
 
+test('declared oversized worker bodies are rejected before route body parsing', async () => {
+  const response = await proxy(request('/api/run', {
+    method: 'POST',
+    headers: authenticatedHeaders({
+      origin: 'http://localhost:3000',
+      'sec-fetch-site': 'same-origin',
+      'content-type': 'application/json',
+      'content-length': '300000',
+    }),
+  }));
+  assert.equal(response.status, 413);
+});
+
 test('same-origin JSON writes pass the shared request boundary', async () => {
   const response = await proxy(request('/api/status', {
     method: 'POST',

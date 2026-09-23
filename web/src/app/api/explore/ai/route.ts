@@ -5,8 +5,10 @@ import { resolveCli } from "@/lib/clis";
 import { careerOpsRoot, readMemory } from "@/lib/career-ops";
 import { assembleDedupContext } from "@/lib/core/discover";
 import { USAGE_MARK } from "@/lib/explore";
-import { spawnSandboxedWorker, workerRoots } from "@/lib/worker-sandbox";
+import { spawnSandboxedWorker, terminateWorkerProcess, workerRoots, WorkerCapacityError } from "@/lib/worker-sandbox";
 import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
+import { readBoundedJson, RequestTooLargeError } from "@/lib/core/request-bounds";
+import { workerClientId } from "@/lib/core/worker-admission";
 
 // AI search orchestrates modes/discover.md by running the USER'S configured CLI
 // headless (CLI-agnostic, like the assistant). Web hunting is slow → generous
@@ -15,6 +17,9 @@ import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-cont
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 600;
+const MAX_SEARCH_BODY_BYTES = 64_000;
+const MAX_SEARCH_QUERY_BYTES = 8_000;
+const MAX_SEARCH_PROMPT_BYTES = 128_000;
 
 const OUTPUT_CONTRACT = `
 
@@ -33,13 +38,15 @@ Follow modes/discover.md exactly. You are running headless for the web:
 export async function POST(req: Request) {
   let body: { query?: string; cliId?: string };
   try {
-    body = await req.json();
-  } catch {
+    body = await readBoundedJson(req, MAX_SEARCH_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestTooLargeError) return Response.json({ error: "AI search request too large (max 63 KB). Shorten your query and retry." }, { status: 413 });
     return Response.json({ error: "bad json" }, { status: 400 });
   }
   const query = (body.query || "").trim();
   const cliId = body.cliId;
   if (!query || !cliId) return Response.json({ error: "query and cliId required" }, { status: 400 });
+  if (Buffer.byteLength(query, "utf8") > MAX_SEARCH_QUERY_BYTES) return Response.json({ error: "AI search query too large (max 8 KB). Shorten it and retry." }, { status: 413 });
 
   const resolved = resolveCli(cliId);
   if (!resolved) return Response.json({ error: `CLI '${cliId}' not found on this machine` }, { status: 404 });
@@ -62,6 +69,7 @@ export async function POST(req: Request) {
   const memoryLine = memory.trim() ? `\n\nWHAT YOU KNOW ABOUT THE USER (persistent memory):\n${untrustedContent("user profile notes", memory.trim())}` : "";
   const knownBlock = lines.length ? `\n\n--- ALREADY KNOWN (dedup — do NOT propose these) ---\n${untrustedContent("existing pipeline data", lines.join("\n"))}` : "";
   const prompt = withPromptSecurityHeader(`${mode}${OUTPUT_CONTRACT}${memoryLine}${knownBlock}\n\n--- USER INTENT ---\n${untrustedContent("search request", query)}\n`);
+  if (Buffer.byteLength(prompt, "utf8") > MAX_SEARCH_PROMPT_BYTES) return Response.json({ error: "AI search prompt too large. Shorten the search query and retry." }, { status: 413 });
 
   const isClaude = cliId === "claude";
   const isCodex = cliId === "codex";
@@ -86,8 +94,12 @@ export async function POST(req: Request) {
   let child;
   try {
     const roots = workerRoots("discover", root);
-    child = await spawnSandboxedWorker({ cliId, task: "discover", binPath, args, cwd: os.tmpdir(), scopeRoot: root, ...roots });
+    child = await spawnSandboxedWorker({ cliId, task: "discover", binPath, args, cwd: os.tmpdir(), scopeRoot: root, ...roots, clientId: workerClientId(req), signal: req.signal, detached: process.platform !== "win32" });
   } catch (error) {
+    if (error instanceof WorkerCapacityError) {
+      if (error.reason === "cancelled") return new Response(null, { status: 499 });
+      return Response.json({ error: error.message }, { status: 429, headers: { "Retry-After": "5" } });
+    }
     return Response.json({ error: error instanceof Error ? error.message : "Worker sandbox could not be started." }, { status: 503 });
   }
 
@@ -97,21 +109,29 @@ export async function POST(req: Request) {
   // controller and throw an uncaught "Controller is already closed" (see #1155).
   let closed = false;
   let killer: ReturnType<typeof setTimeout> | undefined;
+  let forceKiller: ReturnType<typeof setTimeout> | undefined;
+  let stopping = false;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    terminateWorkerProcess(child.pid, "SIGTERM");
+    forceKiller = setTimeout(() => terminateWorkerProcess(child.pid, "SIGKILL"), 5_000);
+  };
+  req.signal.addEventListener("abort", stop, { once: true });
+  if (req.signal.aborted) stop();
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let buf = "";
       let emitted = false;
       killer = setTimeout(() => {
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          /* ignore */
-        }
+        stop();
       }, 480_000);
       const safeClose = () => {
         if (!closed) {
           closed = true;
           if (killer) clearTimeout(killer);
+          if (forceKiller) clearTimeout(forceKiller);
+          req.signal.removeEventListener("abort", stop);
           try {
             controller.close();
           } catch {
@@ -210,11 +230,8 @@ export async function POST(req: Request) {
     cancel() {
       closed = true;
       if (killer) clearTimeout(killer);
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        /* ignore */
-      }
+      req.signal.removeEventListener("abort", stop);
+      stop();
     },
   });
 

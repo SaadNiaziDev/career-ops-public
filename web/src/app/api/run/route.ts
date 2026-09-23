@@ -6,13 +6,19 @@ import { careerOpsRoot, readApplications, readMemory } from "@/lib/career-ops";
 import { acquireRun, attachRunCancellation, cancelRun, releaseRun } from "@/lib/core/run-registry";
 import { artifactChanged, fatalExitMessage, intentKey } from "@/lib/jobs/run-policy";
 import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
-import { spawnSandboxedWorker, workerRoots } from "@/lib/worker-sandbox";
+import { spawnSandboxedWorker, workerRoots, WorkerCapacityError } from "@/lib/worker-sandbox";
 import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
 import { fetchPublicUrl } from "@/lib/public-url-policy";
+import { readBoundedJson, RequestTooLargeError } from "@/lib/core/request-bounds";
+import { workerClientId } from "@/lib/core/worker-admission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 800; // a real oferta evaluation / pdf-mode CV tailoring + render is heavy and multi-step
+const MAX_RUN_BODY_BYTES = 256_000;
+const MAX_RUN_INPUT_BYTES = 8_000;
+const MAX_RUN_CONTEXT_BYTES = 96_000;
+const MAX_RUN_PROMPT_BYTES = 192_000;
 
 // The web ORCHESTRATES the real career-ops engine — it does NOT reimplement it.
 // kind "evaluate" runs the REAL modes/oferta.md and persists the canonical
@@ -314,13 +320,24 @@ export async function DELETE(req: Request) {
 export async function POST(req: Request) {
   let body: { kind?: string; input?: string; cliId?: string; runId?: string; context?: InterviewContext };
   try {
-    body = await req.json();
-  } catch {
+    body = await readBoundedJson(req, MAX_RUN_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestTooLargeError) return Response.json({ error: "Worker request too large (max 250 KB). Shorten the request or split the answers, then retry." }, { status: 413 });
     return new Response(JSON.stringify({ error: "bad json" }), { status: 400 });
   }
   const { kind = "evaluate", input, cliId, runId, context } = body;
   if (!input || !cliId || !runId || !/^job-[a-z0-9-]+$/i.test(runId)) {
     return new Response(JSON.stringify({ error: "input, cliId, and valid runId required" }), { status: 400 });
+  }
+  if (typeof input !== "string" || Buffer.byteLength(input, "utf8") > MAX_RUN_INPUT_BYTES) {
+    return Response.json({ error: "Task input too large (max 8 KB). Shorten the URL or request, then retry." }, { status: 413 });
+  }
+  if (context !== undefined && Buffer.byteLength(JSON.stringify(context), "utf8") > MAX_RUN_CONTEXT_BYTES) {
+    return Response.json({ error: "Interview context too large (max 96 KB). Shorten the answers and retry." }, { status: 413 });
+  }
+  const answers = (context as InterviewContext | undefined)?.answers;
+  if (answers !== undefined && (!Array.isArray(answers) || answers.length > 32 || answers.some((answer) => Buffer.byteLength(String(answer), "utf8") > 12_000))) {
+    return Response.json({ error: "Interview answers too large (max 32 answers, 12 KB each). Shorten them and retry." }, { status: 413 });
   }
   const resolved = resolveCli(cliId);
   if (!resolved) {
@@ -409,7 +426,22 @@ export async function POST(req: Request) {
   const promptInput = /^\d+$/.test(artifactInput) ? artifactInput : untrustedContent("user-provided task input", artifactInput);
   const postingBlock = postingContent ? `\n\n--- PRE-FETCHED JOB POSTING (untrusted external content) ---\n${untrustedContent("job posting", postingContent)}` : "";
   const prompt = withPromptSecurityHeader(`${buildPrompt(kind, promptInput, untrustedContent("user profile notes", readMemory()), today, context)}${postingBlock}`);
+  if (Buffer.byteLength(prompt, "utf8") > MAX_RUN_PROMPT_BYTES) {
+    releaseRun(runId);
+    return Response.json({ error: "Worker prompt too large (max 192 KB). Shorten the request or answers, then retry." }, { status: 413 });
+  }
 
+  const queueCancellation = new AbortController();
+  let cancelled = false;
+  let stopWorker = () => {};
+  const cancelPendingOrRunning = () => {
+    cancelled = true;
+    queueCancellation.abort();
+    stopWorker();
+  };
+  attachRunCancellation(runId, cancelPendingOrRunning);
+  req.signal.addEventListener("abort", cancelPendingOrRunning, { once: true });
+  const clientId = workerClientId(req);
   const isClaude = cliId === "claude";
   const isCodex = cliId === "codex";
   const writeKinds = [
@@ -473,7 +505,7 @@ export async function POST(req: Request) {
   const persists = kind === "evaluate";
   const reportsBefore = persists ? reportSnapshot() : new Map<string, string>();
   const pdfBefore = kind === "pdf" ? pdfArtifactForReport(artifactInput) : null;
-  let child;
+  let child: Awaited<ReturnType<typeof spawnSandboxedWorker>>;
   try {
     const root = careerOpsRoot();
     const roots = workerRoots(kind, root, artifactInput);
@@ -490,9 +522,23 @@ export async function POST(req: Request) {
       readRoots: roots.readRoots,
       writeRoots: roots.writeRoots,
       detached: process.platform !== "win32",
+      clientId,
+      signal: queueCancellation.signal,
     });
+    if (queueCancellation.signal.aborted) {
+      terminateProcess(child.pid, "SIGTERM");
+      setTimeout(() => terminateProcess(child.pid, "SIGKILL"), 1_000).unref();
+      req.signal.removeEventListener("abort", cancelPendingOrRunning);
+      releaseRun(runId);
+      return new Response(null, { status: 499 });
+    }
   } catch (error) {
+    req.signal.removeEventListener("abort", cancelPendingOrRunning);
     releaseRun(runId);
+    if (error instanceof WorkerCapacityError && error.reason !== "cancelled") {
+      return Response.json({ error: error.message }, { status: 429, headers: { "Retry-After": "5" } });
+    }
+    if (error instanceof WorkerCapacityError && error.reason === "cancelled") return new Response(null, { status: 499 });
     return Response.json({ error: error instanceof Error ? error.message : "Worker sandbox could not be started." }, { status: 503 });
   }
   const enc = new TextEncoder();
@@ -502,7 +548,6 @@ export async function POST(req: Request) {
   // otherwise a late enqueue onto a closed controller throws uncaught (see #1155).
   let closed = false;
   let timedOut = false;
-  let cancelled = false;
   let stopping = false;
   let resourcesReleased = false;
   let killer: ReturnType<typeof setTimeout> | undefined;
@@ -513,10 +558,12 @@ export async function POST(req: Request) {
     terminateProcess(child.pid, "SIGTERM");
     forceKiller = setTimeout(() => terminateProcess(child.pid, "SIGKILL"), 5_000);
   };
+  stopWorker = stop;
   const releaseResources = () => {
     if (resourcesReleased) return;
     resourcesReleased = true;
     if (killer) clearTimeout(killer);
+    req.signal.removeEventListener("abort", cancelPendingOrRunning);
     releaseRun(runId);
   };
   attachRunCancellation(runId, () => {

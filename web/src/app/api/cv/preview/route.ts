@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readBoundedJson, RequestTooLargeError } from "@/lib/core/request-bounds";
 import { DEFAULT_CV_SOURCE, readCvSource, resolveCvSource } from "@/lib/cv/sources";
 import { renderCvPreviewHtml } from "@/lib/cv/preview";
 import { readCvSettings, sanitizeCvPageFormat, sanitizeCvStyle, sanitizeCvTemplate } from "@/lib/cv/settings";
@@ -31,8 +32,9 @@ function resolveMarkdown(body: PreviewBody): { md: string } | { error: string; s
 export async function POST(req: Request) {
   let body: PreviewBody;
   try {
-    body = await req.json();
-  } catch {
+    body = await readBoundedJson(req, 250_000);
+  } catch (error) {
+    if (error instanceof RequestTooLargeError) return NextResponse.json({ error: "CV too large for preview" }, { status: 413 });
     return NextResponse.json({ error: "bad json" }, { status: 400 });
   }
 

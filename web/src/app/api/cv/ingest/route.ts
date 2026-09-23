@@ -5,8 +5,10 @@ import { resolveCli, resolveDefaultCli } from "@/lib/clis";
 import { careerOpsRoot } from "@/lib/career-ops";
 import { extractPdfText } from "@/lib/cv/pdf-text.mjs";
 import { localCvStream } from "@/lib/cv/quality";
-import { spawnSandboxedWorker, workerRoots } from "@/lib/worker-sandbox";
+import { spawnSandboxedWorker, terminateWorkerProcess, WorkerCapacityError, workerRoots } from "@/lib/worker-sandbox";
+import { workerClientId } from "@/lib/core/worker-admission";
 import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
+import { readBoundedFormData, readBoundedJson, RequestTooLargeError } from "@/lib/core/request-bounds";
 
 // Parse a CV (pasted text or an uploaded PDF) into clean cv.md markdown.
 // PDFs are extracted locally first so any CLI (or no CLI) can continue — the
@@ -16,6 +18,9 @@ import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-cont
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+const MAX_UPLOAD_BYTES = 5_000_000;
+const MAX_TEXT_BYTES = 200_000;
+const MAX_JSON_BYTES = 250_000;
 
 // Prefer the CANONICAL core mode (single source of truth — CLI + web parse CVs
 // identically); fall back to the inline prompt until modes/cv-ingest.md lands
@@ -73,14 +78,15 @@ export async function POST(req: Request) {
 
   try {
     if (ctype.includes("application/json")) {
-      const body = (await req.json()) as { text?: string; cliId?: string };
+      const body = await readBoundedJson<{ text?: string; cliId?: string }>(req, MAX_JSON_BYTES);
       cliId = body.cliId || "";
       const text = (body.text || "").trim();
       if (!text) return Response.json({ error: "empty cv text" }, { status: 400 });
+      if (Buffer.byteLength(text, "utf8") > MAX_TEXT_BYTES) return Response.json({ error: "CV text too large (max 200 KB)" }, { status: 413 });
       extractedText = text;
       promptSource = TEXT_SRC(text);
     } else if (ctype.includes("multipart/form-data")) {
-      const form = await req.formData();
+      const form = await readBoundedFormData(req, MAX_UPLOAD_BYTES + 32_768);
       cliId = String(form.get("cliId") || "");
       const file = form.get("file");
       if (!(file instanceof File)) return Response.json({ error: "no file" }, { status: 400 });
@@ -88,10 +94,12 @@ export async function POST(req: Request) {
         return Response.json({ error: "Word .docx isn't supported yet — export as PDF or Markdown (.md), or paste the text." }, { status: 400 });
       }
       const ext = (file.name.match(/\.[a-z0-9]+$/i)?.[0] || ".pdf").toLowerCase();
+      if (file.size > MAX_UPLOAD_BYTES) return Response.json({ error: "CV file too large (max 5 MB)" }, { status: 413 });
       const buf = Buffer.from(await file.arrayBuffer());
       if (/\.(md|markdown|txt)$/i.test(file.name)) {
         const text = buf.toString("utf8").trim();
         if (!text) return Response.json({ error: "empty file" }, { status: 400 });
+        if (buf.byteLength > MAX_TEXT_BYTES) return Response.json({ error: "CV text too large (max 200 KB)" }, { status: 413 });
         extractedText = text;
         promptSource = TEXT_SRC(text);
       } else if (ext === ".pdf" || buf.subarray(0, 5).toString("latin1") === "%PDF-") {
@@ -107,7 +115,8 @@ export async function POST(req: Request) {
     } else {
       return Response.json({ error: "unsupported content-type" }, { status: 400 });
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof RequestTooLargeError) return Response.json({ error: "CV upload too large (max 5 MB)" }, { status: 413 });
     return Response.json({ error: "bad request" }, { status: 400 });
   }
 
@@ -142,8 +151,12 @@ export async function POST(req: Request) {
   try {
     const root = careerOpsRoot();
     const roots = workerRoots("cv-ingest", root);
-    child = await spawnSandboxedWorker({ cliId: activeCliId, task: "cv-ingest", binPath, args, cwd: os.tmpdir(), scopeRoot: root, ...roots });
+    child = await spawnSandboxedWorker({ cliId: activeCliId, task: "cv-ingest", binPath, args, cwd: os.tmpdir(), scopeRoot: root, ...roots, clientId: workerClientId(req), signal: req.signal, detached: process.platform !== "win32" });
   } catch (e) {
+    if (e instanceof WorkerCapacityError) {
+      if (e.reason === "cancelled") return new Response(null, { status: 499 });
+      return Response.json({ error: e.message }, { status: 429, headers: { "Retry-After": "5" } });
+    }
     return Response.json({ error: e instanceof Error ? e.message : "failed to start the sandboxed CLI" }, { status: 503 });
   }
 
@@ -155,21 +168,32 @@ export async function POST(req: Request) {
   // "Invalid state: Controller is already closed" that crashes the server (#1155).
   let closed = false;
   let killer: ReturnType<typeof setTimeout> | undefined;
+  let forceKiller: ReturnType<typeof setTimeout> | undefined;
+  let stopping = false;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    terminateWorkerProcess(child.pid, "SIGTERM");
+    forceKiller = setTimeout(() => terminateWorkerProcess(child.pid, "SIGKILL"), 5_000);
+  };
+  const releaseResources = () => {
+    if (killer) clearTimeout(killer);
+    if (forceKiller) clearTimeout(forceKiller);
+    req.signal.removeEventListener("abort", stop);
+  };
+  req.signal.addEventListener("abort", stop, { once: true });
+  if (req.signal.aborted) stop();
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let buf = "";
       let emitted = false;
       killer = setTimeout(() => {
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          /* ignore */
-        }
+        stop();
       }, 240_000);
       const safeClose = () => {
         if (!closed) {
           closed = true;
-          if (killer) clearTimeout(killer);
+          releaseResources();
           try {
             controller.close();
           } catch {
@@ -250,12 +274,8 @@ export async function POST(req: Request) {
     },
     cancel() {
       closed = true; // a consumer teardown must stop the child handlers from enqueuing
-      if (killer) clearTimeout(killer);
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        /* ignore */
-      }
+      releaseResources();
+      stop();
     },
   });
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readBoundedJson, RequestTooLargeError } from "@/lib/core/request-bounds";
 import { DEFAULT_CV_SOURCE, readCvSource, resolveCvSource } from "@/lib/cv/sources";
 import { readCvSettings } from "@/lib/cv/settings";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
@@ -21,8 +22,9 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   let body: { content?: string; source?: string };
   try {
-    body = await req.json();
-  } catch {
+    body = await readBoundedJson(req, 250_000);
+  } catch (error) {
+    if (error instanceof RequestTooLargeError) return NextResponse.json({ error: "CV too large (max 200 KB)" }, { status: 413 });
     return NextResponse.json({ error: "bad json" }, { status: 400 });
   }
   if (typeof body.content !== "string") {

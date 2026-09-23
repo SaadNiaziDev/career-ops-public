@@ -39,6 +39,9 @@ Background workers (evaluate, PDF, research) run through **Claude Code**, **Code
 - Runs entirely on your machine
 - Never submits applications for you
 - Your CV and tracker stay in local files under the repo root
+- Request bodies are capped before parsing; CV uploads are limited to 5 MB, worker requests to 250 KB, and CV text to 200 KB.
+- Every AI worker launch shares a server-side queue: 3 active globally, 2 outstanding per authenticated session, and 12 queued by default. Excess requests receive HTTP 429 with a retry hint.
+- Set `CAREER_OPS_WORKER_GLOBAL_LIMIT`, `CAREER_OPS_WORKER_CLIENT_LIMIT`, or `CAREER_OPS_WORKER_QUEUE_LIMIT` before launching the server to change those limits (maximums: 32, 16, and 128).
 
 ## Development
 

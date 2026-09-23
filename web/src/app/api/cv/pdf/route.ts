@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readBoundedJson, RequestTooLargeError } from "@/lib/core/request-bounds";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -26,8 +27,9 @@ export async function POST(req: Request) {
     style?: Record<string, string>;
   };
   try {
-    body = await req.json();
-  } catch {
+    body = await readBoundedJson(req, 250_000);
+  } catch (error) {
+    if (error instanceof RequestTooLargeError) return NextResponse.json({ error: "CV too large for PDF generation" }, { status: 413 });
     return NextResponse.json({ error: "bad json" }, { status: 400 });
   }
 

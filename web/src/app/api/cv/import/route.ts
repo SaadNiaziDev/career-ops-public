@@ -3,11 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
 import { CV_SOURCE_EXT_RE, cvSourcesDir, resolveCvSource } from "@/lib/cv/sources";
+import { readBoundedFormData, RequestTooLargeError } from "@/lib/core/request-bounds";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_CV_BYTES = 200_000;
+const MAX_CV_BODY_BYTES = 232_768;
 
 function safeFilename(name: string): string {
   const base = path.basename(name).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
@@ -28,8 +30,9 @@ function looksBinary(buf: Buffer): boolean {
 export async function POST(req: Request) {
   let form: FormData;
   try {
-    form = await req.formData();
-  } catch {
+    form = await readBoundedFormData(req, MAX_CV_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestTooLargeError) return NextResponse.json({ error: "file too large (max 200KB)" }, { status: 413 });
     return NextResponse.json({ error: "invalid upload" }, { status: 400 });
   }
 
@@ -39,8 +42,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "only .md, .markdown or .txt files can be imported" }, { status: 400 });
   }
 
+  if (file.size > MAX_CV_BYTES) return NextResponse.json({ error: "file too large (max 200KB)" }, { status: 413 });
   const buf = Buffer.from(await file.arrayBuffer());
-  if (buf.byteLength > MAX_CV_BYTES) return NextResponse.json({ error: "file too large (max 200KB)" }, { status: 413 });
   if (looksBinary(buf)) {
     return NextResponse.json({ error: "that file isn't plain text — paste the CV text instead" }, { status: 400 });
   }

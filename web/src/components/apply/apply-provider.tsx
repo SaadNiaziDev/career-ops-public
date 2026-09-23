@@ -254,6 +254,12 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
     };
     try {
       const r = await fetch("/api/apply/prefill", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: sessionId.current, cliId: cliId() }) });
+      if (!r.ok) {
+        const error = await r.json().catch(() => ({})) as { error?: string };
+        setError(error.error ? `Couldn't pre-fill: ${error.error}` : `Couldn't pre-fill (HTTP ${r.status}).`);
+        setStatus("ready");
+        return;
+      }
       if (!r.body) {
         setError("Couldn't pre-fill — no response stream.");
         setStatus("ready");
