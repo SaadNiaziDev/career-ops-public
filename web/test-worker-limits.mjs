@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import net from "node:net";
-import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
+import { createIsolatedNextProject } from "./test-support/isolated-next-project.mjs";
 
 const WEB = path.dirname(new URL(import.meta.url).pathname);
 const ROOT = path.resolve(WEB, "..");
@@ -32,7 +32,8 @@ async function waitForServer(url, child) {
 }
 
 test("API limits oversized uploads and worker requests, and cancellation kills its child", { skip: process.platform === "win32", timeout: 120_000 }, async (t) => {
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-worker-limits-"));
+  const temp = fs.mkdtempSync(path.join(WEB, ".worker-limits-test-"));
+  const project = createIsolatedNextProject(WEB, temp);
   const binDir = path.join(temp, "bin");
   const port = await unusedPort();
   fs.mkdirSync(binDir);
@@ -41,7 +42,7 @@ test("API limits oversized uploads and worker requests, and cancellation kills i
   fs.chmodSync(cliPath, 0o755);
 
   const child = spawn(process.execPath, [path.join(WEB, "node_modules/next/dist/bin/next"), "dev", "--hostname", "127.0.0.1", "--port", String(port)], {
-    cwd: WEB,
+    cwd: project,
     env: {
       ...process.env,
       PATH: `${binDir}${path.delimiter}${process.env.PATH || ""}`,

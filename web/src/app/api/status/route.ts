@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { createRequire } from "node:module";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { careerOpsRoot } from "@/lib/career-ops";
+
+const require = createRequire(path.join(process.cwd(), "package.json"));
 
 export async function POST(req: Request) {
   let body: { n?: string | number; status?: string };
@@ -17,8 +19,8 @@ export async function POST(req: Request) {
 
   const root = careerOpsRoot();
   try {
-    const { setTrackerStatus } = await import(pathToFileURL(path.join(root, "tracker-mutations.mjs")).href);
-    const { resolveTrackerPath } = await import(pathToFileURL(path.join(root, "tracker-utils.mjs")).href);
+    const { setTrackerStatus } = require(path.join(root, "tracker-mutations.mjs"));
+    const { resolveTrackerPath } = require(path.join(root, "tracker-utils.mjs"));
     const result = await setTrackerStatus({
       trackerPath: resolveTrackerPath(root),
       statesPath: path.join(root, "templates/states.yml"),
