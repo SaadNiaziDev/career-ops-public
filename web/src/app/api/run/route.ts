@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { resolveCli } from "@/lib/clis";
 import { careerOpsRoot, readApplications, readMemory } from "@/lib/career-ops";
-import { acquireRun, acquireTrackerWrite, attachRunCancellation, cancelRun, releaseRun, releaseTrackerWrite } from "@/lib/core/run-registry";
+import { acquireRun, attachRunCancellation, cancelRun, releaseRun } from "@/lib/core/run-registry";
 import { artifactChanged, fatalExitMessage, intentKey } from "@/lib/jobs/run-policy";
 import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
 import { spawnSandboxedWorker, workerRoots } from "@/lib/worker-sandbox";
@@ -473,10 +473,6 @@ export async function POST(req: Request) {
   const persists = kind === "evaluate";
   const reportsBefore = persists ? reportSnapshot() : new Map<string, string>();
   const pdfBefore = kind === "pdf" ? pdfArtifactForReport(artifactInput) : null;
-  // Tracker-mutating runs hold a write token so a row delete can't race their merge
-  // (tracker.mjs delete doesn't yet share a lock with merge-tracker — see run-registry).
-  const writeToken = kind === "evaluate" ? acquireTrackerWrite() : null;
-
   let child;
   try {
     const root = careerOpsRoot();
@@ -496,7 +492,6 @@ export async function POST(req: Request) {
       detached: process.platform !== "win32",
     });
   } catch (error) {
-    if (writeToken !== null) releaseTrackerWrite(writeToken);
     releaseRun(runId);
     return Response.json({ error: error instanceof Error ? error.message : "Worker sandbox could not be started." }, { status: 503 });
   }
@@ -522,7 +517,6 @@ export async function POST(req: Request) {
     if (resourcesReleased) return;
     resourcesReleased = true;
     if (killer) clearTimeout(killer);
-    if (writeToken !== null) releaseTrackerWrite(writeToken);
     releaseRun(runId);
   };
   attachRunCancellation(runId, () => {

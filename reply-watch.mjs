@@ -17,7 +17,7 @@ import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { matchCandidates, classifyReply } from './reply-matcher.mjs';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
-import { rebuildRow } from './tracker-utils.mjs';
+import { setTrackerStatus } from './tracker-mutations.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CANDIDATES_PATH = path.join(__dirname, 'data', 'reply-candidates.json');
@@ -138,29 +138,20 @@ function loadFollowups() {
   return followups;
 }
 
-// Update the status of a specific row in the tracker markdown file
-function updateTrackerStatus(appNum, newStatus) {
-  const content = fs.readFileSync(APPS_FILE, 'utf-8');
-  const lines = content.split('\n');
-  const colmap = resolveColumns(lines);
-
-  let updated = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const row = parseTrackerRow(line, colmap);
-    if (row && row.num === appNum) {
-      const parts = line.split('|').map(s => s.trim());
-      parts[colmap.status] = newStatus;
-      lines[i] = rebuildRow(parts);
-      updated = true;
-      break;
-    }
+// Update one status through the same validated, locked mutation API as web/CLI.
+async function updateTrackerStatus(appNum, newStatus) {
+  try {
+    const result = await setTrackerStatus({
+      trackerPath: APPS_FILE,
+      statesPath: path.join(__dirname, 'templates/states.yml'),
+      selector: String(appNum),
+      status: newStatus,
+    });
+    return result.changed;
+  } catch (error) {
+    console.error(`Could not update tracker #${appNum}: ${error.message}`);
+    return false;
   }
-
-  if (updated) {
-    fs.writeFileSync(APPS_FILE, lines.join('\n'), 'utf-8');
-  }
-  return updated;
 }
 
 async function main() {
@@ -241,7 +232,7 @@ async function main() {
     const answer = await askQuestion('Apply recommended status updates to data/applications.md? (y/N): ');
     if (answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes') {
       for (const r of recommendations) {
-        updateTrackerStatus(r.num, r.newStatus);
+        await updateTrackerStatus(r.num, r.newStatus);
         console.log(`Updated #${r.num} to ${r.newStatus}`);
       }
       console.log('\n✅ All updates written to data/applications.md');

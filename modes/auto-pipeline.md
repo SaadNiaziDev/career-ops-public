@@ -93,6 +93,6 @@ If the final score is >= 4.5, generate a draft of responses for the application 
 
 ## Step 5 — Update Tracker
 
-Record it in `data/applications.md` with all columns including Report and PDF as ✅.
+Write the tracker addition to `batch/tracker-additions/` in the documented TSV format, then run `node merge-tracker.mjs`. Never edit `data/applications.md` directly. Set Report and PDF to ✅ when the PDF was generated.
 
 **If any step fails**, continue with the next ones and mark the failed step as pending in the tracker.

@@ -1,11 +1,11 @@
 /**
- * tracker-utils.mjs — shared helpers for rewriting `data/applications.md` rows.
+ * tracker-utils.mjs — low-level path, row, lock, and atomic-file primitives.
  *
  * The tracker is a markdown table that several scripts mutate in place
  * (`dedup-tracker.mjs`, `normalize-statuses.mjs`, `merge-tracker.mjs`,
- * `set-status.mjs`). Keeping the row-rewrite, path-resolution, locking, and
- * atomic-write logic here means a fix lands once instead of drifting between
- * copies — and every writer excludes every other writer through the same lock.
+ * Tracker writers must use tracker-mutations.mjs for the shared transaction,
+ * validation, backup, and lock boundary. These primitives remain available for
+ * other files that need atomic replacement.
  */
 
 import { readFileSync, writeFileSync, renameSync, rmSync, mkdirSync, statSync, existsSync, realpathSync } from 'fs';

@@ -96,7 +96,7 @@ If the role on screen differs from the one evaluated:
 - **Notify the candidate**: "The role has changed from [X] to [Y]. Do you want me to re-evaluate or adapt the responses to the new title?"
 - **If adapt**: Adjust responses to the new role without re-evaluating, only after the candidate explicitly accepts the mismatch
 - **If re-evaluate**: Execute full A-F evaluation, update report, regenerate Section H
-- **Update tracker**: Change role title in applications.md if applicable
+- **Update tracker**: If applicable, change the role title through `node tracker-mutations.mjs role --num {tracker number} --value "{new role title}"`. Never edit `data/applications.md` directly.
 
 ## Step 6 — Analyze form questions
 

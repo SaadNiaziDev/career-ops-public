@@ -10,11 +10,12 @@
  * Run: node career-ops/dedup-tracker.mjs [--dry-run]
  */
 
-import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { rebuildRow } from './tracker-utils.mjs';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
+import { acquireTrackerMutationLock, writeTrackerSnapshot } from './tracker-mutations.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md
@@ -266,6 +267,16 @@ if (!existsSync(APPS_FILE)) {
   console.log('No applications.md found. Nothing to dedup.');
   process.exit(0);
 }
+let trackerLock = null;
+if (!DRY_RUN) {
+  try {
+    trackerLock = await acquireTrackerMutationLock(APPS_FILE);
+    process.once('exit', () => trackerLock?.release());
+  } catch (error) {
+    console.error(`Cannot acquire tracker lock: ${error.message}`);
+    process.exit(1);
+  }
+}
 const content = readFileSync(APPS_FILE, 'utf-8');
 const lines = content.split('\n');
 // Header-aware column map (tolerates an inserted Location column, etc.).
@@ -385,11 +396,11 @@ for (const idx of sortedRemoveIndices) {
 console.log(`\n📊 ${removed} duplicates removed`);
 
 if (!DRY_RUN && removed > 0) {
-  copyFileSync(APPS_FILE, APPS_FILE + '.bak');
-  writeFileSync(APPS_FILE, lines.join('\n'));
+  writeTrackerSnapshot(APPS_FILE, lines.join('\n'));
   console.log('✅ Written to applications.md (backup: applications.md.bak)');
 } else if (DRY_RUN) {
   console.log('(dry-run — no changes written)');
 } else {
   console.log('✅ No duplicates found');
 }
+trackerLock?.release();

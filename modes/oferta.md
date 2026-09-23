@@ -474,7 +474,7 @@ Save full evaluation in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 
 ### 2. Record in tracker
 
-**ALWAYS** record in `data/applications.md`:
+**ALWAYS** register through `batch/tracker-additions/{num}-{company-slug}.tsv`, then run `node merge-tracker.mjs`. Never edit `data/applications.md` directly. Include:
 - Next sequential number
 - Current date
 - Company — the END employer. If the JD is agency-mediated ("our client", agency domain, no employer named), ASK the user which agency it came through, use `?` as Company, and put a distinguishing descriptor in Notes (e.g. `fintech, Leeds`). Never write "Confidential" — the `?` marker is locale-invariant and can't collide with a real firm.

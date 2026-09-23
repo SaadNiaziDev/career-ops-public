@@ -68,4 +68,4 @@ Suggested status updates to apply:
 Apply recommended status updates to data/applications.md? (y/N): 
 ```
 
-Type `y` or `yes` to apply the changes. The script will rewrite the matched rows in `data/applications.md` and rebuild the derived SQLite index.
+Type `y` or `yes` to apply the changes. The script applies each approved status through the shared locked mutation API, then rebuilds the derived SQLite index. Never edit `data/applications.md` directly.

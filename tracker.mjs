@@ -34,12 +34,13 @@
  * so the index can never serve stale reads.
  */
 
-import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync, statSync, renameSync, rmSync } from 'fs';
+import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync, statSync } from 'fs';
 import { createHash } from 'crypto';
 import { dirname, resolve, join, basename } from 'path';
 import { pathToFileURL } from 'url';
 import yaml from 'js-yaml';
 import { resolveColumns } from './tracker-parse.mjs';
+import { deleteTrackerRow } from './tracker-mutations.mjs';
 
 const MD_PATH = process.env.CAREER_OPS_TRACKER || 'data/applications.md';
 const DB_PATH = process.env.CAREER_OPS_TRACKER_DB
@@ -471,47 +472,26 @@ async function exportMd(args) {
 
 // ── Main ────────────────────────────────────────────────────────────
 
-// Atomic file replace via a same-directory temp file + rename, so a reader never
-// sees a partially written applications.md (mirrors merge-tracker's writer).
-function writeFileAtomic(filePath, content) {
-  const tmp = join(dirname(filePath), `.${basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
-  try {
-    writeFileSync(tmp, content);
-    renameSync(tmp, filePath);
-  } catch (err) {
-    rmSync(tmp, { force: true });
-    throw err;
-  }
-}
-
-// `delete --num N` removes one application row from applications.md and rebuilds
-// the derived index. The markdown stays the source of truth: callers (incl. the
-// web) orchestrate this script rather than editing applications.md directly, so
-// the write-gate holds. The write is atomic; callers should still avoid running
-// a delete concurrently with a scan-merge (they share the same file — serialize
-// at the orchestration layer; a shared lock is a follow-up once merge-tracker is
-// import-safe).
+// `delete --num N` updates the source-of-truth tracker through the shared
+// cross-process mutation API, then rebuilds the derived index.
 async function deleteApp(args) {
   const num = flagValue(args, '--num');
   if (!num) {
     console.error('Usage: node tracker.mjs delete --num <N> [--dry-run]   (remove one application row by its number)');
     process.exit(1);
   }
-  if (!existsSync(MD_PATH)) {
-    console.error(`Error: ${MD_PATH} not found — nothing to delete.`);
-    process.exit(1);
-  }
-  const { removed, removedCount, report, newContent } = removeRowByNum(readFileSync(MD_PATH, 'utf-8'), num);
-  if (!removed) {
-    console.error(`No application numbered ${num} in ${MD_PATH}.`);
+  let result;
+  try {
+    result = await deleteTrackerRow({ trackerPath: MD_PATH, selector: num, dryRun: args.includes('--dry-run') });
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
     process.exit(1);
   }
   if (args.includes('--dry-run')) {
-    console.error(`Would remove application ${num} (${removedCount} row${removedCount > 1 ? 's' : ''}) from ${MD_PATH}.`);
-    if (report) console.error(`(report file would be orphaned: ${report})`);
+    console.error(`Would remove application ${num} (${result.removedCount} row${result.removedCount > 1 ? 's' : ''}) from ${MD_PATH}.`);
+    if (result.report) console.error(`(report file would be orphaned: ${result.report})`);
     return;
   }
-  writeFileAtomic(MD_PATH, newContent);
   // Rebuild the derived SQLite index from the now-updated markdown.
   try {
     const states = loadStates();
@@ -521,8 +501,8 @@ async function deleteApp(args) {
   } catch (e) {
     console.error(`(row removed; index resync skipped: ${e.message})`);
   }
-  console.error(`Removed application ${num} (${removedCount} row${removedCount > 1 ? 's' : ''}) from ${MD_PATH} and reindexed.`);
-  if (report) console.error(`Note: report file may now be orphaned — ${report}`);
+  console.error(`Removed application ${num} (${result.removedCount} row${result.removedCount > 1 ? 's' : ''}) from ${MD_PATH} and reindexed.`);
+  if (result.report) console.error(`Note: report file may now be orphaned — ${result.report}`);
 }
 
 const COMMANDS = { sync, query, history, export: exportMd, delete: deleteApp };

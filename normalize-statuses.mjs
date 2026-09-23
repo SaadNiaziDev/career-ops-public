@@ -11,10 +11,11 @@
  * Run: node career-ops/normalize-statuses.mjs [--dry-run]
  */
 
-import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { rebuildRow } from './tracker-utils.mjs';
+import { acquireTrackerMutationLock, writeTrackerSnapshot } from './tracker-mutations.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
@@ -93,6 +94,16 @@ if (!existsSync(APPS_FILE)) {
   console.log('No applications.md found. Nothing to normalize.');
   process.exit(0);
 }
+let trackerLock = null;
+if (!DRY_RUN) {
+  try {
+    trackerLock = await acquireTrackerMutationLock(APPS_FILE);
+    process.once('exit', () => trackerLock?.release());
+  } catch (error) {
+    console.error(`Cannot acquire tracker lock: ${error.message}`);
+    process.exit(1);
+  }
+}
 const content = readFileSync(APPS_FILE, 'utf-8');
 const lines = content.split('\n');
 
@@ -158,12 +169,11 @@ if (unknowns.length > 0) {
 console.log(`\n📊 ${changes} statuses normalized`);
 
 if (!DRY_RUN && changes > 0) {
-  // Backup first
-  copyFileSync(APPS_FILE, APPS_FILE + '.bak');
-  writeFileSync(APPS_FILE, lines.join('\n'));
+  writeTrackerSnapshot(APPS_FILE, lines.join('\n'));
   console.log('✅ Written to applications.md (backup: applications.md.bak)');
 } else if (DRY_RUN) {
   console.log('(dry-run — no changes written)');
 } else {
   console.log('✅ No changes needed');
 }
+trackerLock?.release();
