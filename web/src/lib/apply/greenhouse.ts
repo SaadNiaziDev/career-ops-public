@@ -4,6 +4,8 @@
 // schema publicly, and each question's `name` equals the DOM element id. We use
 // it to enrich extraction with clean labels, correct types, and real options.
 
+import { fetchPublicUrl } from "@/lib/public-url-policy";
+
 export type GhField = { label: string; type: string; required: boolean; options: string[] };
 
 /** Parse a Greenhouse job-board URL → {token, jobId}, else null. */
@@ -41,10 +43,10 @@ const GH_TYPE: Record<string, GhField["type"]> = {
  *  just keep the generic DOM extraction). */
 export async function fetchGreenhouseSchema(token: string, jobId: string): Promise<Map<string, GhField> | null> {
   try {
-    const r = await fetch(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(token)}/jobs/${encodeURIComponent(jobId)}?questions=true`, {
+    const r = await fetchPublicUrl(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(token)}/jobs/${encodeURIComponent(jobId)}?questions=true`, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(8000),
-    });
+    }, { maxRedirects: 0 });
     if (!r.ok) return null;
     const data = (await r.json()) as { questions?: Array<{ label?: string; required?: boolean; fields?: Array<{ name?: string; type?: string; values?: Array<{ label?: string }> }> }> };
     const map = new Map<string, GhField>();

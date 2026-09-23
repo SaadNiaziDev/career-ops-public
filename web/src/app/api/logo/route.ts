@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { fetchPublicUrl } from "@/lib/public-url-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,11 +40,10 @@ function companyDomains(company: string): string[] {
  *  bytes, or null for a miss (Google serves a tiny globe placeholder for misses). */
 async function fetchFavicon(domain: string): Promise<ArrayBuffer | null> {
   try {
-    const res = await fetch(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`, {
+    const res = await fetchPublicUrl(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`, {
       headers: { Accept: "image/*" },
       signal: AbortSignal.timeout(3500),
-      redirect: "follow",
-    });
+    }, { maxRedirects: 0 });
     if (!res.ok) return null;
     const ab = await res.arrayBuffer();
     return ab.byteLength > 220 ? ab : null;

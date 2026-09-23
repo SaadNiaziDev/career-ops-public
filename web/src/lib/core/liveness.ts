@@ -33,10 +33,12 @@ export function checkOffersLiveness(urls: string[]): Promise<OfferLiveness[]> {
 
   const apiUrl = pathToFileURL(rootScript("liveness-api")).href;
   const browserUrl = pathToFileURL(rootScript("liveness-browser")).href;
+  const policyUrl = pathToFileURL(`${careerOpsRoot()}/public-url-policy.mjs`).href;
   const hasBrowser = fs.existsSync(rootScript("liveness-browser"));
 
   const code = `
 import { checkLivenessViaApi } from ${JSON.stringify(apiUrl)};
+import { launchPublicBrowser } from ${JSON.stringify(policyUrl)};
 ${hasBrowser ? `import { checkUrlLiveness, newLivenessPage } from ${JSON.stringify(browserUrl)};` : ""}
 
 let input = "";
@@ -51,7 +53,7 @@ process.stdin.on("end", async () => {
     if (browser || !${hasBrowser}) return;
     try {
       const { chromium } = await import("playwright");
-      browser = await chromium.launch({ headless: true });
+      browser = await launchPublicBrowser(chromium, { headless: true });
       page = await newLivenessPage(browser);
     } catch (e) {
       browser = null;

@@ -3,6 +3,7 @@ import { extractForm, type ApplyField, type ExtractedForm } from "./extract";
 import { parseGreenhouse, fetchGreenhouseSchema } from "./greenhouse";
 import { statusBlock, dismissConsent, tryApplyTrigger, dropNewTabs, classifyEmpty, captchaWarning, multiStepInfo, verifyFill, type ApplyIssue } from "./diagnose";
 import { agentInterpretForm } from "./agent-interpret";
+import { installPublicUrlPolicy, launchPublicBrowser, validatePublicUrl } from "@/lib/public-url-policy";
 
 /** The frame with the most interactive controls — where the agentic interpreter
  *  should look when deterministic extraction found nothing usable. */
@@ -135,7 +136,7 @@ async function headedBrowser(): Promise<Browser> {
   // headed application sessions and do not retry with the crash-prone bundled
   // browser. Headless callers still use the bundled browser elsewhere.
   try {
-    const nb = await chromium.launch({
+    const nb = await launchPublicBrowser(chromium, {
       channel: "chrome",
       headless: false,
       args: ["--window-position=-3200,-3200", "--window-size=1280,940"], // off-screen during fill; moved on-screen at handoff
@@ -176,10 +177,12 @@ async function nudgeScroll(page: Page): Promise<void> {
 }
 
 export async function openSession(url: string, cliId?: string, forceAgent?: boolean, noApplyBtn?: boolean): Promise<{ id: string; title: string; fields: ApplyField[]; shots: string[]; issues: ApplyIssue[]; needsDrive?: boolean }> {
+  await validatePublicUrl(url);
   prune();
   if (globalThis.__coIdleTimer) clearTimeout(globalThis.__coIdleTimer); // someone's active
   const browser = await headedBrowser();
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await installPublicUrlPolicy(context);
   context.setDefaultTimeout(8000); // no single action hangs the whole open/fill
   const page = await context.newPage();
   const abort = async (msg: string): Promise<never> => {
@@ -330,9 +333,11 @@ export async function readSessionSnapshot(id: string): Promise<{
 /** Open a bare headed page on a URL (for the agentic drive loop / validation),
  *  without the full extract pipeline. Caller must close the context. */
 export async function newDrivePage(url: string): Promise<{ page: Page; context: BrowserContext }> {
+  await validatePublicUrl(url);
   if (globalThis.__coIdleTimer) clearTimeout(globalThis.__coIdleTimer);
   const browser = await headedBrowser();
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await installPublicUrlPolicy(context);
   context.setDefaultTimeout(8000);
   const page = await context.newPage();
   await gotoResilient(page, url);

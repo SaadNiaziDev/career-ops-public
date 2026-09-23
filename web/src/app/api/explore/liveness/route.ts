@@ -1,4 +1,5 @@
 import { checkOffersLiveness } from "@/lib/core/liveness";
+import { validatePublicUrl } from "@/lib/public-url-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,12 @@ export async function POST(req: Request) {
     ? body.urls.filter((u): u is string => typeof u === "string").slice(0, 20)
     : [];
   if (urls.length === 0) return Response.json({ results: [] });
+
+  try {
+    await Promise.all(urls.map((url) => validatePublicUrl(url)));
+  } catch {
+    return Response.json({ error: "Only public HTTP(S) job URLs are allowed" }, { status: 400 });
+  }
 
   const results = await checkOffersLiveness(urls);
   return Response.json({ results });

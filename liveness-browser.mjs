@@ -6,6 +6,7 @@
  */
 
 import { classifyLiveness } from './liveness-core.mjs';
+import { installPublicUrlPolicy, launchPublicBrowser, validatePublicUrl } from './public-url-policy.mjs';
 
 const NAVIGATE_TIMEOUT_MS = 15_000;
 const HYDRATION_WAIT_MS = 2_000;
@@ -25,6 +26,7 @@ export const LIVENESS_CONTEXT_OPTIONS = {
 // this instead of browser.newPage() so headless checks aren't instantly bot-walled.
 export async function newLivenessPage(browser) {
   const context = await browser.newContext(LIVENESS_CONTEXT_OPTIONS);
+  await installPublicUrlPolicy(context);
   return context.newPage();
 }
 
@@ -131,6 +133,11 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0 } = {}) {
     return { result: 'uncertain', code: guardError.code, reason: guardError.reason };
   }
   try {
+    await validatePublicUrl(url);
+  } catch (error) {
+    return { result: 'uncertain', code: 'blocked_host', reason: error instanceof Error ? error.message : 'URL host is not public' };
+  }
+  try {
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAVIGATE_TIMEOUT_MS });
     const status = response?.status() ?? 0;
 
@@ -216,8 +223,9 @@ export function createHeadedPageProvider(chromium) {
         return null;
       }
       try {
-        browser = await chromium.launch({ channel: 'chrome', headless: false });
+        browser = await launchPublicBrowser(chromium, { channel: 'chrome', headless: false });
         const context = await browser.newContext(LIVENESS_CONTEXT_OPTIONS);
+        await installPublicUrlPolicy(context);
         page = await context.newPage();
         return page;
       } catch {
