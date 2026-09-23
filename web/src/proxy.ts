@@ -4,6 +4,14 @@ import { NextResponse, type NextRequest } from "next/server.js";
 const SESSION_COOKIE = "career_ops_session";
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const MULTIPART_ROUTES = new Set(["/api/cv/import", "/api/cv/ingest"]);
+const DEFAULT_API_BODY_LIMIT = 1_000_000;
+
+function bodyLimitFor(pathname: string): number {
+  if (pathname === "/api/cv/ingest") return 5_032_768;
+  if (["/api/cv", "/api/cv/import", "/api/cv/preview", "/api/cv/pdf"].includes(pathname)) return 250_000;
+  if (pathname === "/api/run") return 256_000;
+  return DEFAULT_API_BODY_LIMIT;
+}
 
 function isApiPath(pathname: string): boolean {
   return pathname === "/api" || pathname.startsWith("/api/");
@@ -77,6 +85,11 @@ export function proxy(request: NextRequest) {
     if (!hasValidSession(request, token)) return reject(401, "Local session token required");
     if (STATE_CHANGING_METHODS.has(request.method) && !validCsrfHeaders(request)) {
       return reject(403, "Same-origin request required");
+    }
+    const contentLength = request.headers.get("content-length");
+    const declaredBytes = contentLength === null ? null : Number(contentLength);
+    if (declaredBytes !== null && Number.isFinite(declaredBytes) && declaredBytes > bodyLimitFor(request.nextUrl.pathname)) {
+      return reject(413, `Request too large (max ${Math.ceil(bodyLimitFor(request.nextUrl.pathname) / 1024)} KB)`);
     }
     if (!allowedContentType(request)) return reject(415, "Unsupported content type");
     return NextResponse.next();

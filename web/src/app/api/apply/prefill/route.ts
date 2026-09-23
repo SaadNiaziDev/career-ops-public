@@ -3,12 +3,17 @@ import path from "node:path";
 import { extractCodexAgentText, resolveCli } from "@/lib/clis";
 import { careerOpsRoot, readMemory } from "@/lib/career-ops";
 import { getSession } from "@/lib/apply/session";
-import { spawnSandboxedWorker, workerRoots } from "@/lib/worker-sandbox";
+import { spawnSandboxedWorker, terminateWorkerProcess, workerRoots, WorkerCapacityError } from "@/lib/worker-sandbox";
 import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
+import { readBoundedJson, RequestTooLargeError } from "@/lib/core/request-bounds";
+import { workerClientId } from "@/lib/core/worker-admission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 320;
+const MAX_PREFILL_BODY_BYTES = 16_000;
+const MAX_PREFILL_PROMPT_BYTES = 128_000;
+const MAX_PREFILL_OUTPUT_BYTES = 256_000;
 
 /**
  * Pull a JSON object out of an LLM's text answer, tolerating code fences,
@@ -76,14 +81,24 @@ function extractJsonObject(text: string): { obj: Record<string, unknown> | null;
 export async function POST(req: Request) {
   let body: { sessionId?: string; cliId?: string };
   try {
-    body = await req.json();
-  } catch {
+    body = await readBoundedJson(req, MAX_PREFILL_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestTooLargeError) return Response.json({ error: "Prefill request too large (max 16 KB). Retry with a smaller request." }, { status: 413 });
     return Response.json({ error: "bad json" }, { status: 400 });
   }
   const { sessionId, cliId } = body;
+  if (typeof sessionId !== "string" || sessionId.length > 128 || typeof cliId !== "string" || cliId.length > 32) {
+    return Response.json({ error: "valid sessionId and cliId required" }, { status: 400 });
+  }
   const t0 = Date.now();
   const encoder = new TextEncoder();
   const logPath = path.join(careerOpsRoot(), ".career-ops-web", "apply-prefill.log");
+  const workerAbort = new AbortController();
+  const abortFromRequest = () => workerAbort.abort();
+  req.signal.addEventListener("abort", abortFromRequest, { once: true });
+  if (req.signal.aborted) workerAbort.abort();
+  let responseClosed = false;
+  let cancelWorker = () => workerAbort.abort();
   try {
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
   } catch {
@@ -109,8 +124,11 @@ export async function POST(req: Request) {
         }
       };
       const fail = (m: string, raw?: string) => {
+        if (responseClosed) return;
         log(`ERROR: ${m}`);
         emit({ t: "error", m, raw });
+        responseClosed = true;
+        req.signal.removeEventListener("abort", abortFromRequest);
         controller.close();
       };
       try {
@@ -141,6 +159,7 @@ For each field give the best answer:
 - NEVER fill legal / visa / work-authorization / salary / demographic / sensitive fields → set needs_confirmation:true and value:"".
 
 Output ONLY a compact JSON object mapping each field id → {"value": "...", "needs_confirmation": boolean}. No prose, no markdown, no code fence.`);
+      if (Buffer.byteLength(prompt, "utf8") > MAX_PREFILL_PROMPT_BYTES) return fail("Application form is too large to prefill safely (max prompt 128 KB). Reduce the number or length of its fields.");
 
       log(`Form: "${s.title}" · ${s.fields.length} fields · prompt ${prompt.length} chars · memory ${mem.length} chars`);
       log(`Planner: ${cliId} (${binPath})`);
@@ -161,11 +180,28 @@ Output ONLY a compact JSON object mapping each field id → {"value": "...", "ne
       try {
         const root = careerOpsRoot();
         const roots = workerRoots("form-prefill", root, s.title);
-        child = await spawnSandboxedWorker({ cliId: resolved.spec.id, task: "form-prefill", binPath, args, cwd: root, scopeRoot: root, ...roots });
+        child = await spawnSandboxedWorker({ cliId: resolved.spec.id, task: "form-prefill", binPath, args, cwd: root, scopeRoot: root, ...roots, clientId: workerClientId(req), signal: workerAbort.signal, detached: process.platform !== "win32" });
       } catch (error) {
+        if (error instanceof WorkerCapacityError) return fail(error.message);
         return fail(error instanceof Error ? error.message : "Worker sandbox could not be started.");
       }
 
+      let stopping = false;
+      let forceKiller: ReturnType<typeof setTimeout> | undefined;
+      const stop = () => {
+        if (stopping) return;
+        stopping = true;
+        terminateWorkerProcess(child.pid, "SIGTERM");
+        forceKiller = setTimeout(() => terminateWorkerProcess(child.pid, "SIGKILL"), 5_000);
+      };
+      cancelWorker = () => {
+        workerAbort.abort();
+        stop();
+      };
+      workerAbort.signal.addEventListener("abort", stop, { once: true });
+      if (workerAbort.signal.aborted) stop();
+
+      let outputTooLarge = false;
       const result = await new Promise<{ buf: string; code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
         // stdin = /dev/null so the CLI doesn't wait 3s for piped input.
         let buf = "";
@@ -174,6 +210,13 @@ Output ONLY a compact JSON object mapping each field id → {"value": "...", "ne
           log(`…running ${Math.round((Date.now() - t0) / 1000)}s · ${buf.length} chars received`);
         }, 4000);
         child.stdout.on("data", (d: Buffer) => {
+          if (outputTooLarge) return;
+          if (Buffer.byteLength(buf, "utf8") + d.byteLength > MAX_PREFILL_OUTPUT_BYTES) {
+            outputTooLarge = true;
+            log("planner output limit reached → stopping worker");
+            stop();
+            return;
+          }
           if (!firstByteAt) {
             firstByteAt = Date.now();
             log(`first output byte at ${Math.round((firstByteAt - t0) / 1000)}s`);
@@ -186,15 +229,16 @@ Output ONLY a compact JSON object mapping each field id → {"value": "...", "ne
         });
         const killer = setTimeout(() => {
           log("TIMEOUT reached → SIGTERM");
-          try {
-            child.kill("SIGTERM");
-          } catch {
-            /* ignore */
-          }
+          stop();
         }, killMs);
         child.on("close", (code, signal) => {
           clearTimeout(killer);
           clearInterval(hb);
+          if (forceKiller) clearTimeout(forceKiller);
+          workerAbort.signal.removeEventListener("abort", stop);
+          req.signal.removeEventListener("abort", abortFromRequest);
+          responseClosed = true;
+          cancelWorker = () => {};
           resolve({ buf, code, signal });
         });
         child.on("error", (e) => {
@@ -206,6 +250,7 @@ Output ONLY a compact JSON object mapping each field id → {"value": "...", "ne
       });
 
       const plannerText = isCodex ? extractCodexAgentText(result.buf) : result.buf;
+      if (outputTooLarge) return fail("Planner answer too large (max 256 KB). Reduce the form size and retry.");
       log(`Planner exited code=${result.code} signal=${result.signal} · ${result.buf.length} raw chars · ${plannerText.length} answer chars`);
       log(`output head: ${plannerText.slice(0, 100).replace(/\s+/g, " ") || "(empty)"}`);
       log(`output tail: ${plannerText.slice(-100).replace(/\s+/g, " ") || "(empty)"}`);
@@ -225,6 +270,11 @@ Output ONLY a compact JSON object mapping each field id → {"value": "...", "ne
       log(`Parsed ${count} answers${truncated ? " (RECOVERED from truncated output — some fields may be missing)" : ""}`);
       emit({ t: "done", answers: obj, truncated, count });
       controller.close();
+    },
+    cancel() {
+      responseClosed = true;
+      req.signal.removeEventListener("abort", abortFromRequest);
+      cancelWorker();
     },
   });
 

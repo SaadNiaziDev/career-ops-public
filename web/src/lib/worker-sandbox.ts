@@ -4,6 +4,7 @@ import { spawn, type ChildProcessByStdio } from "node:child_process";
 import fs from "node:fs";
 import type { Readable } from "node:stream";
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
+import { acquireWorkerSlot } from "./core/worker-admission.ts";
 
 export type WorkerPhase = "fetch" | "local-analysis" | "write";
 export type WorkerCapabilities = {
@@ -35,7 +36,28 @@ export type WorkerLaunch = {
 export type WorkerSpawnOptions = Omit<LaunchOptions, "args"> & {
   args: string[];
   detached?: boolean;
+  clientId?: string;
+  signal?: AbortSignal;
 };
+
+export class WorkerCapacityError extends Error {
+  readonly reason: "client-limit" | "queue-full" | "cancelled";
+  constructor(reason: "client-limit" | "queue-full" | "cancelled") {
+    super(reason === "cancelled" ? "Worker request was cancelled while queued." : "Worker capacity is full for this client or server. Wait for a running task to finish, then retry.");
+    this.name = "WorkerCapacityError";
+    this.reason = reason;
+  }
+}
+
+export function terminateWorkerProcess(pid: number | undefined, signal: NodeJS.Signals): void {
+  if (!pid) return;
+  try {
+    if (process.platform === "win32") process.kill(pid, signal);
+    else process.kill(-pid, signal);
+  } catch {
+    try { process.kill(pid, signal); } catch { /* process already stopped */ }
+  }
+}
 
 const TASK_PHASE: Record<string, WorkerPhase> = {
   research: "fetch",
@@ -295,11 +317,23 @@ export async function buildWorkerLaunch(options: LaunchOptions): Promise<WorkerL
 }
 
 export async function spawnSandboxedWorker(options: WorkerSpawnOptions): Promise<ChildProcessByStdio<null, Readable, Readable>> {
-  const launch = await buildWorkerLaunch(options);
-  return spawn(launch.command, launch.args, {
-    cwd: launch.cwd,
-    env: launch.env,
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: options.detached,
-  });
+  const admission = await acquireWorkerSlot(options.clientId || "local", { signal: options.signal });
+  if (!admission.accepted) throw new WorkerCapacityError(admission.reason);
+  try {
+    if (options.signal?.aborted) throw new WorkerCapacityError("cancelled");
+    const launch = await buildWorkerLaunch(options);
+    if (options.signal?.aborted) throw new WorkerCapacityError("cancelled");
+    const child = spawn(launch.command, launch.args, {
+      cwd: launch.cwd,
+      env: launch.env,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: options.detached,
+    });
+    child.once("close", admission.release);
+    child.once("error", admission.release);
+    return child;
+  } catch (error) {
+    admission.release();
+    throw error;
+  }
 }
