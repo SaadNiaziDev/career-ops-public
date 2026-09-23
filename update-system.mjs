@@ -58,6 +58,16 @@ export const REEXEC_BUFFER_TIMEOUT_MS = parsePositiveInt(process.env.CAREER_OPS_
 
 // System layer paths — ONLY these files get updated
 const SYSTEM_PATHS = [
+  'PLAN.md',
+  'application-answers.test.mjs',
+  'cv-md-preview.mjs',
+  'fit-score.mjs',
+  'patterns-signals.mjs',
+  'probe-tmp.mjs',
+  'repair-vacancies.mjs',
+  'scripts/parsers/',
+  'vacancy-identity.mjs',
+  'vacancy-identity.test.mjs',
   'modes/README.md',
   'modes/_shared.md',
   'modes/_profile.template.md',
