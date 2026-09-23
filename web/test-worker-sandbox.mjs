@@ -13,6 +13,8 @@ import {
 } from "./src/lib/worker-sandbox.ts";
 import { untrustedContent } from "./src/lib/untrusted-content.ts";
 
+const testHome = path.join(os.tmpdir(), "career-ops-test-home");
+
 test("worker environments contain only safe base values and provider credentials", async () => {
   const previousApiKey = process.env.ANTHROPIC_API_KEY;
   process.env.ANTHROPIC_API_KEY = "provider-key";
@@ -28,7 +30,7 @@ test("worker environments contain only safe base values and provider credentials
     writeRoots: [],
     env: {
       PATH: "/usr/bin",
-      HOME: "/Users/test",
+      HOME: testHome,
       LANG: "en_US.UTF-8",
       ANTHROPIC_API_KEY: "provider-key",
       OPENAI_API_KEY: "wrong-provider-key",
@@ -39,7 +41,7 @@ test("worker environments contain only safe base values and provider credentials
 
   assert.deepEqual(launch.env, {
     PATH: "/usr/bin",
-    HOME: "/Users/test",
+    HOME: testHome,
     LANG: "en_US.UTF-8",
     ANTHROPIC_API_KEY: "provider-key",
   });
@@ -80,7 +82,7 @@ test("worker launch refuses CLI login files when no allowlisted token is availab
     scopeRoot: "/tmp/project",
     readRoots: ["/tmp/workspace"],
     writeRoots: [],
-    env: { PATH: "/usr/bin", HOME: "/Users/test" },
+    env: { PATH: "/usr/bin", HOME: testHome },
   }), /CLI login files are intentionally inaccessible/i);
 });
 

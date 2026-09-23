@@ -169,7 +169,7 @@ After the user reviews and says they've sent a follow-up, record it:
    - `contact` = who it was sent to
    - `notes` = brief note (e.g., "First follow-up, referenced Barbeiro.app")
 
-3. Optionally update the Notes column in `data/applications.md` with "Follow-up {N} sent {YYYY-MM-DD}"
+3. Optionally record the confirmed send in tracker Notes through the shared API: `node set-status.mjs {appNum} {current canonical state} --note "Follow-up {N} sent {YYYY-MM-DD}"`. Never edit `data/applications.md` directly.
 
 4. Update `data/contacts.tsv` for the recipient: set `outreach_status` to `messaged` and `last_touch` to today's date (dedup on email/LinkedIn).
 

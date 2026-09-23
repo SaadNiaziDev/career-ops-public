@@ -285,4 +285,4 @@ Do not auto-generate the cover letter PDF without going through the interactive 
 
 ## Post-generation
 
-Update tracker if the job is already registered: change PDF from ❌ to ✅.
+If the job is already registered, update its PDF flag through the shared locked mutation API: `node tracker-mutations.mjs pdf --num {report number} --value ✅`. Never edit `data/applications.md` directly.

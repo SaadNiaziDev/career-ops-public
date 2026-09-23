@@ -1,0 +1,55 @@
+name: Tracker mutation integrity
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/tracker-mutations.yml'
+      - 'tracker-mutations.mjs'
+      - 'tracker-utils.mjs'
+      - 'tracker-parse.mjs'
+      - 'role-matcher.mjs'
+      - 'set-status.mjs'
+      - 'set-status-tests.mjs'
+      - 'merge-tracker.mjs'
+      - 'tracker.mjs'
+      - 'dedup-tracker.mjs'
+      - 'normalize-statuses.mjs'
+      - 'reply-watch.mjs'
+      - 'web/src/app/api/status/**'
+      - 'test-tracker-mutations.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tracker-mutations.yml'
+      - 'tracker-mutations.mjs'
+      - 'tracker-utils.mjs'
+      - 'tracker-parse.mjs'
+      - 'role-matcher.mjs'
+      - 'set-status.mjs'
+      - 'set-status-tests.mjs'
+      - 'merge-tracker.mjs'
+      - 'tracker.mjs'
+      - 'dedup-tracker.mjs'
+      - 'normalize-statuses.mjs'
+      - 'reply-watch.mjs'
+      - 'web/src/app/api/status/**'
+      - 'test-tracker-mutations.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+jobs:
+  tracker-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:tracker

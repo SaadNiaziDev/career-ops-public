@@ -21,7 +21,8 @@ import { execFileSync } from 'child_process';
 import { normalizeReportLink as normalizeLink } from './tracker-links.mjs';
 import { roleFuzzyMatch } from './role-matcher.mjs';
 import { LEGACY_COLMAP, detectColumns, resolveScoreStatus, normalizeVia } from './tracker-parse.mjs';
-import { resolveTrackerPath, trackerLockDirFor, acquireTrackerLock, writeFileAtomic, normalizeCompany, cell } from './tracker-utils.mjs';
+import { resolveTrackerPath, normalizeCompany, cell } from './tracker-utils.mjs';
+import { acquireTrackerMutationLock, writeTrackerSnapshot, normalizeBatchStatus } from './tracker-mutations.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md
@@ -42,7 +43,6 @@ const MIGRATE_VIA = process.argv.includes('--migrate-via');
 const MERGE_HOLD_MS = Number(process.env.CAREER_OPS_MERGE_HOLD_MS) || 0;
 const MERGE_READY_IPC = process.env.CAREER_OPS_MERGE_READY_IPC === '1';
 
-const TRACKER_LOCK_DIR = trackerLockDirFor(APPS_FILE);
 
 // The reports/ dir sits at the repo root, which is the tracker's parent in the
 // data/ layout (data/applications.md) and the tracker's own dir at root layout.
@@ -82,11 +82,10 @@ function sleep(ms) {
 
 let trackerLock;
 try {
-  trackerLock = await acquireTrackerLock(TRACKER_LOCK_DIR, {
+  trackerLock = await acquireTrackerMutationLock(APPS_FILE, {
     timeoutMs: Number(process.env.CAREER_OPS_TRACKER_LOCK_TIMEOUT_MS) || 60_000,
     retryMs: Number(process.env.CAREER_OPS_TRACKER_LOCK_RETRY_MS) || 75,
     staleMs: Number(process.env.CAREER_OPS_TRACKER_LOCK_STALE_MS) || 10 * 60_000,
-    tracker: APPS_FILE,
   });
   process.once('exit', () => trackerLock?.release());
   if (trackerLock.waitMs > 0 || trackerLock.staleRecovered) {
@@ -97,50 +96,7 @@ try {
   process.exit(1);
 }
 
-// Canonical states and aliases
-const CANONICAL_STATES = ['Evaluated', 'Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Discarded', 'SKIP'];
-
-/**
- * Convert raw addition status text into one canonical tracker state.
- *
- * Batch workers and older tracker additions may emit Spanish labels, bold
- * Markdown, legacy date suffixes, or repost markers. The merge script normalizes
- * all of those variants here so applications.md keeps the states defined by
- * templates/states.yml.
- *
- * @param {string} status - Raw status string from a TSV or pipe-delimited row.
- * @returns {string} Canonical tracker status.
- */
-function validateStatus(status) {
-  const clean = status.replace(/\*\*/g, '').replace(/\s+\d{4}-\d{2}-\d{2}.*$/, '').trim();
-  const lower = clean.toLowerCase();
-
-  for (const valid of CANONICAL_STATES) {
-    if (valid.toLowerCase() === lower) return valid;
-  }
-
-  // Aliases
-  const aliases = {
-    // Spanish → English
-    'evaluada': 'Evaluated', 'condicional': 'Evaluated', 'hold': 'Evaluated', 'evaluar': 'Evaluated', 'verificar': 'Evaluated',
-    'aplicado': 'Applied', 'enviada': 'Applied', 'aplicada': 'Applied', 'applied': 'Applied', 'sent': 'Applied',
-    'respondido': 'Responded',
-    'entrevista': 'Interview',
-    'oferta': 'Offer',
-    'rechazado': 'Rejected', 'rechazada': 'Rejected',
-    'descartado': 'Discarded', 'descartada': 'Discarded', 'cerrada': 'Discarded', 'cancelada': 'Discarded',
-    'no aplicar': 'SKIP', 'no_aplicar': 'SKIP', 'skip': 'SKIP', 'monitor': 'SKIP',
-    'geo blocker': 'SKIP',
-  };
-
-  if (aliases[lower]) return aliases[lower];
-
-  // DUPLICADO/Repost → Discarded
-  if (/^(duplicado|dup|repost)/i.test(lower)) return 'Discarded';
-
-  console.warn(`⚠️  Non-canonical status "${status}" → defaulting to "Evaluated"`);
-  return 'Evaluated';
-}
+const validateStatus = normalizeBatchStatus;
 
 // normalizeVia (Unicode-aware Via/agency key, #1596/#1603) lives in
 // tracker-parse.mjs so merge-tracker and analyze-patterns share ONE normalizer
@@ -417,7 +373,7 @@ if (MIGRATE) {
   if (DRY_RUN) {
     console.log(`🔎 Migration (dry-run): ${changed} row(s) would be rewritten in ${basename(APPS_FILE)}`);
   } else {
-    writeFileAtomic(APPS_FILE, migrated.join('\n'));
+    writeTrackerSnapshot(APPS_FILE, migrated.join('\n'));
     console.log(`✅ Migration: rewrote ${changed} report link(s) in ${basename(APPS_FILE)} relative to ${TRACKER_DIR === CAREER_OPS ? 'repo root' : 'data/'}`);
   }
   process.exit(0);
@@ -453,7 +409,7 @@ if (MIGRATE_VIA) {
   if (DRY_RUN) {
     console.log(`🔎 Migration (dry-run): Via column would be inserted after Company (${changed} table line(s) rewritten)`);
   } else {
-    writeFileAtomic(APPS_FILE, migrated.join('\n'));
+    writeTrackerSnapshot(APPS_FILE, migrated.join('\n'));
     console.log(`✅ Migration: inserted Via column after Company (${changed} table line(s) rewritten). Direct applications are marked —.`);
   }
   process.exit(0);
@@ -684,7 +640,7 @@ if (newLines.length > 0) {
 
 // Write back
 if (!DRY_RUN) {
-  writeFileAtomic(APPS_FILE, appLines.join('\n'));
+  writeTrackerSnapshot(APPS_FILE, appLines.join('\n'));
 
   // Move processed files to merged/
   if (!existsSync(MERGED_DIR)) mkdirSync(MERGED_DIR, { recursive: true });
