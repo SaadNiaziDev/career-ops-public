@@ -74,3 +74,4 @@ For one-shot workers, use `codex exec`. See [docs/CODEX.md](CODEX.md).
 Never commit `cv.md`, `config/profile.yml`, `portals.yml`, `modes/_profile.md`, tracker files, reports, or outputs. See `DATA_CONTRACT.md`.
 
 If a user-layer file or backup is already tracked, `.gitignore` will not untrack it. Remove it from the release index while keeping the local copy with `git rm --cached -- <path>`, then run `node verify-public-release.mjs` before publishing. If sensitive content was already published, treat removal from the current branch as containment only; review repository history and follow the hosting provider's sensitive-data removal process where needed. Do not copy the content into issue reports or logs.
+CSV exports prefix formula-leading text with an apostrophe before quoting, so spreadsheet apps display it as text; ordinary values, numbers, and dates remain unchanged.

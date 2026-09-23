@@ -2,11 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import { careerOpsRoot, readApplications } from "@/lib/career-ops";
-
-function csvEscape(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
+import { csvEscape } from "@/lib/csv";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
