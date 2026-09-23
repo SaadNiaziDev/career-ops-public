@@ -9,7 +9,7 @@ function runVerifierWithTrackedFiles(files) {
   const repo = mkdtempSync(join(tmpdir(), 'career-ops-public-check-'));
   try {
     execFileSync('git', ['init', '-q'], { cwd: repo });
-    writeFileSync(join(repo, '.gitignore'), '*.bak\nconfig/profile.yml\n');
+    writeFileSync(join(repo, '.gitignore'), '*.bak*\nconfig/profile.yml\n');
     copyFileSync(join(ROOT, 'verify-public-release.mjs'), join(repo, 'verify-public-release.mjs'));
     for (const file of files) {
       const fullPath = join(repo, file);
