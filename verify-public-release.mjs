@@ -36,6 +36,7 @@ const USER_LAYER_PATTERNS = [
 ];
 
 const SCAFFOLD_OK = /(^|\/)\.gitkeep$|(^|\/)README\.md$/;
+const BACKUP_OR_TEMP_FILE = /(?:~|\.bak(?:[-.][^/]*)?|\.backup(?:[-.][^/]*)?|\.tmp|\.temp|\.orig|\.swp|\.swo)$/i;
 
 const FORBIDDEN_CONTENT = [
   { label: 'personal email', pattern: /devsaadk@gmail\.com/i },
@@ -68,7 +69,12 @@ let failed = false;
 
 for (const file of tracked) {
   if (SCAFFOLD_OK.test(file)) continue;
-  if (USER_LAYER_PATTERNS.some((re) => re.test(file))) {
+  if (BACKUP_OR_TEMP_FILE.test(file)) {
+    console.error(`❌ tracked backup/temp file: ${file}`);
+    failed = true;
+  }
+  const sourceFile = file.replace(BACKUP_OR_TEMP_FILE, '');
+  if (USER_LAYER_PATTERNS.some((re) => re.test(file) || re.test(sourceFile))) {
     console.error(`❌ tracked user-layer file: ${file}`);
     failed = true;
   }
