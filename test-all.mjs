@@ -1804,15 +1804,15 @@ if ((batchPromptDoc.match(/advertised_comp/g) || []).length >= 2) {
 
 console.log('\n9. Local parser contract');
 
-const scanScript = readFile('scan.mjs');
+const scanScript = `${readFile('scan.mjs')}\n${readFile('scan-engine.mjs')}`;
 if (
   scanScript.includes('typeof entry.name !== \'string\'') &&
   scanScript.includes('entry.name.trim()') &&
   scanScript.includes('entry.name.toLowerCase()')
 ) {
-  pass('scan.mjs guards company names before filtering');
+  pass('scan engine guards company names before filtering');
 } else {
-  fail('scan.mjs does not guard company names before filtering');
+  fail('scan engine does not guard company names before filtering');
 }
 
 if (
@@ -1820,9 +1820,9 @@ if (
   scanScript.includes('local parser failed, used API fallback') &&
   scanScript.includes('resolveProvider(company, providers')
 ) {
-  pass('scan.mjs falls back to ATS API when local parser fails');
+  pass('scan engine falls back to ATS API when local parser fails');
 } else {
-  fail('scan.mjs does not fall back to ATS API when local parser fails');
+  fail('scan engine does not fall back to ATS API when local parser fails');
 }
 
 if (fileExists('providers/local-parser.mjs')) {
@@ -1991,7 +1991,7 @@ if (
 ) {
   pass('scan.mjs wires blacklist counter, summary line, scan-runs column, and --include-blacklisted (#1742)');
 } else {
-  fail('scan.mjs missing blacklist counter/summary/scan-runs/--include-blacklisted wiring');
+  fail('scan engine missing blacklist counter/summary/scan-runs/--include-blacklisted wiring');
 }
 
 // Prompt-level gates (#1742): oferta + auto-pipeline stop before Block A on a
@@ -3559,7 +3559,7 @@ try {
   ) {
     pass('scan-history TTL rechecks old added URLs while permanent statuses stay deduped');
   } else {
-    fail('scan-history TTL policy did not match expected recheck/permanent behavior');
+  fail('scan engine history policy did not match expected recheck/permanent behavior');
   }
 
   const hostileOffer = {
@@ -7558,13 +7558,13 @@ try {
     fail('tracker.mjs no longer writes the canonical 9-col header — BREAKING for the web reader; coordinate web/ in lockstep');
   }
 
-  // 55.2 scan-history.tsv header prefix (scan.mjs → web whats-new + first_seen map)
-  const scanSrc = readFileSync(join(ROOT, 'scan.mjs'), 'utf-8');
+  // 55.2 scan-history.tsv header prefix (scan engine → web whats-new + first_seen map)
+  const scanSrc = readFileSync(join(ROOT, 'scan-engine.mjs'), 'utf-8');
   const SCAN_HISTORY_PREFIX = 'url\\tfirst_seen\\tportal\\ttitle\\tcompany\\tstatus\\tlocation';
   if (scanSrc.includes(SCAN_HISTORY_PREFIX)) {
-    pass('scan.mjs scan-history.tsv header keeps the canonical 7-col prefix (append-only beyond it)');
+    pass('scan engine scan-history.tsv header keeps the canonical 7-col prefix (append-only beyond it)');
   } else {
-    fail('scan.mjs scan-history.tsv header prefix changed — BREAKING for web readers; appending new columns at the END is the additive path');
+    fail('scan engine scan-history.tsv header prefix changed — BREAKING for web readers; appending new columns at the END is the additive path');
   }
 
   // 55.3 canonical statuses (templates/states.yml → web status pills/actions)
