@@ -5,6 +5,7 @@ import fs from "node:fs";
 import type { Readable } from "node:stream";
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
 import { acquireWorkerSlot } from "./core/worker-admission.ts";
+import { getRunTaskPolicy } from "./jobs/run-task-registry.ts";
 
 export type WorkerPhase = "fetch" | "local-analysis" | "write";
 export type WorkerCapabilities = {
@@ -67,19 +68,6 @@ const TASK_PHASE: Record<string, WorkerPhase> = {
   "form-prefill": "local-analysis",
   "cv-ingest": "local-analysis",
   "local-analysis": "local-analysis",
-  evaluate: "write",
-  "fix-portal": "write",
-  pdf: "write",
-  cover: "write",
-  email: "write",
-  contacto: "write",
-  titles: "write",
-  "interview-prep": "write",
-  "interview-questions": "write",
-  "interview-plan": "write",
-  "interview-practice": "write",
-  "interview-debrief": "write",
-  "interview-redflag": "write",
 };
 
 const PROVIDER = {
@@ -110,7 +98,7 @@ function initializeSandbox(): Promise<void> {
 
 /** Fail closed until a provider/task combination has an explicit policy. */
 export function workerCapabilities(task: string, cliId: string): WorkerCapabilities {
-  const phase = TASK_PHASE[task];
+  const phase = getRunTaskPolicy(task)?.workerPhase ?? TASK_PHASE[task];
   if (!phase || !(cliId in PROVIDER)) {
     throw new Error(`Worker task '${task}' with CLI '${cliId}' is not supported by the security profile.`);
   }
