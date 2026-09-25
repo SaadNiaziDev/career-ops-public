@@ -156,7 +156,7 @@ export function ConfigForm() {
             </span>
           </div>
 
-          <div className="mt-4 flex gap-2 overflow-x-auto lg:hidden">
+          <div className="mt-4 flex flex-wrap gap-2 lg:hidden" aria-label="Config sections">
             {SECTIONS.map((s) => (
               <button
                 key={s.id}

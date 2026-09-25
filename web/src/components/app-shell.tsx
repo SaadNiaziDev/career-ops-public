@@ -34,10 +34,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       <div className="relative flex min-w-0 flex-1 flex-col">
                         <AmbientWorkerBar />
                         <main className="min-w-0 flex-1 overflow-x-hidden">{children}</main>
+                        <BetaBanner />
                       </div>
                       <WorkerSheet />
                       <FirstScoreView />
-                      <BetaBanner />
                     </div>
                     <CommandPaletteHost />
                     <ProductTourHost />
