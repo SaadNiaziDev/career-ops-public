@@ -14,6 +14,7 @@ import { FacetChips, type InboxSort } from "./facet-chips";
 import { TriageRow, type RowScore } from "./triage-row";
 import { ShortlistTray, type ShortItem } from "./shortlist-tray";
 import { cn } from "@/lib/cn";
+import { readSortPreference, sortInbox, writeSortPreference } from "@/lib/list-sort-policy";
 
 const SHORTLIST_KEY = "career-ops:shortlist";
 const HIDDEN_KEY = "career-ops:hidden";
@@ -37,6 +38,11 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   const [locQ, setLocQ] = useState("");
   const [kw, setKw] = useState("");
   const [sort, setSort] = useState<InboxSort>("newest");
+  useEffect(() => setSort(readSortPreference<InboxSort>("career-ops:inbox-order", ["newest", "fit", "company"], "newest")), []);
+  const changeSort = (next: InboxSort) => {
+    setSort(next);
+    writeSortPreference("career-ops:inbox-order", next);
+  };
   const [showAll, setShowAll] = useState(false);
 
   // persisted triage state + ephemeral selection/undo
@@ -131,15 +137,10 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   );
 
   // Free ordering uses only scanner metadata; no AI evaluation is implied here.
-  const ordered = useMemo(
-    () =>
-      [...filtered].sort((a, b) => {
-        if (sort === "fit") return (b.job.fitScore ?? -Infinity) - (a.job.fitScore ?? -Infinity);
-        if (sort === "company") return a.job.company.localeCompare(b.job.company);
-        return (a.age ?? Infinity) - (b.age ?? Infinity);
-      }),
-    [filtered, sort],
-  );
+  const ordered = useMemo(() => {
+    const byUrl = new Map(filtered.map((item) => [item.job.url, item]));
+    return sortInbox(filtered.map((item) => item.job), sort).map((job) => byUrl.get(job.url)!);
+  }, [filtered, sort]);
 
   const anyFacet = within != null || minFit != null || sources.size > 0 || seniorities.size > 0 || locQ.trim() !== "" || kw.trim() !== "";
   const capped = !showAll && !anyFacet;
@@ -230,7 +231,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
           kw={kw}
           setKw={setKw}
           sort={sort}
-          setSort={setSort}
+          setSort={changeSort}
           availSources={availSources}
           availSeniorities={availSeniorities}
           resultCount={filtered.length}

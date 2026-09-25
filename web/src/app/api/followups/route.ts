@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
+import { sortFollowups } from "@/lib/list-sort-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,9 +18,10 @@ export async function GET() {
   try {
     const start = stdout.indexOf("{");
     const j = JSON.parse(stdout.slice(start));
-    const entries = Array.isArray(j.entries) ? j.entries : [];
+    type Entry = { urgency?: string; status?: string; nextFollowupDate?: string; company?: string; num?: number };
+    const entries = sortFollowups<Entry>(Array.isArray(j.entries) ? j.entries : []);
     // Overdue first; cap for the home (full list lives in the tracker).
-    const overdue = entries.filter((e: { status?: string }) => /overdue|urgent/i.test(String(e.status))).slice(0, 8);
+    const overdue = entries.filter((e) => /overdue|urgent/i.test(String(e.urgency))).slice(0, 8);
     const top = (overdue.length ? overdue : entries).slice(0, 6);
     return Response.json({ available: true, metadata: j.metadata ?? null, entries: top });
   } catch {

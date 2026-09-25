@@ -18,6 +18,7 @@ import { DossierStat } from "@/components/dossier/dossier-stat";
 import { DossierSection } from "@/components/dossier/dossier-section";
 import { PageShell } from "@/components/dossier/page-shell";
 import { CompanyLogo } from "@/components/company-logo";
+import { sortApplications, sortOffers, sortTodayFocus } from "@/lib/list-sort-policy";
 
 export function TodayDashboard({
   applications,
@@ -48,7 +49,7 @@ export function TodayDashboard({
       .catch(() => {});
     fetch("/api/whats-new")
       .then((r) => r.json())
-      .then((d) => setFresh(Array.isArray(d.offers) ? d.offers : []))
+      .then((d) => setFresh(sortOffers(Array.isArray(d.offers) ? d.offers : [], "fresh")))
       .catch(() => {});
   }, []);
 
@@ -63,11 +64,11 @@ export function TodayDashboard({
   }, [refetch, router]);
 
   const awaiting = useMemo(
-    () => applications.filter((a) => /^evaluat/i.test(a.status)).slice(0, 6),
+    () => sortApplications(applications.filter((a) => /^evaluat/i.test(a.status)), "EVALUATED").slice(0, 6),
     [applications],
   );
   const interviewFocus = useMemo(
-    () => applications.filter((a) => ["INTERVIEW", "OFFER"].includes(canonStatus(a.status))).slice(0, 4),
+    () => sortTodayFocus(applications.filter((a) => ["INTERVIEW", "OFFER"].includes(canonStatus(a.status)))).slice(0, 4),
     [applications],
   );
 
@@ -136,7 +137,7 @@ export function TodayDashboard({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex flex-col gap-4">
           {followups.length > 0 && (
-            <DossierSection icon={<MaterialSymbol name="notifications" size={20} />} title="Follow-ups due" hint="Keep applications alive">
+            <DossierSection icon={<MaterialSymbol name="notifications" size={20} />} title="Follow-ups due" hint="Urgent first · then due date">
               <div className="flex flex-col gap-2">
                 {followups.map((f) => (
                   <FollowUpCard key={`${f.num}-${f.company}`} followup={f} onLogged={() => setOverdue((n) => Math.max(0, n - 1))} />
@@ -146,7 +147,7 @@ export function TodayDashboard({
           )}
 
           {awaiting.length > 0 && (
-            <DossierSection icon={<MaterialSymbol name="help" size={20} />} title="Awaiting your decision" hint="Scored — apply or skip">
+            <DossierSection icon={<MaterialSymbol name="help" size={20} />} title="Awaiting your decision" hint="Highest score first">
               <div className="grid gap-3 sm:grid-cols-2">
                 {awaiting.map((a) => (
                   <DecisionCard key={a.n} app={a} />
@@ -159,7 +160,7 @@ export function TodayDashboard({
             <DossierSection
               icon={<MaterialSymbol name="psychology" size={20} />}
               title="Interview focus"
-              hint="Prepare the next conversation"
+              hint="Next scheduled interview or decision deadline"
             >
               <div className="divide-y divide-[var(--md-sys-color-outline-variant)]">
                 {interviewFocus.map((a) => {
@@ -179,7 +180,7 @@ export function TodayDashboard({
                       <span className="shrink-0 text-right">
                         <span className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--md-sys-color-tertiary)]">{canonStatus(a.status)}</span>
                         <span className="block text-xs text-[var(--md-sys-color-outline)]">
-                          {progress ? `Round ${nextRound}/${progress.total}` : "Start workspace"}
+                          {a.offerDeadline ? `Decide by ${a.offerDeadline}` : a.nextInterviewAt ? `Interview ${a.nextInterviewAt}` : progress ? `Round ${nextRound}/${progress.total}` : "Start workspace"}
                         </span>
                       </span>
                       <MaterialSymbol name="arrow_forward" size={18} className="shrink-0 text-[var(--md-sys-color-outline)]" />
@@ -194,6 +195,7 @@ export function TodayDashboard({
             <DossierSection
               icon={<MaterialSymbol name="rocket_launch" size={20} />}
               title="Fresh matches this week"
+              hint="Newest discovered first"
               extra={
                 fresh.length > 6 ? (
                   <Link href="/explore" className="text-[var(--md-sys-color-primary)] md-label-large">

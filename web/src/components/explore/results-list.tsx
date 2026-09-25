@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { Button } from "@/components/ui/button";
 import { Md3Segmented } from "@/components/ui/md3-segmented";
@@ -8,13 +8,20 @@ import type { DiscoveredOffer } from "@/lib/explore";
 import { CostBadge } from "@/components/cost/cost-badge";
 import { DiscoveryCard } from "./discovery-card";
 import { useExplore } from "./explore-provider";
+import { readSortPreference, sortOffers, writeSortPreference, type OfferOrder } from "@/lib/list-sort-policy";
 
 export type EnrichedOffer = DiscoveredOffer & { inPipeline: boolean; evaluatedN?: string };
 
 export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
   const { companiesScanned, partial, addToPipeline, added, mode } = useExplore();
   const isAi = mode === "ai";
-  const [sort, setSort] = useState<"fit" | "fresh" | "company">("fit");
+  const [sort, setSort] = useState<OfferOrder>("fit");
+  useEffect(() => setSort(readSortPreference<OfferOrder>("career-ops:explore-order", ["fit", "fresh", "company"], "fit")), []);
+  const changeSort = (value: string) => {
+    const next = value as OfferOrder;
+    setSort(next);
+    writeSortPreference("career-ops:explore-order", next);
+  };
   const [q, setQ] = useState("");
 
   const view = useMemo(() => {
@@ -25,11 +32,7 @@ export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
         (o) => o.title.toLowerCase().includes(needle) || o.company.toLowerCase().includes(needle),
       );
     }
-    return [...list].sort((a, b) => {
-      if (sort === "fit") return (b.fitScore ?? 0) - (a.fitScore ?? 0) || (b.postedAt || "").localeCompare(a.postedAt || "");
-      if (sort === "company") return a.company.localeCompare(b.company);
-      return (b.postedAt || "").localeCompare(a.postedAt || "");
-    });
+    return sortOffers(list, sort);
   }, [offers, q, sort]);
 
   const addable = offers.filter((o) => !o.inPipeline && !o.evaluatedN && !added.has(o.url));
@@ -60,7 +63,7 @@ export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
           />
           <Md3Segmented
             value={sort}
-            onChange={setSort}
+            onChange={changeSort}
             aria-label="Sort results"
             options={[
               { value: "fit", label: "Best fit" },

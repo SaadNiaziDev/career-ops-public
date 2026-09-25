@@ -5,6 +5,7 @@ import { atomicWrite } from "@/lib/core/safe-write";
 import { parseApplications } from "@/lib/tracker-table.mjs";
 import { parseMachineSummary } from "@/lib/format";
 import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
+import { offerDeadlineFromNotes, scheduledInterviewDates } from "@/lib/list-sort-policy";
 import { onboardingVerificationPending } from "@/lib/onboarding/readiness-state";
 
 /**
@@ -188,7 +189,7 @@ export function recentScanFinds({ days = 14, limit = 30 } = {}): {
       return { ...j, firstSeen: m?.firstSeen ?? "", source: scanSourceLabel(m?.portal ?? "") };
     })
     .filter((j): j is ScanFind => !!j.firstSeen && j.firstSeen >= cutoff)
-    .sort((a, b) => b.firstSeen.localeCompare(a.firstSeen) || a.company.localeCompare(b.company));
+    .sort((a, b) => b.firstSeen.localeCompare(a.firstSeen) || a.company.localeCompare(b.company) || a.url.localeCompare(b.url));
 
   return {
     finds: scanned.slice(0, limit),
@@ -211,6 +212,8 @@ export type Application = {
   pdf: string;
   report: string;
   notes: string;
+  nextInterviewAt?: string;
+  offerDeadline?: string;
 };
 
 function reportsWithVerifiedPdf(): Set<string> {
@@ -247,6 +250,7 @@ export function readApplications(): Application[] {
   const md = read("data/applications.md");
   if (!md) return [];
   const pdfReady = reportsWithVerifiedPdf();
+  const scheduled = scheduledInterviewDates(read("data/interview-rounds.tsv") ?? "");
   return parseApplications(md, careerOpsRoot()).map((row: Application) => {
     const report = readReportDetails(row.n);
     const reportNum = row.report.match(/\[(\d+)\]/)?.[1];
@@ -255,6 +259,8 @@ export function readApplications(): Application[] {
       pdf: reportNum && pdfReady.has(String(Number.parseInt(reportNum, 10))) ? "✅" : row.pdf,
       url: report.url,
       location: row.location || report.location,
+      nextInterviewAt: scheduled.get(row.n),
+      offerDeadline: offerDeadlineFromNotes(row.notes),
     };
   });
 }
