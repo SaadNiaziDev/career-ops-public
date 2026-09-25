@@ -11,6 +11,8 @@ import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-cont
 import { fetchPublicUrl } from "@/lib/public-url-policy";
 import { readBoundedJson, RequestTooLargeError } from "@/lib/core/request-bounds";
 import { workerClientId } from "@/lib/core/worker-admission";
+import { completionError, createRunTaskRegistry, getRunTask, type RunTaskDescriptor } from "@/lib/jobs/run-task-registry";
+import { createCliOutputAdapter } from "@/lib/jobs/cli-output-adapters.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -204,6 +206,8 @@ VERDICT: {score}/5 — {reason in 12 words or fewer}
 Posting URL: ${input}`;
 }
 
+const RUN_TASKS = createRunTaskRegistry(buildPrompt);
+
 function externalHtmlToText(input: string): string {
   return input
     .replace(/<(script|style|noscript|svg)[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
@@ -260,10 +264,10 @@ function reportNumberForApplication(input: string): string {
   return app?.report.match(/\[(\d+)\]/)?.[1] ?? input.trim();
 }
 
-function openingPhase(kind: string): string {
-  if (kind === "evaluate") return "Verifying the vacancy";
-  if (kind === "pdf") return "Reading your profile and CV";
-  if (kind.startsWith("interview")) return "Reading interview context";
+function openingPhase(task: RunTaskDescriptor): string {
+  if (task.kind === "evaluate") return "Verifying the vacancy";
+  if (task.kind === "pdf") return "Reading your profile and CV";
+  if (task.group === "interview") return "Reading interview context";
   return "Reading your profile and instructions";
 }
 
@@ -309,6 +313,32 @@ function pdfArtifactForReport(report: string): PdfArtifact | null {
   }
 }
 
+function snapshotWriteRoots(roots: string[]): Map<string, string> {
+  const snapshot = new Map<string, string>();
+  const visit = (target: string) => {
+    try {
+      const stat = fs.lstatSync(target);
+      if (stat.isSymbolicLink()) return;
+      if (stat.isFile()) {
+        snapshot.set(target, createHash("sha256").update(fs.readFileSync(target)).digest("hex"));
+      } else if (stat.isDirectory()) {
+        for (const entry of fs.readdirSync(target, { withFileTypes: true })) {
+          if (!entry.isSymbolicLink()) visit(path.join(target, entry.name));
+        }
+      }
+    } catch {
+      // A task may create its output directory only after it starts.
+    }
+  };
+  roots.forEach(visit);
+  return snapshot;
+}
+
+function snapshotsDiffer(before: Map<string, string>, after: Map<string, string>): boolean {
+  return [...after].some(([file, signature]) => before.get(file) !== signature)
+    || [...before.keys()].some((file) => !after.has(file));
+}
+
 export async function DELETE(req: Request) {
   const runId = new URL(req.url).searchParams.get("id") ?? "";
   if (!/^job-[a-z0-9-]+$/i.test(runId)) return Response.json({ error: "valid run id required" }, { status: 400 });
@@ -326,6 +356,8 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: "bad json" }), { status: 400 });
   }
   const { kind = "evaluate", input, cliId, runId, context } = body;
+  const task = getRunTask(RUN_TASKS, kind);
+  if (!task) return Response.json({ error: `Unsupported task kind '${kind}'.` }, { status: 400 });
   if (!input || !cliId || !runId || !/^job-[a-z0-9-]+$/i.test(runId)) {
     return new Response(JSON.stringify({ error: "input, cliId, and valid runId required" }), { status: 400 });
   }
@@ -350,22 +382,7 @@ export async function POST(req: Request) {
 
   // These run the REAL core (modes/scripts), not just data — fail clearly if the
   // root is incomplete instead of faking it.
-  const needsScript: Record<string, string> = {
-    evaluate: "modes/oferta.md",
-    "fix-portal": "verify-portals.mjs",
-    pdf: "render-cv.mjs",
-    cover: "modes/cover.md",
-    email: "modes/email.md",
-    contacto: "modes/contacto.md",
-    titles: "modes/titles.md",
-    "interview-prep": "modes/interview-prep.md",
-    "interview-questions": "modes/interview-prep.md",
-    "interview-plan": "modes/interview/plan.md",
-    "interview-practice": "modes/interview/practice.md",
-    "interview-debrief": "modes/interview/debrief.md",
-    "interview-redflag": "modes/interview-redflag.md",
-  };
-  const required = needsScript[kind];
+  const required = task.requiredFile;
   if (required && !fs.existsSync(path.join(careerOpsRoot(), required))) {
     return new Response(
       JSON.stringify({
@@ -377,25 +394,14 @@ export async function POST(req: Request) {
 
   // An A–F score is meaningless without a CV to score against — the CLI would
   // hallucinate a fit narrative and still emit a VERDICT. Require cv.md first.
-  const interviewKinds = [
-    "interview-prep",
-    "interview-questions",
-    "interview-plan",
-    "interview-practice",
-    "interview-debrief",
-    "interview-redflag",
-  ];
-  if (
-    ["evaluate", "pdf", "cover", "email", "contacto", "titles", ...interviewKinds].includes(kind) &&
-    !fs.existsSync(path.join(careerOpsRoot(), "cv.md"))
-  ) {
+  if (task.requiresCv && !fs.existsSync(path.join(careerOpsRoot(), "cv.md"))) {
     return new Response(
       JSON.stringify({ error: "Add your CV first so I can score this against you — drop it on the home page." }),
       { status: 400, headers: { "Content-Type": "application/json" } },
     );
   }
 
-  const existingReport = kind === "evaluate" ? existingEvaluationForUrl(input) : undefined;
+  const existingReport = task.kind === "evaluate" ? existingEvaluationForUrl(input) : undefined;
   if (existingReport) {
     return streamEvents([
       { type: "status", label: `Already evaluated as #${parseInt(existingReport, 10)}` },
@@ -412,7 +418,7 @@ export async function POST(req: Request) {
   }
 
   let postingContent = "";
-  if (kind === "evaluate") {
+  if (task.fetchPosting) {
     try {
       postingContent = await fetchPostingContent(input);
     } catch (error) {
@@ -422,10 +428,10 @@ export async function POST(req: Request) {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const artifactInput = kind === "pdf" ? reportNumberForApplication(input) : input;
+  const artifactInput = task.kind === "pdf" ? reportNumberForApplication(input) : input;
   const promptInput = /^\d+$/.test(artifactInput) ? artifactInput : untrustedContent("user-provided task input", artifactInput);
   const postingBlock = postingContent ? `\n\n--- PRE-FETCHED JOB POSTING (untrusted external content) ---\n${untrustedContent("job posting", postingContent)}` : "";
-  const prompt = withPromptSecurityHeader(`${buildPrompt(kind, promptInput, untrustedContent("user profile notes", readMemory()), today, context)}${postingBlock}`);
+  const prompt = withPromptSecurityHeader(`${task.prompt(promptInput, untrustedContent("user profile notes", readMemory()), today, context)}${postingBlock}`);
   if (Buffer.byteLength(prompt, "utf8") > MAX_RUN_PROMPT_BYTES) {
     releaseRun(runId);
     return Response.json({ error: "Worker prompt too large (max 192 KB). Shorten the request or answers, then retry." }, { status: 413 });
@@ -444,17 +450,7 @@ export async function POST(req: Request) {
   const clientId = workerClientId(req);
   const isClaude = cliId === "claude";
   const isCodex = cliId === "codex";
-  const writeKinds = [
-    "evaluate",
-    "fix-portal",
-    "pdf",
-    "cover",
-    "email",
-    "contacto",
-    "titles",
-    ...interviewKinds,
-  ];
-  const tools = writeKinds.includes(kind)
+  const tools = task.workerPhase === "write"
       ? { allowed: "Read,WebFetch,WebSearch,Write,Edit,Bash,Glob,Grep", disallowed: "Task,NotebookEdit" }
       : { allowed: "Read,WebFetch,WebSearch,Glob,Grep", disallowed: "Bash,Write,Edit,NotebookEdit,Task" };
   const args = isClaude
@@ -502,16 +498,20 @@ export async function POST(req: Request) {
     }
     return undefined;
   };
-  const persists = kind === "evaluate";
+  const persists = task.completionCheck === "report";
   const reportsBefore = persists ? reportSnapshot() : new Map<string, string>();
-  const pdfBefore = kind === "pdf" ? pdfArtifactForReport(artifactInput) : null;
+  const pdfBefore = task.completionCheck === "pdf" ? pdfArtifactForReport(artifactInput) : null;
+  let writeRoots: string[] = [];
+  let writesBefore = new Map<string, string>();
   let child: Awaited<ReturnType<typeof spawnSandboxedWorker>>;
   try {
     const root = careerOpsRoot();
     const roots = workerRoots(kind, root, artifactInput);
+    writeRoots = roots.writeRoots;
     for (const writeRoot of roots.writeRoots) {
       if (!path.extname(writeRoot)) fs.mkdirSync(writeRoot, { recursive: true });
     }
+    if (task.completionCheck === "writes") writesBefore = snapshotWriteRoots(writeRoots);
     child = await spawnSandboxedWorker({
       cliId,
       task: kind,
@@ -572,31 +572,16 @@ export async function POST(req: Request) {
   });
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      let buf = "";
       let codexFinalText = "";
       let emittedText = false; // any assistant text delta → the CLI actually ran
       let announcedScoring = false;
       let stderr = "";
       let lastTokens = 0; // per-run token cost from the Claude result event (#6) — local only
       let lastCostUsd: number | null = null;
-      // pdf-mode tailors a full CV + renders it — give it more headroom. `evaluate`
-      // needs the same: a real oferta run is Playwright liveness + up to 5 WebSearch
-      // + reading the mode/profile/CV files + writing the A–G report + reserve-report-num
-      // and merge-tracker. That does not fit in the 285s default, and the SIGTERM landed
-      // as a null exit code → the honesty gate reported it as "hit an error before
-      // finishing" (a timeout wearing an error's clothes). Both stay under maxDuration.
-      const killMs =
-        kind === "pdf" || kind === "evaluate"
-          ? 720_000
-          : kind === "contacto" || kind === "interview-prep" || kind === "interview-questions"
-            ? 360_000
-            : kind === "cover" || kind === "email" || kind === "titles" || kind === "interview-plan" || kind === "interview-practice" || kind === "interview-debrief"
-              ? 300_000
-              : 285_000;
       killer = setTimeout(() => {
         timedOut = true;
         stop();
-      }, killMs);
+      }, task.timeoutMs);
       const send = (obj: unknown) => {
         if (closed) return;
         try {
@@ -604,6 +589,28 @@ export async function POST(req: Request) {
         } catch {
           closed = true;
           stop();
+        }
+      };
+      const outputAdapter = createCliOutputAdapter(cliId);
+      const handleCliEvents = (events: ReturnType<typeof outputAdapter.push>) => {
+        for (const event of events) {
+          if (event.type === "command") send({ type: "status", label: commandPhase(event.command) });
+          else if (event.type === "tool") send({ type: "tool", name: event.name });
+          else if (event.type === "ready") send({ type: "status", label: "Agent ready" });
+          else if (event.type === "usage") {
+            lastTokens = event.tokens;
+            if (event.costUsd !== undefined) lastCostUsd = event.costUsd;
+          } else if (event.type === "final-text") {
+            codexFinalText = event.text;
+            emittedText = true;
+          } else if (event.type === "text") {
+            if (task.kind === "evaluate" && !announcedScoring) {
+              announcedScoring = true;
+              send({ type: "status", label: "Scoring the role against your profile" });
+            }
+            emittedText = true;
+            send({ type: "text", text: event.text });
+          }
         }
       };
       const close = () => {
@@ -615,84 +622,22 @@ export async function POST(req: Request) {
         }
       };
 
-      send({ type: "status", label: openingPhase(kind) });
+      send({ type: "status", label: openingPhase(task) });
 
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
-        if (isCodex) {
-          buf += d.toString();
-          let nl: number;
-          while ((nl = buf.indexOf("\n")) !== -1) {
-            const line = buf.slice(0, nl).trim();
-            buf = buf.slice(nl + 1);
-            if (!line) continue;
-            try {
-              const ev = JSON.parse(line);
-              if (ev.type === "item.started" && ev.item?.type === "command_execution") {
-                send({ type: "status", label: commandPhase(ev.item.command) });
-              } else if (ev.type === "item.completed" && ev.item?.type === "agent_message") {
-                const text = ev.item.text;
-                if (typeof text === "string") {
-                  emittedText = true;
-                  codexFinalText = text;
-                }
-              } else if (ev.type === "turn.completed") {
-                const u = ev.usage || {};
-                lastTokens = (u.input_tokens || 0) + (u.output_tokens || 0) + (u.cache_write_input_tokens || 0);
-              }
-            } catch {
-              /* Codex may print non-JSON setup lines before JSONL; ignore them. */
-            }
-          }
-          return;
-        }
-        if (!isClaude) {
-          emittedText = true;
-          send({ type: "text", text: d.toString() });
-          return;
-        }
-        buf += d.toString();
-        let nl: number;
-        while ((nl = buf.indexOf("\n")) !== -1) {
-          const line = buf.slice(0, nl).trim();
-          buf = buf.slice(nl + 1);
-          if (!line) continue;
-          try {
-            const ev = JSON.parse(line);
-            if (ev.type === "stream_event") {
-              const e = ev.event;
-              if (e?.type === "content_block_start" && e.content_block?.type === "tool_use") {
-                send({ type: "tool", name: e.content_block.name });
-              } else if (e?.type === "content_block_delta" && e.delta?.text) {
-                if (kind === "evaluate" && !announcedScoring) {
-                  announcedScoring = true;
-                  send({ type: "status", label: "Scoring the role against your profile" });
-                }
-                emittedText = true;
-                send({ type: "text", text: e.delta.text });
-              }
-            } else if (ev.type === "system" && ev.subtype === "init") {
-              send({ type: "status", label: "Agent ready" });
-            } else if (ev.type === "result") {
-              // Capture the per-run cost; the authoritative "done" is sent on close
-              // (so the honesty gate decides done-vs-error first). Tokens = the same
-              // formula /api/usage uses: input + output + cache-creation.
-              const u = ev.usage || {};
-              lastTokens = (u.input_tokens || 0) + (u.output_tokens || 0) + (u.cache_creation_input_tokens || 0);
-              if (typeof ev.total_cost_usd === "number") lastCostUsd = ev.total_cost_usd;
-            }
-          } catch {
-            /* partial line */
-          }
-        }
+        handleCliEvents(outputAdapter.push(d.toString()));
       });
       child.stderr.on("data", (d: Buffer) => {
         stderr = (stderr + d.toString()).slice(-8_000);
       });
       child.on("error", (e) => { stderr = e.message; });
       child.on("close", (code, signal) => {
+        handleCliEvents(outputAdapter.finish());
         if (isCodex && codexFinalText) send({ type: "text", text: codexFinalText });
         send({ type: "status", label: "Validating the saved result" });
+        const writesAfter = task.completionCheck === "writes" ? snapshotWriteRoots(writeRoots) : new Map<string, string>();
+        const writesChanged = task.completionCheck === "writes" && snapshotsDiffer(writesBefore, writesAfter);
         const after = persists ? reportSnapshot() : new Map<string, string>();
         const changedReport = persists && artifactChanged(reportsBefore, after)
           ? [...after.keys()].filter((file) => reportsBefore.get(file) !== after.get(file)).find((file) => {
@@ -704,24 +649,31 @@ export async function POST(req: Request) {
           send({ type: "cancelled", msg: "Cancelled safely" });
         } else if (failure) {
           send({ type: "error", msg: failure });
-        } else if (persists && !changedReport) {
-          send({ type: "error", msg: "This evaluation didn't save a report, so it's not in your tracker. Full evaluation is verified on Claude Code." });
-        } else if (kind === "pdf") {
+        } else if (task.completionCheck === "report" && completionError(task, { reportChanged: Boolean(changedReport) })) {
+          send({ type: "error", msg: completionError(task, { reportChanged: Boolean(changedReport) }) });
+        } else if (task.completionCheck === "pdf") {
           const artifact = pdfArtifactForReport(artifactInput);
-          if (!artifact || artifact.signature === pdfBefore?.signature || !artifact.template || !artifact.sourceReport) {
-            send({ type: "error", msg: "The worker finished, but no newly verified CV artifact was recorded. Open the worker log for the failed render step." });
+          const pdfVerified = Boolean(artifact && artifact.signature !== pdfBefore?.signature && artifact.template && artifact.sourceReport);
+          if (!pdfVerified) {
+            send({ type: "error", msg: completionError(task, { pdfVerified }) });
           } else {
             if (stderr.trim()) send({ type: "warning", msg: "The CLI reported a warning but completed successfully." });
             send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd, reportN: artifactInput });
           }
         } else {
+          const missingOutput = completionError(task, { emittedOutput: emittedText, writesChanged });
+          if (missingOutput) {
+            send({ type: "error", msg: missingOutput });
+            close();
+            return;
+          }
           if (stderr.trim()) send({ type: "warning", msg: "The CLI reported a warning but completed successfully." });
           const reportN =
-            kind === "evaluate"
+            task.reportNumber === "new-report"
               ? changedReport?.match(/^(\d+)/)?.[1]
-              : ["pdf", "cover", "email", "contacto", ...interviewKinds].includes(kind) && /^\d+$/.test(input.trim())
+              : task.reportNumber === "input-if-numeric" && /^\d+$/.test(input.trim())
                 ? input.trim()
-                : findReportNumForInput(input);
+                : task.reportNumber === "find-by-input" ? findReportNumForInput(input) : undefined;
           send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd, reportN });
         }
         close();
