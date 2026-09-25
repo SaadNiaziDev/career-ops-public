@@ -30,6 +30,12 @@ function KeywordField({
   onChange: (v: string[]) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [expanded, setExpanded] = useState(false);
+  const [query, setQuery] = useState("");
+  const collapsedLimit = 3;
+  const canCollapse = values.length > collapsedLimit;
+  const visibleValues = values.filter((value) => !query || value.toLowerCase().includes(query.trim().toLowerCase()));
+  const displayedValues = expanded || query ? visibleValues : visibleValues.slice(0, collapsedLimit);
   // Split only on UNAMIGUOUS item separators (comma / newline / semicolon) — never
   // bare spaces, which are legitimate inside multi-word entries ("AI platform",
   // "New York", "Costa Rica"). A space-only paste stays one chip on purpose (#1147).
@@ -40,8 +46,9 @@ function KeywordField({
     setDraft("");
   };
   return (
+    <div>
     <div className="md3-field h-auto min-h-[48px] flex-wrap items-center gap-1 py-2">
-      {values.map((v) => (
+      {displayedValues.map((v) => (
         <span
           key={v}
           className="md3-chip inline-flex min-h-[32px] cursor-default items-center gap-1"
@@ -88,6 +95,52 @@ function KeywordField({
         placeholder={values.length ? "" : placeholder}
         className="md3-field__input min-w-[7rem] flex-1 text-[13.5px]"
       />
+    </div>
+    {values.length > 0 && (
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+        {canCollapse && (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => {
+              setExpanded((current) => !current);
+              setQuery("");
+            }}
+            className="inline-flex min-h-[40px] items-center gap-1 text-sm font-medium text-brand-text hover:text-foreground"
+          >
+            <MaterialSymbol name={expanded ? "expand_less" : "expand_more"} size={18} />
+            {expanded ? "Show fewer" : `Show all ${values.length} ${tone === "inc" ? "roles" : "exclusions"}`}
+          </button>
+        )}
+        <span className="text-xs text-muted" aria-live="polite">
+          {query ? `${visibleValues.length} of ${values.length}` : `${values.length} ${tone === "inc" ? "roles" : "exclusions"}`}
+        </span>
+        {expanded && canCollapse && (
+          <label className="flex min-h-[40px] flex-1 basis-full items-center gap-2 sm:basis-56">
+            <MaterialSymbol name="search" size={17} className="text-muted" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={`Search ${tone === "inc" ? "roles" : "exclusions"}`}
+              aria-label={`Search ${tone === "inc" ? "roles" : "exclusions"}`}
+              className="min-w-0 flex-1 border-b border-border bg-transparent py-1 text-sm text-foreground outline-none focus:border-brand"
+            />
+          </label>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            onChange([]);
+            setQuery("");
+            setExpanded(false);
+          }}
+          className="inline-flex min-h-[40px] items-center gap-1 text-sm text-muted hover:text-foreground"
+        >
+          <MaterialSymbol name="delete_sweep" size={17} /> Clear all
+        </button>
+      </div>
+    )}
     </div>
   );
 }

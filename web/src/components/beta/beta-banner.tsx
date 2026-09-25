@@ -95,7 +95,7 @@ export function BetaBanner() {
 
   return (
     <>
-      <div className="fixed bottom-3 left-3 z-[70] flex items-center gap-2 rounded-full border border-brand/30 bg-surface/90 px-3 py-1.5 text-xs shadow-lg backdrop-blur-md">
+      <div className="mx-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] flex w-fit max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 self-start rounded-2xl border border-brand/30 bg-surface/95 px-3 py-2 text-xs sm:flex-nowrap sm:rounded-full">
         <span className="flex items-center gap-1.5 font-medium text-brand-text">
           <span className="size-1.5 animate-pulse rounded-full bg-brand" /> {meta.version} · {meta.channel}
         </span>
