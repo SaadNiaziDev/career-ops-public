@@ -5,7 +5,7 @@
  * optional portals.yml ranking weights, and data/ranking-signals.yml multipliers.
  */
 
-import { readFileSync, existsSync } from 'fs';
+import fs from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
@@ -34,10 +34,10 @@ function tokenize(text) {
   );
 }
 
-function loadCvTokens() {
+function loadCvTokens(fileSystem = fs, cvPath = CV_PATH) {
   try {
-    if (!existsSync(CV_PATH)) return new Set();
-    return tokenize(readFileSync(CV_PATH, 'utf-8'));
+    if (!fileSystem.existsSync(cvPath)) return new Set();
+    return tokenize(fileSystem.readFileSync(cvPath, 'utf-8'));
   } catch {
     return new Set();
   }
@@ -103,9 +103,9 @@ function cvOverlapScore(title, description, cvTokens) {
   return Math.min(100, Math.round(ratio * 140));
 }
 
-function freshnessScore(postedAt, maxAgeDays = 30) {
+function freshnessScore(postedAt, maxAgeDays = 30, nowMs = Date.now()) {
   if (typeof postedAt !== 'number' || !Number.isFinite(postedAt) || postedAt <= 0) return 45;
-  const days = Math.max(0, (Date.now() - postedAt) / 86_400_000);
+  const days = Math.max(0, (nowMs - postedAt) / 86_400_000);
   if (days <= 3) return 100;
   if (days >= maxAgeDays) return 20;
   return Math.round(100 - ((days - 3) / Math.max(maxAgeDays - 3, 1)) * 80);
@@ -129,10 +129,10 @@ function loadRankingWeights(portalsConfig) {
   };
 }
 
-function loadSignals() {
+function loadSignals(fileSystem = fs, signalsPath = SIGNALS_PATH) {
   try {
-    if (!existsSync(SIGNALS_PATH)) return null;
-    return yaml.load(readFileSync(SIGNALS_PATH, 'utf-8')) || null;
+    if (!fileSystem.existsSync(signalsPath)) return null;
+    return yaml.load(fileSystem.readFileSync(signalsPath, 'utf-8')) || null;
   } catch {
     return null;
   }
@@ -173,7 +173,7 @@ export function computeFitScore(offer, ctx = {}) {
     cv_overlap: cvOverlapScore(offer.title, offer.description, cvTokens),
     title_match: titleMatchScore(offer.title, positives, matchedKeyword),
     comp_fit: compFitScore(offer, compRange),
-    freshness: freshnessScore(offer.postedAt, ctx.maxAgeDays ?? 30),
+    freshness: freshnessScore(offer.postedAt, ctx.maxAgeDays ?? 30, ctx.nowMs ?? Date.now()),
     trust: trustScore(offer),
   };
 
@@ -195,22 +195,27 @@ export function computeFitScore(offer, ctx = {}) {
 }
 
 export function buildFitScoreContext(portalsConfig, options = {}) {
+  const fileSystem = options.fs ?? fs;
+  const profilePath = options.profilePath ?? PROFILE_PATH;
+  const cvPath = options.cvPath ?? CV_PATH;
+  const signalsPath = options.signalsPath ?? SIGNALS_PATH;
   let profile = options.profile;
   if (!profile) {
     try {
-      if (existsSync(PROFILE_PATH)) profile = yaml.load(readFileSync(PROFILE_PATH, 'utf-8')) || {};
+      if (fileSystem.existsSync(profilePath)) profile = yaml.load(fileSystem.readFileSync(profilePath, 'utf-8')) || {};
     } catch {
       profile = {};
     }
   }
   return {
-    cvTokens: loadCvTokens(),
+    cvTokens: loadCvTokens(fileSystem, cvPath),
     compRange: parseCompRange(profile),
     positives: portalsConfig?.title_filter?.positive || [],
     weights: loadRankingWeights(portalsConfig),
-    signals: loadSignals(),
+    signals: loadSignals(fileSystem, signalsPath),
     profile,
     maxAgeDays: portalsConfig?.max_posting_age_days ?? 30,
+    nowMs: options.nowMs ?? Date.now(),
   };
 }
 
