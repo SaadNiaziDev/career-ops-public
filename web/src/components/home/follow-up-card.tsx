@@ -11,6 +11,7 @@ export type FollowUp = {
   role?: string;
   status?: string;
   appliedDate?: string;
+  nextFollowupDate?: string;
   notes?: string;
 };
 
@@ -52,7 +53,7 @@ export function FollowUpCard({
           </p>
           <p className="flex items-center gap-1 md-body-small text-[var(--md-sys-color-on-surface-variant)]">
             <span className="material-symbols-outlined text-[14px] leading-none">schedule</span>
-            {followup.appliedDate ? `Applied ${followup.appliedDate}` : "Follow-up due"}
+            {followup.nextFollowupDate ? `Due ${followup.nextFollowupDate}` : followup.appliedDate ? `Applied ${followup.appliedDate}` : "Follow-up due"}
           </p>
         </div>
       </div>

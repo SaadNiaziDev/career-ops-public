@@ -14,6 +14,7 @@ import { JobLinkHub } from "@/components/job-link-hub";
 import { Md3Input } from "@/components/ui/md3-input";
 import { Md3Select } from "@/components/ui/md3-select";
 import { cn } from "@/lib/cn";
+import { applicationOrderFromParams, defaultApplicationOrder, sortApplications } from "@/lib/list-sort-policy";
 
 const STAGES = [
   { key: "EVALUATED", label: "Evaluated", stage: "evaluated" as const },
@@ -28,9 +29,6 @@ const CLOSED = ["REJECTED", "DISCARDED", "SKIP"] as const;
 
 const TABS = ["INBOX", "ALL", ...STAGES.map((s) => s.key), ...CLOSED] as const;
 type Tab = (typeof TABS)[number];
-
-const SORT_KEYS = ["company", "role", "score", "status", "date"] as const;
-type SortKey = (typeof SORT_KEYS)[number];
 
 const BOARD_CAP = 10;
 const DATE_WINDOWS = [7, 30, 90] as const;
@@ -64,9 +62,7 @@ export function PipelineView({
   const pDays = parseInt(params.get("days") ?? "", 10);
   const daysFilter: number | null = (DATE_WINDOWS as readonly number[]).includes(pDays) ? pDays : null;
   const locationFilter = params.get("location") ?? "";
-  const pSort = params.get("sort") ?? "";
-  const sortKey: SortKey = (SORT_KEYS as readonly string[]).includes(pSort) ? (pSort as SortKey) : "date";
-  const sortDir = params.get("dir") === "1" ? 1 : -1;
+  const applicationOrder = applicationOrderFromParams(params);
 
   const [q, setQ] = useState(params.get("q") ?? "");
   const lastUrlQ = useRef(params.get("q") ?? "");
@@ -120,13 +116,8 @@ export function PipelineView({
       if (stage) buckets.get(stage.key)!.push(r);
       else closed.push(r);
     }
-    const byScore = (a: Application, b: Application) => {
-      const an = scoreNum(a.score);
-      const bn = scoreNum(b.score);
-      return (Number.isNaN(bn) ? -Infinity : bn) - (Number.isNaN(an) ? -Infinity : an);
-    };
-    for (const rows of buckets.values()) rows.sort(byScore);
-    closed.sort(byScore);
+    for (const [stage, rows] of buckets) buckets.set(stage, sortApplications(rows, stage));
+    closed.splice(0, closed.length, ...sortApplications(closed, "ALL"));
     return { buckets, closed };
   }, [applications]);
 
@@ -162,17 +153,8 @@ export function PipelineView({
       const needle = q.toLowerCase();
       rows = rows.filter((r) => `${r.company} ${r.role} ${r.location ?? ""}`.toLowerCase().includes(needle));
     }
-    return [...rows].sort((a, b) => {
-      if (sortKey === "score") {
-        const an = scoreNum(a.score);
-        const bn = scoreNum(b.score);
-        const av = Number.isNaN(an) ? -Infinity : an;
-        const bv = Number.isNaN(bn) ? -Infinity : bn;
-        return (av - bv) * sortDir;
-      }
-      return (a[sortKey] || "").localeCompare(b[sortKey] || "") * sortDir;
-    });
-  }, [applications, mode, tab, q, sortKey, sortDir, minFilter, daysFilter, locationFilter]);
+    return sortApplications(rows, tab, applicationOrder);
+  }, [applications, mode, tab, q, applicationOrder, minFilter, daysFilter, locationFilter]);
 
   const goInbox = () => setParams({ tab: null, view: null, min: null });
   const goBoard = () => setParams({ tab: "ALL", view: null, min: null });
@@ -404,16 +386,27 @@ export function PipelineView({
               <div className="pipeline-filter-field">
                 <span>Sort by</span>
                 <Md3Select
-                  value={`${sortKey}-${sortDir === 1 ? "asc" : "desc"}`}
+                  value={applicationOrder}
                   onChange={(value) => {
+                    if (value === "default") {
+                      setParams({ sort: null, dir: null });
+                      return;
+                    }
                     const [sort, dir] = value.split("-");
                     setParams({ sort, dir: dir === "asc" ? 1 : null });
                   }}
                   options={[
-                    { value: "date-desc", label: "Newest evaluated" },
+                    { value: "default", label: `Default · ${defaultApplicationOrder(tab)}` },
+                    { value: "date-desc", label: "Newest first" },
+                    { value: "date-asc", label: "Oldest first" },
                     { value: "score-desc", label: "Highest score" },
+                    { value: "score-asc", label: "Lowest score" },
                     { value: "company-asc", label: "Company A–Z" },
+                    { value: "company-desc", label: "Company Z–A" },
                     { value: "role-asc", label: "Role A–Z" },
+                    { value: "role-desc", label: "Role Z–A" },
+                    { value: "status-asc", label: "Status A–Z" },
+                    { value: "status-desc", label: "Status Z–A" },
                   ]}
                   aria-label="Sort tracked roles"
                 />
@@ -464,6 +457,9 @@ function BoardColumn({
         <h2 className="md-column-heading">{label}</h2>
         <span className="md3-pipeline-column-count">{rows.length}</span>
       </header>
+      <p className="px-3 pb-2 text-xs text-[var(--md-sys-color-on-surface-variant)]">
+        {stage === "offer" ? 'Decision deadline · add "Decision deadline: YYYY-MM-DD" in notes' : defaultApplicationOrder(stage.toUpperCase())}
+      </p>
       <div className="flex flex-col gap-2">
         {visible.map((row) => (
           <BoardCard key={row.n} row={row} showStatus={showStatus} stage={stage} interviewProgress={interviewProgress[row.n]} />
@@ -532,7 +528,9 @@ function BoardCard({
                 {row.date ? ` · ${row.date}` : ""}
               </span>
             ) : (
-              row.date || "—"
+              stage === "interview" && row.nextInterviewAt ? `Interview ${row.nextInterviewAt}`
+                : stage === "offer" && row.offerDeadline ? `Decide by ${row.offerDeadline}`
+                  : row.date || "—"
             )}
           </span>
           <span className="pointer-events-auto flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">

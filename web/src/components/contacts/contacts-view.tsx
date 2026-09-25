@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { PageShell } from "@/components/dossier/page-shell";
@@ -13,6 +13,7 @@ import { Md3Select } from "@/components/ui/md3-select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/providers/toast-provider";
 import type { ContactRow, ContactType, OutreachStatus } from "@/lib/contacts";
+import { readSortPreference, sortContacts, writeSortPreference, type ContactOrder } from "@/lib/list-sort-policy";
 
 const OUTREACH_OPTIONS: { value: OutreachStatus; label: string }[] = [
   { value: "not-contacted", label: "Not contacted" },
@@ -91,7 +92,14 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
   const { toast } = useToast();
   const [q, setQ] = useState("");
   const [rows, setRows] = useState(initial);
-  const [grouped, setGrouped] = useState(true);
+  const [grouped, setGrouped] = useState(false);
+  const [order, setOrder] = useState<ContactOrder>("newest");
+  useEffect(() => setOrder(readSortPreference<ContactOrder>("career-ops:contacts-order", ["newest", "oldest", "company"], "newest")), []);
+  const changeOrder = (value: string) => {
+    const next = value as ContactOrder;
+    setOrder(next);
+    writeSortPreference("career-ops:contacts-order", next);
+  };
   const [channels, setChannels] = useState<Set<string>>(new Set());
   const [verifiedOnly, setVerifiedOnly] = useState<boolean | null>(null);
   const [types, setTypes] = useState<Set<ContactType>>(new Set());
@@ -104,7 +112,7 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return rows.filter((r) => {
+    return sortContacts(rows.filter((r) => {
       if (needle && ![r.company, r.role, r.name, r.title, r.email, r.notes].some((f) => f.toLowerCase().includes(needle))) {
         return false;
       }
@@ -114,8 +122,8 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
       if (types.size && !types.has(r.contactType)) return false;
       if (statusFilter.size && !statusFilter.has((r.outreachStatus || "not-contacted") as OutreachStatus)) return false;
       return true;
-    });
-  }, [rows, q, channels, verifiedOnly, types, statusFilter]);
+    }), order);
+  }, [rows, q, channels, verifiedOnly, types, statusFilter, order]);
 
   const groups = useMemo(() => {
     const map = new Map<string, ContactRow[]>();
@@ -124,7 +132,7 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
       if (!map.has(key)) map.set(key, []);
       map.get(key)?.push(r);
     }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    return [...map.entries()];
   }, [filtered]);
 
   // S09 · state `write failed`: the row moves optimistically, then reverts to
@@ -169,7 +177,7 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
   return (
     <PageShell width="wide">
       <div data-co-tour="outreach-intro">
-        <DossierPageHeader title="Contacts & applications memory" description="Grouped by company — filter by channel, type, and outreach status." />
+        <DossierPageHeader title="Contacts & applications memory" description="Newest contacts first — filter by channel, type, and outreach status." />
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -177,6 +185,12 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
         <button type="button" className="md3-btn-outlined min-h-10" onClick={() => setGrouped((g) => !g)}>
           {grouped ? "Flat list" : "Group by company"}
         </button>
+        <Md3Select
+          value={order}
+          onChange={changeOrder}
+          aria-label="Sort contacts"
+          options={[{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }, { value: "company", label: "Company A–Z" }]}
+        />
         <Link href="/pipeline" className="md3-btn-outlined">
           Open pipeline
         </Link>

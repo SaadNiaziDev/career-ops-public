@@ -90,7 +90,7 @@ export function AnalyticsView({
 
   const companyCounts = new Map<string, number>();
   for (const a of applications) if (a.company) companyCounts.set(a.company, (companyCounts.get(a.company) ?? 0) + 1);
-  const topCompanies = [...companyCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const topCompanies = [...companyCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 10);
   const maxCompany = Math.max(1, ...topCompanies.map((c) => c[1]));
 
   const offers = stageCounts.find((s) => s.key === "OFFER")?.n ?? 0;

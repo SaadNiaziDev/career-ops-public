@@ -111,7 +111,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         setJobs((current) => {
           const byId = new Map(current.map((j) => [j.id, j]));
           for (const job of restored) if (job?.id && !byId.has(job.id)) byId.set(job.id, job);
-          return [...byId.values()].sort((a, b) => b.startedAt - a.startedAt).slice(0, 40);
+          return [...byId.values()].sort((a, b) => b.startedAt - a.startedAt || a.id.localeCompare(b.id)).slice(0, 40);
         });
       }
     } catch {
@@ -133,7 +133,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
             if (!run?.id || run.status === "running" || byId.has(run.id)) continue;
             byId.set(run.id, { ...run, state: run.state ?? stateFromLegacyStatus(run.status), intentKey: run.intentKey ?? intentKey(run.kind ?? "worker", run.input ?? ""), lastActivityAt: run.lastActivityAt ?? run.endedAt ?? run.startedAt });
           }
-          return [...byId.values()].sort((a, b) => b.startedAt - a.startedAt).slice(0, 40);
+          return [...byId.values()].sort((a, b) => b.startedAt - a.startedAt || a.id.localeCompare(b.id)).slice(0, 40);
         });
       })
       .catch(() => {});
