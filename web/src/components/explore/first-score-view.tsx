@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,8 @@ import { cn } from "@/lib/cn";
 import { instrumentSerif } from "@/lib/fonts";
 import { parseReport, scoreTone, legitimacyTone } from "@/lib/format";
 import { useJobs, type Job } from "@/components/jobs/job-store";
-
-const SEEN_KEY = "career-ops:first-score-seen";
+import { usePipeline } from "@/components/pipeline/pipeline-provider";
+import { firstScoreSeenKey, resolveFirstScoreIdentity, selectSessionEvaluation } from "@/lib/jobs/first-score-policy";
 
 const STYLE = `
 .co-aha{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:1.2rem;background:color-mix(in srgb, var(--md-sys-color-surface) 70%, rgba(0,0,0,.5));-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);animation:co-aha-in .35s ease both}
@@ -34,37 +34,51 @@ function extractWhy(job: Job): string {
 
 export function FirstScoreView() {
   const router = useRouter();
-  const { jobs } = useJobs();
-  const [dismissed, setDismissed] = useState(false);
-  const [seen, setSeen] = useState(true);
+  const { jobs, completedEvaluationId } = useJobs();
+  const { applications } = usePipeline();
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+  const [seenState, setSeenState] = useState<{ key: string | null; seen: boolean }>({ key: null, seen: true });
+
+  const firstDone = useMemo(() => selectSessionEvaluation(jobs, completedEvaluationId), [jobs, completedEvaluationId]);
+  const identity = useMemo(
+    () => (firstDone ? resolveFirstScoreIdentity(firstDone, applications) : null),
+    [firstDone, applications],
+  );
+  const seenKey = firstDone ? firstScoreSeenKey(firstDone.id) : null;
 
   useEffect(() => {
-    try {
-      setSeen(localStorage.getItem(SEEN_KEY) === "1");
-    } catch {
-      setSeen(false);
+    if (!seenKey) {
+      setSeenState({ key: null, seen: true });
+      return;
     }
-  }, []);
-
-  const firstDone = useMemo(
-    () => jobs.filter((j) => j.kind === "evaluate" && j.status === "done").sort((a, b) => (a.endedAt ?? 0) - (b.endedAt ?? 0))[0],
-    [jobs],
-  );
+    try {
+      setSeenState({ key: seenKey, seen: localStorage.getItem(seenKey) === "1" });
+    } catch {
+      setSeenState({ key: seenKey, seen: false });
+    }
+  }, [seenKey]);
 
   const panelRef = useRef<HTMLDivElement>(null);
-  const open = !seen && !dismissed && !!firstDone;
+  const open = !!firstDone && !!identity && !!seenKey && seenState.key === seenKey && !seenState.seen && dismissedKey !== seenKey;
+
+  const close = useCallback(() => {
+    if (!seenKey) return;
+    try {
+      localStorage.setItem(seenKey, "1");
+    } catch {
+      /* ignore */
+    }
+    setSeenState({ key: seenKey, seen: true });
+    setDismissedKey(seenKey);
+  }, [seenKey]);
+
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
     const t = window.setTimeout(() => panelRef.current?.querySelector<HTMLElement>("a, button")?.focus(), 40);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        try {
-          localStorage.setItem(SEEN_KEY, "1");
-        } catch {
-          /* ignore */
-        }
-        setDismissed(true);
+        close();
         return;
       }
       if (e.key === "Tab" && panelRef.current) {
@@ -87,26 +101,17 @@ export function FirstScoreView() {
       window.clearTimeout(t);
       prev?.focus?.();
     };
-  }, [open]);
+  }, [open, close]);
 
-  if (!open) return null;
+  if (!open || !firstDone || !identity) return null;
 
   const why = extractWhy(firstDone);
   const score = firstDone.result?.score ?? null;
   const meta = parseReport(firstDone.text || "");
   const legit = meta.legitimacy;
-  const company = firstDone.title.replace(/^Evaluate\s*·\s*/, "");
-  const role = firstDone.subtitle || "";
+  const company = identity.company;
+  const role = identity.role;
   const tone = score != null ? scoreTone(`${score}`) : "muted";
-
-  const close = () => {
-    try {
-      localStorage.setItem(SEEN_KEY, "1");
-    } catch {
-      /* ignore */
-    }
-    setDismissed(true);
-  };
 
   return (
     <div className="co-aha" role="dialog" aria-modal="true" aria-label="Your first score" onClick={close}>
@@ -179,7 +184,7 @@ export function FirstScoreView() {
               icon="description"
               onClick={() => {
                 close();
-                router.push("/pipeline?tab=EVALUATED");
+                router.push(identity.href);
               }}
             >
               See the full report

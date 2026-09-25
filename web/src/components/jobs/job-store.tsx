@@ -44,6 +44,7 @@ type StartOpts = {
 
 type Ctx = {
   jobs: Job[];
+  completedEvaluationId: string | null;
   startJob: (opts: StartOpts) => string | null;
   cancelJob: (id: string) => void;
   removeJob: (id: string) => void;
@@ -86,6 +87,7 @@ function latchReportNum(hay: string): string | undefined {
 
 export function JobsProvider({ children }: { children: React.ReactNode }) {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [completedEvaluationId, setCompletedEvaluationId] = useState<string | null>(null);
   const seq = useRef(0);
   const loaded = useRef(false);
   const jobsRef = useRef<Job[]>([]);
@@ -241,6 +243,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
             lastActivityAt: endedAt,
             steps: lastLabel ? [...j.steps, { kind: "status", label: lastLabel, ts: endedAt }] : j.steps,
           }));
+          if (status === "done" && opts.kind === "evaluate") setCompletedEvaluationId(id);
           // Persist both successful and failed runs so the worker log is a
           // truthful history, including the useful failure message.
           fetch("/api/runs/save", {
@@ -349,5 +352,5 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
   const removeJob = useCallback((id: string) => setJobs((js) => js.filter((j) => j.id !== id)), []);
   const clearFinished = useCallback(() => setJobs((js) => js.filter((j) => isActiveState(j.state))), []);
 
-  return <JobsContext.Provider value={{ jobs, startJob, cancelJob, removeJob, clearFinished }}>{children}</JobsContext.Provider>;
+  return <JobsContext.Provider value={{ jobs, completedEvaluationId, startJob, cancelJob, removeJob, clearFinished }}>{children}</JobsContext.Provider>;
 }
