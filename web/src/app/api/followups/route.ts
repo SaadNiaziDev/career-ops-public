@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
 // The DEMAND loop: surface follow-ups due, via the core's own
 // followup-cadence.mjs --json (the SAME calculator the CLI uses) — we never
 // reimplement the cadence logic, we read its verdict (mirrors /api/doctor).
-export async function GET() {
+export async function GET(req: Request) {
+  const includeAll = new URL(req.url).searchParams.get("all") === "1";
   const script = rootScript("followup-cadence");
   if (!fs.existsSync(script)) return Response.json({ available: false, metadata: null, entries: [] });
   const stdout = await new Promise<string>((resolve) => {
@@ -34,7 +35,7 @@ export async function GET() {
     });
     const overdue = active.filter((e) => /overdue|urgent/i.test(String(e.urgency))).slice(0, 8);
     const top = (overdue.length ? overdue : active).slice(0, 6);
-    return Response.json({ available: true, metadata: j.metadata ?? null, entries: top, snoozed });
+    return Response.json({ available: true, metadata: j.metadata ?? null, entries: includeAll ? active : top, snoozed });
   } catch {
     return Response.json({ available: false, metadata: null, entries: [] });
   }

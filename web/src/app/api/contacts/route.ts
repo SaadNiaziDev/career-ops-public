@@ -4,7 +4,7 @@ import { appendContact, readContacts, updateContact, type OutreachStatus } from 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const VALID_STATUS: OutreachStatus[] = ["not-contacted", "messaged", "replied", "ghosted"];
+const VALID_STATUS: OutreachStatus[] = ["not-contacted", "replied", "ghosted"];
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -69,11 +69,11 @@ export async function PATCH(req: Request) {
       name: (body.name ?? "").trim() || undefined,
     },
     {
-      outreachStatus: status,
-      lastTouch: (body.last_touch ?? body.lastTouch ?? new Date().toISOString().slice(0, 10)).trim(),
-      contactType: (body.contact_type ?? body.contactType ?? undefined) as never,
-      notes: body.notes?.trim(),
-      verified: body.verified?.trim(),
+      ...(status ? { outreachStatus: status } : {}),
+      ...(body.last_touch != null || body.lastTouch != null ? { lastTouch: (body.last_touch ?? body.lastTouch ?? "").trim() } : {}),
+      ...(body.contact_type != null || body.contactType != null ? { contactType: (body.contact_type ?? body.contactType ?? "") as never } : {}),
+      ...(body.notes != null ? { notes: body.notes.trim() } : {}),
+      ...(body.verified != null ? { verified: body.verified.trim() } : {}),
     },
   );
   if (!ok) return NextResponse.json({ error: "contact not found" }, { status: 404 });

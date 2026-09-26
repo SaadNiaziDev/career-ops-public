@@ -14,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/providers/toast-provider";
 import type { ContactRow, ContactType, OutreachStatus } from "@/lib/contacts";
 import { readSortPreference, sortContacts, writeSortPreference, type ContactOrder } from "@/lib/list-sort-policy";
+import { FollowUpCard, type FollowUp } from "@/components/home/follow-up-card";
+import type { Application } from "@/lib/career-ops";
 
 const OUTREACH_OPTIONS: { value: OutreachStatus; label: string }[] = [
   { value: "not-contacted", label: "Not contacted" },
@@ -27,9 +29,13 @@ const CONTACT_TYPES: ContactType[] = ["recruiter", "hiring-manager", "peer", "in
 function ContactRowView({
   r,
   onStatusChange,
+  applicationStatus,
+  nextDue,
 }: {
   r: ContactRow;
   onStatusChange: (row: ContactRow, status: OutreachStatus) => void;
+  applicationStatus?: string;
+  nextDue?: string;
 }) {
   return (
     <div className="grid min-h-16 grid-cols-1 items-start gap-x-5 gap-y-3 border-b border-[var(--md-sys-color-outline-variant)] px-5 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(9.5rem,auto)_6.5rem_minmax(0,1.35fr)]">
@@ -41,6 +47,8 @@ function ContactRowView({
         <Badge tone="muted" className="mt-1">
           #{r.trackerNum}
         </Badge>
+        {applicationStatus && <p className="mt-1 text-xs text-[var(--md-sys-color-on-surface-variant)]">Application: {applicationStatus}</p>}
+        {nextDue && <p className="mt-1 text-xs text-[var(--md-sys-color-error)]">Next follow-up: {nextDue}</p>}
       </div>
       <div className="min-w-0">
         <div className="truncate font-medium">{r.name || "—"}</div>
@@ -71,14 +79,15 @@ function ContactRowView({
         </div>
       </div>
       <div className="min-w-[9.5rem]">
-        <Md3Select
+        {(r.outreachStatus || "not-contacted") === "messaged" ? <Badge tone="good" className="inline-flex">Message sent</Badge> : <Md3Select
           className="w-full min-w-[9.5rem]"
           aria-label={`Outreach status for ${r.name || r.company}`}
           value={r.outreachStatus || "not-contacted"}
           onChange={(v) => onStatusChange(r, v as OutreachStatus)}
-          options={OUTREACH_OPTIONS}
-        />
+          options={OUTREACH_OPTIONS.filter((option) => option.value !== "messaged")}
+        />}
         {r.lastTouch ? <p className="mt-1 text-[10px] text-[var(--md-sys-color-outline)]">Last: {r.lastTouch}</p> : null}
+        {r.verified !== "verified" && <p className="mt-1 text-xs text-[var(--md-sys-color-error)]">{/bounce|invalid/i.test(`${r.verified} ${r.notes}`) ? "Bounced or invalid contact — verify before use." : "Contact not verified."}</p>}
       </div>
       <div className="whitespace-nowrap text-sm tabular-nums text-[var(--md-sys-color-on-surface-variant)]">{r.date}</div>
       <div className="min-w-0 text-sm leading-snug text-[var(--md-sys-color-on-surface-variant)] [overflow-wrap:anywhere]">
@@ -88,7 +97,7 @@ function ContactRowView({
   );
 }
 
-export function ContactsView({ initial }: { initial: ContactRow[] }) {
+export function ContactsView({ initial, applications = [] }: { initial: ContactRow[]; applications?: Application[] }) {
   const { toast } = useToast();
   const [q, setQ] = useState("");
   const [rows, setRows] = useState(initial);
@@ -104,6 +113,29 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
   const [verifiedOnly, setVerifiedOnly] = useState<boolean | null>(null);
   const [types, setTypes] = useState<Set<ContactType>>(new Set());
   const [statusFilter, setStatusFilter] = useState<Set<OutreachStatus>>(new Set());
+  const [mode, setMode] = useState<"due" | "contacts">("due");
+  const [dueRows, setDueRows] = useState<FollowUp[]>([]);
+  const [cadenceRows, setCadenceRows] = useState<FollowUp[]>([]);
+  const [snoozedRows, setSnoozedRows] = useState<{ num: number; snoozedUntil: string }[]>([]);
+  const [followupsUnavailable, setFollowupsUnavailable] = useState(false);
+  const applicationsByNum = useMemo(() => new Map(applications.map((application) => [application.n, application])), [applications]);
+  const dueByNum = useMemo(() => new Map(cadenceRows.map((entry) => [String(entry.num), entry])), [cadenceRows]);
+  const snoozedByNum = useMemo(() => new Map(snoozedRows.map((entry) => [String(entry.num), entry])), [snoozedRows]);
+
+  async function refreshDue() {
+    try {
+      const response = await fetch("/api/followups?all=1");
+      const data = await response.json() as { available?: boolean; entries?: FollowUp[]; snoozed?: { num: number; snoozedUntil: string }[] };
+      setFollowupsUnavailable(!response.ok || data.available === false);
+      setCadenceRows(data.entries ?? []);
+      setSnoozedRows(data.snoozed ?? []);
+      setDueRows((data.entries ?? []).filter((entry) => /overdue|urgent|due/i.test(entry.urgency ?? "")));
+    } catch {
+      setFollowupsUnavailable(true);
+      setDueRows([]);
+    }
+  }
+  useEffect(() => { void refreshDue(); }, []);
 
   const availChannels = useMemo(
     () => Array.from(new Set(rows.map((r) => r.channel).filter(Boolean))).sort(),
@@ -144,9 +176,7 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
       (r.trackerNum === row.trackerNum && r.name === row.name && r.date === row.date);
 
     const previous = row.outreachStatus;
-    const previousTouch = row.lastTouch;
-    const lastTouch = new Date().toISOString().slice(0, 10);
-    setRows((prev) => prev.map((r) => (isSame(r) ? { ...r, outreachStatus, lastTouch } : r)));
+    setRows((prev) => prev.map((r) => (isSame(r) ? { ...r, outreachStatus } : r)));
 
     try {
       const res = await fetch("/api/contacts", {
@@ -158,13 +188,12 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
           trackerNum: row.trackerNum,
           name: row.name,
           outreach_status: outreachStatus,
-          last_touch: lastTouch,
         }),
       });
       if (!res.ok) throw new Error(String(res.status));
     } catch {
       setRows((prev) =>
-        prev.map((r) => (isSame(r) ? { ...r, outreachStatus: previous, lastTouch: previousTouch } : r)),
+        prev.map((r) => (isSame(r) ? { ...r, outreachStatus: previous } : r)),
       );
       toast({
         tone: "error",
@@ -177,9 +206,19 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
   return (
     <PageShell width="wide">
       <div data-co-tour="outreach-intro">
-        <DossierPageHeader title="Contacts & applications memory" description="Newest contacts first — filter by channel, type, and outreach status." />
+        <DossierPageHeader title="Outreach" description="Complete due follow-ups first; open the contact directory when you need someone specific." />
       </div>
 
+      <div className="mb-4 flex gap-2" role="tablist" aria-label="Outreach views">
+        <button type="button" role="tab" aria-selected={mode === "due"} className="md3-btn-outlined" onClick={() => setMode("due")}>Due now ({dueRows.length})</button>
+        <button type="button" role="tab" aria-selected={mode === "contacts"} className="md3-btn-outlined" onClick={() => setMode("contacts")}>Contact directory</button>
+      </div>
+
+      {mode === "due" && <section aria-label="Due follow-ups" className="mb-6 space-y-3">
+        {followupsUnavailable ? <p role="status" className="md3-alert md3-alert--warning">Follow-up cadence is unavailable. Retry, or open the contact directory to continue.</p> : dueRows.length ? dueRows.map((followup) => <FollowUpCard key={`${followup.num}-${followup.company}`} followup={followup} onLogged={(warning) => { void refreshDue(); if (warning) toast({ tone: "error", message: warning }); }} onSnoozed={() => void refreshDue()} />) : <Md3Empty description="No follow-ups due now"><p className="mt-2 text-sm text-[var(--md-sys-color-on-surface-variant)]">The cadence tracker has no overdue or urgent follow-ups.</p></Md3Empty>}
+      </section>}
+
+      {mode === "contacts" && <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Md3Input icon="search" type="search" placeholder="Search company, name, email…" value={q} onChange={(e) => setQ(e.target.value)} className="w-[420px] max-w-full" />
         <button type="button" className="md3-btn-outlined min-h-10" onClick={() => setGrouped((g) => !g)}>
@@ -241,7 +280,7 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
             >
               <div className="md3-pipeline-list-panel -mx-2">
                 {items.map((r) => (
-                  <ContactRowView key={`${r.trackerNum}-${r.name}-${r.email}-${r.date}`} r={r} onStatusChange={patchStatus} />
+                  <ContactRowView key={`${r.trackerNum}-${r.name}-${r.email}-${r.date}`} r={r} onStatusChange={patchStatus} applicationStatus={applicationsByNum.get(r.trackerNum)?.status} nextDue={dueByNum.get(r.trackerNum)?.nextFollowupDate || snoozedByNum.get(r.trackerNum)?.snoozedUntil} />
                 ))}
               </div>
             </Md3Collapse>
@@ -250,10 +289,11 @@ export function ContactsView({ initial }: { initial: ContactRow[] }) {
       ) : (
         <div className="md3-pipeline-list-panel" data-co-tour="outreach-list">
           {filtered.map((r) => (
-            <ContactRowView key={`${r.trackerNum}-${r.name}-${r.email}-${r.date}`} r={r} onStatusChange={patchStatus} />
+            <ContactRowView key={`${r.trackerNum}-${r.name}-${r.email}-${r.date}`} r={r} onStatusChange={patchStatus} applicationStatus={applicationsByNum.get(r.trackerNum)?.status} nextDue={dueByNum.get(r.trackerNum)?.nextFollowupDate || snoozedByNum.get(r.trackerNum)?.snoozedUntil} />
           ))}
         </div>
       )}
+      </>}
     </PageShell>
   );
 }
