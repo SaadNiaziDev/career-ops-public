@@ -16,6 +16,7 @@ export function StatusSelect({ n, current, score }: { n: string; current: string
   async function onChange(next: string) {
     const prev = status;
     let overrideReason: string | undefined;
+    if (next === "Applied" && !window.confirm("Have you submitted the application? Marking Applied records a submission that has already happened.")) return;
     const scoreValue = Number.parseFloat(String(score ?? "").replace(/[^\d.\-]/g, ""));
     if (next === "Applied" && Number.isFinite(scoreValue) && scoreValue < 4) {
       overrideReason = window.prompt("This role scored below 4.0. Why do you want to apply anyway?")?.trim();
@@ -28,7 +29,7 @@ export function StatusSelect({ n, current, score }: { n: string; current: string
       const res = await fetch("/api/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ n, status: next, overrideReason }),
+        body: JSON.stringify({ n, status: next, overrideReason, confirmedSubmission: next === "Applied" }),
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(result.error || "Status update failed. Please retry.");

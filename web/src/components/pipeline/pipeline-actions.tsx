@@ -150,19 +150,26 @@ export function PipelineActions({
     );
   };
 
-  const actions = (
+  const applyControl = <ApplyButton n={n} url={url?.startsWith("http") ? url : undefined} company={company} pdfReady={pdfReady} status={status} rail={rail} />;
+  const actions = rail ? (
     <>
       {showInterview ? (
-        <Link href={`/pipeline/${n}/interview`} className={cn("md3-btn-outlined flex w-full items-center justify-center gap-2", rail && "w-full")}>
-          <MaterialSymbol name="psychology" size={18} />
-          Interview workspace
+        <Link href={`/pipeline/${n}/interview`} className="md3-btn-outlined flex w-full items-center justify-center gap-2">
+          <MaterialSymbol name="psychology" size={18} />Interview workspace
         </Link>
-      ) : null}
-      <GeneratePdfButton n={n} company={company} pdfReady={pdfReady} rail={rail} />
-      {actionBtn("cover")}
+      ) : ["APPLIED", "RESPONDED"].includes(canonStatus(status ?? "")) ? applyControl : (
+        <section aria-label="Application preparation checklist" className="space-y-3 rounded-xl border border-[var(--md-sys-color-outline-variant)] p-3">
+          <h2 className="md-title-small">Prepare your application</h2>
+          <ol className="space-y-3 text-sm">
+            <li><p className="mb-1 font-medium">1. Tailored CV {pdfReady ? "· ready" : "· needed"}</p><GeneratePdfButton n={n} company={company} pdfReady={pdfReady} rail /></li>
+            <li><p className="mb-1 font-medium">2. Optional cover letter draft</p>{actionBtn("cover")}</li>
+            <li><p className="mb-1 font-medium">3. Review the application form</p>{applyControl}</li>
+            <li className="text-xs text-[var(--md-sys-color-on-surface-variant)]">4. Submit on the company site. Then confirm Applied in the Decision panel; career-ops will ask you to confirm the submission.</li>
+          </ol>
+        </section>
+      )}
       {actionBtn("email")}
       {actionBtn("contacto")}
-      <ApplyButton n={n} url={url?.startsWith("http") ? url : undefined} company={company} pdfReady={pdfReady} status={status} rail={rail} />
       {available.length > 0 && (
         <Button variant="text" size="sm" className={cn(rail && "w-full")} onClick={() => void openDraft(available[0])}>
           <MaterialSymbol name="visibility" size={18} />
@@ -170,6 +177,12 @@ export function PipelineActions({
         </Button>
       )}
       {!rail && <CostBadge kind="spend" size="xs" />}
+    </>
+  ) : (
+    <>
+      {showInterview && <Link href={`/pipeline/${n}/interview`} className="md3-btn-outlined flex items-center justify-center gap-2"><MaterialSymbol name="psychology" size={18} />Interview workspace</Link>}
+      <GeneratePdfButton n={n} company={company} pdfReady={pdfReady} />
+      {actionBtn("cover")}{actionBtn("email")}{actionBtn("contacto")}{applyControl}
     </>
   );
 
