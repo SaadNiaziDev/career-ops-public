@@ -11,7 +11,7 @@ export type RoundAudience = "recruiter-screen" | "hiring-manager" | "peer-tech" 
 
 export type RoundStatus = "planned" | "scheduled" | "done" | "cancelled";
 
-export type RoundOutcome = "pending" | "advanced" | "rejected";
+export type RoundOutcome = "pending" | "advanced" | "rejected" | "offer";
 
 export type QuestionProvenance =
   | "asked"

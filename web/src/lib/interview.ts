@@ -32,7 +32,7 @@ const ROUNDS_HEADER =
   "tracker#\tround_no\ttype\taudience\tstatus\tscheduled_at\tduration_min\tinterviewers\tformat\tsession_file\toutcome\tnotes";
 
 const ROUND_STATUSES = new Set<RoundStatus>(["planned", "scheduled", "done", "cancelled"]);
-const ROUND_OUTCOMES = new Set<RoundOutcome>(["pending", "advanced", "rejected"]);
+const ROUND_OUTCOMES = new Set<RoundOutcome>(["pending", "advanced", "rejected", "offer"]);
 const AUDIENCES = new Set<RoundAudience>([
   "recruiter-screen",
   "hiring-manager",
@@ -40,8 +40,8 @@ const AUDIENCES = new Set<RoundAudience>([
   "panel-mixed",
 ]);
 
-function tsvCell(value: string): string {
-  return value.replace(/[\t\r\n]+/g, " ").trim();
+function tsvCell(value: string | undefined): string {
+  return (value ?? "").replace(/[\t\r\n]+/g, " ").trim();
 }
 
 function interviewPrepDir(): string {
@@ -374,9 +374,10 @@ export type RoundPatch = Partial<Omit<InterviewRound, "source">> & { roundNo: nu
 export function upsertRound(trackerNum: string, patch: RoundPatch): InterviewRound[] {
   const current = readInterviewRounds(trackerNum);
   const idx = current.findIndex((r) => r.roundNo === patch.roundNo);
+  const definedPatch = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) as Partial<InterviewRound>;
   const base: InterviewRound =
     idx >= 0
-      ? { ...current[idx], ...patch, source: "ledger" }
+      ? { ...current[idx], ...definedPatch, source: "ledger" }
       : {
           roundNo: patch.roundNo,
           type: patch.type ?? "screen",
