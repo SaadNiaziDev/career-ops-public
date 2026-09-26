@@ -39,9 +39,54 @@ function htmlText(input: string): string {
     .replace(/\s+/g, " ").trim().slice(0, 40_000);
 }
 
+function fullStackJobText(input: string): string {
+  const posting = JSON.parse(input) as {
+    jobTitle?: unknown;
+    region?: unknown;
+    linkedInWorkplaceType?: unknown;
+    linkedInJobType?: unknown;
+    sections?: Array<{ title?: unknown; body?: unknown }>;
+  };
+  const parts = [posting.jobTitle, posting.region, posting.linkedInWorkplaceType, posting.linkedInJobType]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  for (const section of posting.sections ?? []) {
+    const title = typeof section.title === "string" ? section.title.trim() : "";
+    const body = typeof section.body === "string" ? htmlText(section.body) : "";
+    if (body) parts.push(title ? `${title}: ${body}` : body);
+  }
+  return parts.join("\n\n").slice(0, 40_000);
+}
+
+/** FullStack's public job pages load a multi-megabyte SPA; its public API is fast and includes the posting sections. */
+async function fetchFullStackPosting(url: string): Promise<string | undefined> {
+  const page = new URL(url);
+  if (page.hostname !== "talent.fullstack.com") return undefined;
+  const match = page.pathname.match(/^\/jobs\/([0-9a-f-]{36})\/?$/i);
+  if (!match) return undefined;
+  const response = await fetchPublicUrl(
+    `https://api-v1.fullstack.com/api/job-postings/${match[1]}`,
+    { headers: { "user-agent": "Career-Ops local job evaluator", accept: "application/json" } },
+    { maxBytes: 1_500_000, timeoutMs: 12_000, maxRedirects: 2 },
+  );
+  if (!response.ok) return undefined;
+  const data = await response.text();
+  const posting = JSON.parse(data) as { isPublished?: unknown; statusName?: unknown };
+  if (posting.isPublished === false || posting.statusName === "Unpublished") throw new Error("This posting is no longer available.");
+  const content = fullStackJobText(data);
+  if (content.length < 100) return undefined;
+  return content;
+}
+
 /** Fetch static pages cheaply; render empty JS shells outside the AI worker. */
 export async function fetchPostingContent(url: string): Promise<string> {
   let fetchError = "";
+  try {
+    const content = await fetchFullStackPosting(url);
+    if (content) return content;
+  } catch (error) {
+    if (error instanceof Error && error.message === "This posting is no longer available.") throw error;
+    /* Use the ordinary page and browser fallback if the provider API is unavailable. */
+  }
   try {
     const response = await fetchPublicUrl(url, {headers: {"user-agent": "Career-Ops local job evaluator"}}, {maxBytes: 1_500_000, timeoutMs: 12_000, maxRedirects: 4});
     if ([404, 410].includes(response.status)) throw new Error(`Posting fetch returned HTTP ${response.status}.`);
