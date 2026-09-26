@@ -44,6 +44,10 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
   const { added, adding, addToPipeline } = useExplore();
   const { jobs, startJob } = useJobs();
   const { applications } = usePipeline();
+  const [checking, setChecking] = useState(false);
+  const [verification, setVerification] = useState(offer.verification);
+  const [verifyMessage, setVerifyMessage] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
 
   const job = useMemo(
     () => jobs.filter((j) => j.input === offer.url).sort((a, b) => b.startedAt - a.startedAt)[0],
@@ -60,9 +64,21 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
   const unverified = offer.verification === "unconfirmed";
   const fresh = freshness(offer.postedAt) || offer.postedHint || "";
 
-  const evaluate = () => {
-    addToPipeline([offer]);
-    startJob({ title: `Evaluate · ${offer.company}`, subtitle: offer.title, kind: "evaluate", input: offer.url, page: "/explore" });
+  const evaluate = async () => {
+    if (offer.kind === "hiring-signal") return;
+    setChecking(true); setVerifyMessage("");
+    try {
+      const response = await fetch("/api/explore/liveness", {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({urls:[offer.url]})});
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not verify this posting.");
+      const hit = result.results?.[0];
+      if (hit?.result === "expired") { setVerification("unconfirmed"); setVerifyMessage("This posting appears to be closed. Reopen it to confirm the source."); return; }
+      if (hit?.result !== "active" && !confirmed) { setVerification("unconfirmed"); setVerifyMessage("The posting could not be confirmed automatically. Open it, confirm it is accepting applications, then check the box below."); return; }
+      const next = startJob({ title: `Evaluate · ${offer.company}`, subtitle: offer.title, kind: "evaluate", input: offer.url, page: "/explore" });
+      if (!next) { setVerifyMessage("Evaluation could not start. Check your AI engine in Config."); return; }
+      await addToPipeline([offer]);
+    } catch (error) { setVerifyMessage(error instanceof Error ? error.message : "Could not verify this posting."); }
+    finally { setChecking(false); }
   };
 
   return (
@@ -100,11 +116,16 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
           {ATS_LABEL[offer.ats as AtsSource] ?? offer.ats}
         </span>
         {fresh && <span className="font-mono text-[var(--md-sys-color-outline)]">{fresh}</span>}
+        {offer.kind === "hiring-signal" ? <span className="rounded-[var(--md-sys-shape-corner-small)] bg-[var(--md-sys-color-tertiary-container)] px-2 py-0.5 font-medium">Hiring signal · not a vacancy</span> : null}
+        {offer.confidence && <span>Confidence: {offer.confidence}</span>}
         {unverified && (
           <span className="inline-flex items-center gap-1 rounded-[var(--md-sys-shape-corner-small)] bg-[var(--md-sys-color-tertiary-container)] px-2 py-0.5 font-medium text-[var(--md-sys-color-on-tertiary-container)]">
             unverified
           </span>
         )}
+        {offer.discoveredFrom && <span>Source: {offer.discoveredFrom}</span>}
+        {offer.discoveredAt && <span>Discovered {new Date(offer.discoveredAt).toLocaleDateString()}</span>}
+        {offer.liveness && <span>Link: {offer.liveness === "active" ? "reachable" : offer.liveness === "expired" ? "closed" : "unconfirmed"}</span>}
       </div>
 
       {offer.why && (
@@ -125,7 +146,9 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
       )}
 
       <div className="mt-4 md3-actions-row">
-        {evaluatedN || doneEval ? (
+        {offer.kind === "hiring-signal" ? (
+          <a href={offer.url} target="_blank" rel="noopener noreferrer" className="md3-btn-outlined min-h-11 w-full"><MaterialSymbol name="open_in_new" size={18}/>Open public hiring signal</a>
+        ) : evaluatedN || doneEval ? (
           <a href={reportHref} className="md3-btn-filled w-full min-h-11">
             <MaterialSymbol name="check" size={18} /> Evaluated · view report
           </a>
@@ -151,11 +174,12 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
               {isAdded ? "In pipeline" : "Add to pipeline"}
             </Md3ActionButton>
             <Md3ActionButton variant="outlined" icon="bolt" cost="spend" onClick={evaluate} className="flex-1">
-              Evaluate
+              {checking ? "Checking posting…" : "Verify & evaluate"}
             </Md3ActionButton>
           </>
         )}
       </div>
+      {verifyMessage && <div className="mt-3 space-y-2"><p role="status" className="text-sm">{verifyMessage}</p>{verifyMessage.includes("confirm it is accepting")&&<><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I opened this vacancy and confirmed it is accepting applications.</label><button type="button" disabled={!confirmed||checking} onClick={()=>void evaluate()} className="md3-btn-filled min-h-10">Evaluate confirmed posting</button></>}</div>}
     </article>
   );
 }

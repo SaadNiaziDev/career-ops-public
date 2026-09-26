@@ -84,6 +84,7 @@ type ExploreCtx = {
    *  when this matches its own mode, so Scan never displays AI hits (or vice versa). */
   resultsMode: ExploreMode;
   aiIntent: string;
+  settledAiIntent: string;
   setAiIntent: (s: string) => void;
   /** Optional intent override — use when starting from a URL before state flushes. */
   discoverAI: (intentOverride?: string) => Promise<void>;
@@ -165,6 +166,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<ExploreMode>("scan");
   const [resultsMode, setResultsMode] = useState<ExploreMode>("scan");
   const [aiIntent, setAiIntentState] = useState("");
+  const [settledAiIntent, setSettledAiIntent] = useState("");
   const [aiTrace, setAiTrace] = useState<AiTraceChunk[]>([]);
   const [aiCost, setAiCost] = useState<AiCost>({ searches: 0, candidates: 0, fetches: 0 });
   const runningRef = useRef(false);
@@ -424,6 +426,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   const discoverAI = useCallback(async (intentOverride?: string) => {
     const intent = (intentOverride ?? aiIntentRef.current).trim();
     if (!intent) return;
+    setSettledAiIntent("");
     // Keep ref + state in lockstep when launched from a URL before React re-renders.
     aiIntentRef.current = intent;
     setAiIntentState(intent);
@@ -567,6 +570,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
           acc.push({
             ...offer,
             verification: hit?.result === "active" ? "live" : "unconfirmed",
+            liveness: hit?.result === "active" || hit?.result === "expired" ? hit.result : "uncertain",
           });
         }
       } catch {
@@ -581,6 +585,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
 
     if (!isCurrent()) return;
     endRun(runId);
+    setSettledAiIntent(intent);
     if (acc.length > 0) {
       setMatchCount(acc.length);
       setPhase("revealing");
@@ -637,6 +642,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       nextPhase = snap.offers.length ? "results" : "idle";
     }
     setPhase(nextPhase);
+    if (snap.mode === "ai" && SETTLED.has(nextPhase)) setSettledAiIntent(snap.aiIntent || "");
   }, [setAiIntent]);
 
   // Provider stays mounted across the app shell — so a NEW /explore?mode=ai&intent=…
@@ -723,9 +729,9 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       running: phase === "casting" || phase === "scanning" || phase === "revealing" || phase === "hunting",
       offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding,
       discover, addToPipeline, applyPatch, reset,
-      mode, setMode, resultsMode, aiIntent, setAiIntent, discoverAI, aiTrace, aiCost,
+      mode, setMode, resultsMode, aiIntent, settledAiIntent, setAiIntent, discoverAI, aiTrace, aiCost,
     }),
-    [filters, setFilters, initFilters, phase, offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, discover, addToPipeline, applyPatch, reset, mode, setMode, resultsMode, aiIntent, setAiIntent, discoverAI, aiTrace, aiCost],
+    [filters, setFilters, initFilters, phase, offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, discover, addToPipeline, applyPatch, reset, mode, setMode, resultsMode, aiIntent, settledAiIntent, setAiIntent, discoverAI, aiTrace, aiCost],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

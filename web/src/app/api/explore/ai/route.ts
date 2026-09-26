@@ -26,8 +26,11 @@ const OUTPUT_CONTRACT = `
 --- OUTPUT CONTRACT (the career-ops WEB is parsing your stream) ---
 Follow modes/discover.md exactly. You are running headless for the web:
 - You are a PROPOSER — never write a file (Write/Edit/Bash are disabled).
+- Ordinary web search is allowed for public job postings and publicly indexed company/recruiter hiring posts. Never scrape LinkedIn, log in, or automate authenticated browsing.
+- Classify direct job detail pages as kind=vacancy. Classify public hiring announcements without a direct, verified job detail as kind=hiring-signal; they are leads only, never job vacancies.
+- Include a public source label and a discovery time is added by the UI. Include postedAt only when a precise date is visible; otherwise use postedHint or unknown.
 - Emit each candidate as ONE line, never inside a code fence:
-  <<offer:{"url":"…","title":"…","company":"…","location":"…","source":"ai-search","why":"…","postedHint":"…","ats":"…","verification":"unconfirmed"}>>
+  <<offer:{"url":"…","title":"…","company":"…","location":"…","source":"ai-search","why":"…","postedHint":"…","ats":"…","verification":"unconfirmed","kind":"vacancy|hiring-signal","discoveredFrom":"public source name","postedAt":"YYYY-MM-DD when reliably visible"}>>
   Valid JSON, one per line, the moment you're confident — stream them as you go.
 - Between envelopes, narrate briefly (plain text) what you're searching — shown live as your reasoning.
 - Be frugal (~3–6 searches, stop at a strong set). Prefer direct ATS URLs over aggregator mirrors. EVERY envelope starts as UNVERIFIED — the web UI then liveness-checks and drops expired links before showing them.

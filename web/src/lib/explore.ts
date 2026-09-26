@@ -95,6 +95,12 @@ export type DiscoveredOffer = {
   /** human freshness ("~5d ago", "unknown") shown when postedAt is "" */
   postedHint?: string;
   confidence?: "low" | "medium" | "high";
+  kind?: "vacancy" | "hiring-signal";
+  discoveredAt?: string;
+  /** Search engine or site that surfaced this result; never implies verification. */
+  discoveredFrom?: string;
+  /** URL liveness at search time (distinct from vacancy verification). */
+  liveness?: "active" | "expired" | "uncertain";
 };
 
 /** The two discovery surfaces: free deterministic Scan vs token-spending AI search. */

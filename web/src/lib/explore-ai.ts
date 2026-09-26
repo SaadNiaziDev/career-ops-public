@@ -28,21 +28,27 @@ function toOffer(raw: unknown): DiscoveredOffer | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const url = typeof o.url === "string" ? o.url.trim() : "";
-  if (!/^https?:\/\//i.test(url)) return null;
+  if (!/^https:\/\//i.test(url)) return null;
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
   const conf = o.confidence;
+  let hostname = "";
+  try { hostname = new URL(url).hostname; } catch { return null; }
+  const kind = o.kind === "hiring-signal" || (!o.kind && /(^|\.)((linkedin|x|twitter|reddit)\.com)$/.test(hostname)) ? "hiring-signal" : "vacancy";
   return {
     url,
     company: str(o.company),
     title: str(o.title),
     location: str(o.location),
-    postedAt: "", // AI gives only a human postedHint, never a trustworthy date
+    postedAt: /^\d{4}-\d{2}-\d{2}$/.test(str(o.postedAt)) ? str(o.postedAt) : "",
     ats: str(o.ats) || "other",
     source: "ai-search",
     verification: "unconfirmed",
     why: str(o.why) || undefined,
     postedHint: str(o.postedHint) || undefined,
-    confidence: conf === "low" || conf === "medium" || conf === "high" ? conf : undefined,
+    confidence: kind === "hiring-signal" ? "low" : conf === "low" || conf === "medium" || conf === "high" ? conf : "low",
+    kind,
+    discoveredAt: new Date().toISOString(),
+    discoveredFrom: str(o.discoveredFrom) || "Public web search",
   };
 }
 
