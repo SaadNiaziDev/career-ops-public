@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 const ROUND_TYPES = new Set<RoundType>(["screen", "hiring-manager", "technical", "system-design", "behavioral", "onsite", "final"]);
 const AUDIENCES = new Set<RoundAudience>(["recruiter-screen", "hiring-manager", "peer-tech", "panel-mixed"]);
 const STATUSES = new Set<RoundStatus>(["planned", "scheduled", "done", "cancelled"]);
-const OUTCOMES = new Set<RoundOutcome>(["pending", "advanced", "rejected"]);
+const OUTCOMES = new Set<RoundOutcome>(["pending", "advanced", "rejected", "offer"]);
 
 type Body =
   | { action: "upsert"; trackerNum: string; round: Record<string, unknown> }

@@ -22,6 +22,7 @@ import {
   PROVENANCE_LABEL,
   PROV_ORDER,
   ROUND_TYPE_OPTIONS,
+  audienceForType,
   extractAudiencePack,
   extractRoundSection,
   questionsForRound,
@@ -101,7 +102,11 @@ function formatWhen(iso: string): string {
 }
 
 function defaultRoundNo(rounds: InterviewRound[]): number {
-  const next = rounds.find((r) => r.status === "scheduled") ?? rounds.find((r) => r.status === "planned");
+  const scheduled = rounds.filter((round) => round.status === "scheduled");
+  const now = Date.now();
+  const next = scheduled.filter((round) => Date.parse(round.scheduledAt) >= now).sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt))[0]
+    ?? scheduled.filter((round) => Date.parse(round.scheduledAt) < now).sort((a, b) => Date.parse(b.scheduledAt) - Date.parse(a.scheduledAt))[0]
+    ?? rounds.find((round) => round.status === "planned");
   return next?.roundNo ?? rounds[0]?.roundNo ?? 1;
 }
 
@@ -128,6 +133,18 @@ export function InterviewWorkspace({ id, initial }: { id: string; initial: Inter
   const [debriefNotes, setDebriefNotes] = useState("");
   const [debriefOutcome, setDebriefOutcome] = useState("pending");
   const [debriefNext, setDebriefNext] = useState("");
+  const [debriefCommitments, setDebriefCommitments] = useState("");
+  const [debriefCompensation, setDebriefCompensation] = useState("");
+  const [debriefConcerns, setDebriefConcerns] = useState("");
+  const [debriefFollowUp, setDebriefFollowUp] = useState("");
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickDate, setQuickDate] = useState("");
+  const [quickType, setQuickType] = useState<InterviewRound["type"]>("screen");
+  const [quickPeople, setQuickPeople] = useState("");
+  const [quickFormat, setQuickFormat] = useState("");
+  const [quickFocus, setQuickFocus] = useState("");
+  const [savingDebrief, setSavingDebrief] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const [editOpen, setEditOpen] = useState(false);
   const editDialogRef = useRef<HTMLElement>(null);
@@ -168,8 +185,27 @@ export function InterviewWorkspace({ id, initial }: { id: string; initial: Inter
     return () => window.removeEventListener("co-job-done", onDone);
   }, [reload]);
 
-  const progress = useMemo(() => roundProgress(bundle.rounds), [bundle.rounds]);
+  const progress = useMemo(() => {
+    const summary = roundProgress(bundle.rounds);
+    const scheduled = bundle.rounds.filter((round) => round.status === "scheduled" && Number.isFinite(Date.parse(round.scheduledAt)));
+    const time = now ?? Date.now();
+    const next = scheduled.filter((round) => Date.parse(round.scheduledAt) >= time).sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt))[0]
+      ?? scheduled.filter((round) => Date.parse(round.scheduledAt) < time).sort((a, b) => Date.parse(b.scheduledAt) - Date.parse(a.scheduledAt))[0]
+      ?? bundle.rounds.find((round) => round.status === "planned")
+      ?? null;
+    return { ...summary, next };
+  }, [bundle.rounds, now]);
+  const overdueRound = useMemo(() => bundle.rounds
+    .filter((round) => round.status === "scheduled" && Date.parse(round.scheduledAt) < (now ?? Date.now()))
+    .sort((a, b) => Date.parse(b.scheduledAt) - Date.parse(a.scheduledAt))[0] ?? null, [bundle.rounds, now]);
   const activeRound = bundle.rounds.find((r) => r.roundNo === selectedRound) ?? null;
+  const lastNextRound = useRef(progress.next?.roundNo);
+  useEffect(() => {
+    if (lastNextRound.current !== progress.next?.roundNo) {
+      lastNextRound.current = progress.next?.roundNo;
+      if (progress.next) setSelectedRound(progress.next.roundNo);
+    }
+  }, [progress.next?.roundNo]);
   const roundQuestions = useMemo(
     () => (activeRound ? questionsForRound(bundle.questions, activeRound) : []),
     [activeRound, bundle.questions],
@@ -224,6 +260,66 @@ export function InterviewWorkspace({ id, initial }: { id: string; initial: Inter
     }
     setEditOpen(false);
     reload();
+  };
+
+  const addNextEvent = async () => {
+    const roundNo = Math.max(0, ...bundle.rounds.map((round) => round.roundNo)) + 1;
+    try {
+      const res = await fetch("/api/interview/rounds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "upsert", trackerNum: id, round: {
+          roundNo, type: quickType, audience: audienceForType(quickType), status: quickDate ? "scheduled" : "planned", scheduledAt: quickDate,
+          interviewers: quickPeople, format: quickFormat, notes: quickFocus,
+        } }),
+      });
+      if (!res.ok) { flash("Could not save interview"); return; }
+      setQuickAddOpen(false);
+      setSelectedRound(roundNo);
+      reload();
+    } catch { flash("Could not save interview"); }
+  };
+
+  const savePrimaryDebrief = async () => {
+    if (!activeRound) return;
+    setSavingDebrief(true);
+    try {
+      const outcome = debriefOutcome as InterviewRound["outcome"];
+      const res = await fetch("/api/interview/rounds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "upsert", trackerNum: id, round: {
+          ...activeRound, status: "done", outcome,
+        } }),
+      });
+      if (!res.ok) { flash("Could not save interview outcome"); return; }
+      const questionsAsked = [
+        debriefNotes && `What happened: ${debriefNotes}`,
+        debriefCommitments && `Commitments made: ${debriefCommitments}`,
+        debriefCompensation && `Compensation discussed: ${debriefCompensation}`,
+        debriefConcerns && `Concerns: ${debriefConcerns}`,
+        debriefFollowUp && `Follow-up: ${debriefFollowUp}`,
+      ].filter(Boolean).join("\n");
+      const pipelineStatus = outcome === "offer" ? "Offer" : outcome === "rejected" ? "Rejected" : "";
+      let statusUpdateWarning = "";
+      if (pipelineStatus) {
+        try {
+          const statusResponse = await fetch("/api/status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ n: id, status: pipelineStatus }),
+          });
+          if (!statusResponse.ok) statusUpdateWarning = `Debrief saved, but pipeline status could not be changed to ${pipelineStatus}.`;
+        } catch { statusUpdateWarning = `Debrief saved, but pipeline status could not be changed to ${pipelineStatus}.`; }
+      }
+      run("interview-debrief", `Debrief · R${activeRound.roundNo}`, {
+        round: activeRound.roundNo, roundType: activeRound.type, questionsAsked,
+        outcome, nextRound: [debriefNext, debriefFollowUp].filter(Boolean).join(" — "),
+      });
+      if (statusUpdateWarning) flash(statusUpdateWarning);
+      reload();
+    } catch { flash("Could not save debrief"); }
+    finally { setSavingDebrief(false); }
   };
 
   const importRounds = async () => {
@@ -291,28 +387,64 @@ export function InterviewWorkspace({ id, initial }: { id: string; initial: Inter
             ))}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {!bundle.prepContent ? (
-            <Button onClick={() => run("interview-prep", `Interview prep · ${bundle.company}`)} disabled={runningInterview}>
-              <MaterialSymbol name="psychology" size={18} />
-              Generate prep
-            </Button>
-          ) : (
-            <Button variant="outline" onClick={() => run("interview-prep", `Refresh prep · ${bundle.company}`)} disabled={runningInterview}>
-              <MaterialSymbol name="refresh" size={18} />
-              Refresh prep
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => run("interview-questions", `Mine questions · ${bundle.company}`, { scope: "mine" })} disabled={runningInterview}>
-            <MaterialSymbol name="search" size={18} />
-            Mine questions
-          </Button>
-        </div>
       </header>
 
       {notice ? (
         <p className="md3-alert md3-alert--info mb-4">{notice}</p>
       ) : null}
+
+      <section className="mb-6 space-y-4" aria-labelledby="next-interview-title">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--md-sys-color-primary)]">Next interview</p>
+            <h2 id="next-interview-title" className="md-title-large">{progress.next ? `Round ${progress.next.roundNo} · ${ROUND_TYPE_OPTIONS.find((option) => option.value === progress.next?.type)?.label ?? progress.next.type}` : "No interview scheduled"}</h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {progress.next && <Button disabled={runningInterview} onClick={() => run(bundle.prepContent ? "interview-plan" : "interview-prep", `15-minute prep · ${bundle.company}`, { round: progress.next?.roundNo, roundType: progress.next?.type, audience: progress.next?.audience, scheduledAt: progress.next?.scheduledAt, interviewers: progress.next?.interviewers })}><MaterialSymbol name="psychology" size={18} />{bundle.prepContent ? "Refresh 15-minute prep" : "Build 15-minute prep"}</Button>}
+            <Button variant="outline" onClick={() => setQuickAddOpen((open) => !open)}><MaterialSymbol name="add" size={18} />{quickAddOpen ? "Cancel" : "Add interview"}</Button>
+          </div>
+        </div>
+
+        {quickAddOpen && <Md3Card title="Schedule an interview">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Md3Select aria-label="Interview stage" value={quickType} onChange={(value) => setQuickType(value as InterviewRound["type"])} options={ROUND_TYPE_OPTIONS} />
+            <Md3Input aria-label="Date and time" type="datetime-local" value={quickDate} onChange={(event) => setQuickDate(event.target.value)} />
+            <Md3Input aria-label="Interviewers" placeholder="People, if known" value={quickPeople} onChange={(event) => setQuickPeople(event.target.value)} />
+            <Md3Input aria-label="Interview format" placeholder="Format or meeting link" value={quickFormat} onChange={(event) => setQuickFormat(event.target.value)} />
+            <Md3Input aria-label="Focus areas" placeholder="Three focus areas, if known" value={quickFocus} onChange={(event) => setQuickFocus(event.target.value)} className="sm:col-span-2" />
+          </div>
+          <Button className="mt-3" onClick={() => void addNextEvent()}><MaterialSymbol name="save" size={18} />Save interview</Button>
+        </Md3Card>}
+
+        {progress.next ? <>
+          <Md3Card title="Prepare in 15 minutes" extra={<Badge tone={progress.next.status === "scheduled" ? "warn" : "muted"}>{progress.next.scheduledAt ? formatWhen(progress.next.scheduledAt) : statusLabel(progress.next.status)}</Badge>}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <p className="text-sm"><strong>People:</strong> {progress.next.interviewers || "Not confirmed"}</p>
+              <p className="text-sm"><strong>Format:</strong> {progress.next.format || "Not confirmed"}</p>
+              <p className="text-sm sm:col-span-2"><strong>Focus:</strong> {progress.next.notes || "Review the role requirements, prepare one relevant project story, and clarify success expectations."}</p>
+            </div>
+            {bundle.prepContent && <article className="report-prose-compact mt-4 max-h-72 overflow-auto border-t border-[var(--md-sys-color-outline-variant)] pt-3"><ReactMarkdown remarkPlugins={[remarkGfm]}>{briefMd || bundle.prepContent.slice(0, 5000)}</ReactMarkdown></article>}
+            {roundQuestions.slice(0, 3).length > 0 && <div className="mt-4"><h3 className="md-title-small">Likely questions</h3><ul className="mt-2 list-inside list-disc space-y-1 text-sm">{roundQuestions.slice(0, 3).map((question) => <li key={question.num}>{question.question}</li>)}</ul></div>}
+          </Md3Card>
+          {overdueRound && <p role="status" className="md3-alert md3-alert--warning">Round {overdueRound.roundNo} has passed. <button type="button" className="underline" onClick={() => { setSelectedRound(overdueRound.roundNo); setGlobalTab(null); }}>Record its outcome and next step</button>.</p>}
+          <Md3Card title={activeRound ? `After Round ${activeRound.roundNo}` : "After the interview"}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Md3Textarea aria-label="Interview debrief" placeholder="What happened? Questions, signals, and how your answers landed." value={debriefNotes} onChange={(event) => setDebriefNotes(event.target.value)} />
+              <div className="space-y-3">
+                <Md3Select aria-label="Outcome" value={debriefOutcome} onChange={setDebriefOutcome} options={[{ value: "pending", label: "Outcome pending" }, { value: "advanced", label: "Advanced" }, { value: "offer", label: "Offer received" }, { value: "rejected", label: "Rejected" }]} />
+                <Md3Input aria-label="Commitments made" placeholder="Promises or commitments made" value={debriefCommitments} onChange={(event) => setDebriefCommitments(event.target.value)} />
+                <Md3Input aria-label="Compensation discussed" placeholder="Compensation discussed" value={debriefCompensation} onChange={(event) => setDebriefCompensation(event.target.value)} />
+                <Md3Input aria-label="Concerns" placeholder="Concerns or open questions" value={debriefConcerns} onChange={(event) => setDebriefConcerns(event.target.value)} />
+                <Md3Input aria-label="Next round and follow-up" placeholder="Next date or follow-up" value={debriefFollowUp} onChange={(event) => setDebriefFollowUp(event.target.value)} />
+                <Md3Input aria-label="Next round details" placeholder="Next stage details, if known" value={debriefNext} onChange={(event) => setDebriefNext(event.target.value)} />
+              </div>
+            </div>
+            <Button className="mt-3" disabled={savingDebrief || runningInterview || ![debriefNotes, debriefCommitments, debriefCompensation, debriefConcerns, debriefFollowUp].some((value) => value.trim())} onClick={() => void savePrimaryDebrief()}><MaterialSymbol name="save" size={18} />{savingDebrief ? "Saving…" : "Save debrief"}</Button>
+          </Md3Card>
+        </> : <Md3Card title="Add your next interview"><p className="mb-3 text-sm text-[var(--md-sys-color-on-surface-variant)]">Add a stage, time, and any details you have. You can fill in the rest later.</p><Button onClick={() => setQuickAddOpen(true)}><MaterialSymbol name="add" size={18} />Add interview details</Button></Md3Card>}
+
+        <details open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)} className="rounded-[var(--md-sys-shape-corner-large)] border border-[var(--md-sys-color-outline-variant)] p-4">
+          <summary className="cursor-pointer font-medium">Advanced interview tools</summary>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="rounded-[var(--md-sys-shape-corner-large)] border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] p-3">
@@ -586,6 +718,7 @@ export function InterviewWorkspace({ id, initial }: { id: string; initial: Inter
                       options={[
                         { value: "pending", label: "Pending" },
                         { value: "advanced", label: "Advanced" },
+                        { value: "offer", label: "Offer received" },
                         { value: "rejected", label: "Rejected" },
                       ]}
                     />
@@ -614,6 +747,9 @@ export function InterviewWorkspace({ id, initial }: { id: string; initial: Inter
           )}
         </main>
       </div>
+
+        </details>
+      </section>
 
       {editOpen ? (
         <>
@@ -668,6 +804,7 @@ export function InterviewWorkspace({ id, initial }: { id: string; initial: Inter
                 options={[
                   { value: "pending", label: "Outcome pending" },
                   { value: "advanced", label: "Advanced" },
+                  { value: "offer", label: "Offer received" },
                   { value: "rejected", label: "Rejected" },
                 ]}
               />

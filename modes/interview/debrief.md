@@ -16,7 +16,7 @@ After a real interview, capture what was asked, assess what landed and what didn
 
 1. **Interview debrief from candidate** — what questions were asked, how they answered, what felt strong or weak
 2. **Interviewer name and role** — informs next round prediction
-3. **Round outcome** (if known) — moved forward / rejected / pending
+3. **Round outcome** (if known) — moved forward / offer received / rejected / pending
 4. **Next round details** (if known) — format, interviewers, timeline
 5. **Question bank** at `interview-prep/question-bank.md` — update with real data
 6. **Story bank** at `interview-prep/story-bank.md` — add new stories if surfaced
