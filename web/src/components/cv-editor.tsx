@@ -13,6 +13,7 @@ import { FullPreviewOverlay } from "@/components/cv/full-preview-overlay";
 import { CvIngest } from "@/components/cv/cv-ingest";
 import { assessFit, type CvStyleLike } from "@/lib/cv/fit";
 import { DEFAULT_PAGE_FORMAT, pageBox, type CvPageFormat } from "@/lib/cv/page";
+import { TailoredCvLibrary } from "@/components/cv/tailored-cv-library";
 import { cn } from "@/lib/cn";
 
 type CvStyle = {
@@ -32,8 +33,6 @@ type CvSettings = {
 };
 
 type CvSourceEntry = { path: string; label: string; exists: boolean; mtime: number };
-
-type GeneratedCv = { file: string; label: string; mtime: number; pdf: boolean };
 
 type ViewMode = "edit" | "split" | "preview";
 
@@ -72,6 +71,7 @@ function sameStyle(a: CvStyle, b: CvStyle): boolean {
 type FitUndo = { style: CvStyle } | null;
 
 export function CvEditor() {
+  const [section, setSection] = useState<"master" | "tailored">("master");
   const [content, setContent] = useState("");
   const [baseline, setBaseline] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -103,11 +103,6 @@ export function CvEditor() {
   const [previewScale, setPreviewScale] = useState(1);
   const [previewDocHeight, setPreviewDocHeight] = useState(0);
   const [fullPreview, setFullPreview] = useState(false);
-  // A finished, tailored render from output/ — shown instead of the live
-  // preview so you can look at a real one-page CV, not the whole of cv.md.
-  const [generated, setGenerated] = useState<GeneratedCv[]>([]);
-  const [shownGenerated, setShownGenerated] = useState("");
-  const [generatedHtml, setGeneratedHtml] = useState("");
   const [fitUndo, setFitUndo] = useState<FitUndo>(null);
   const [baseMarkdown, setBaseMarkdown] = useState("");
 
@@ -148,8 +143,9 @@ export function CvEditor() {
 
   // ── data ────────────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (new URLSearchParams(location.search).get("report")) setSection("tailored");
     let alive = true;
-    Promise.all([fetch("/api/cv"), fetch("/api/cv/settings"), fetch("/api/cv/sources")])
+    Promise.all([fetch("/api/cv?source=cv.md"), fetch("/api/cv/settings"), fetch("/api/cv/sources")])
       .then(async ([cvRes, settingsRes, sourcesRes]) => {
         if (!alive) return;
         if (cvRes.ok) {
@@ -265,32 +261,6 @@ export function CvEditor() {
     return () => ro.disconnect();
   }, [view, loaded, previewHtml, box.width]);
 
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/cv/generated")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => alive && setGenerated(Array.isArray(d?.generated) ? d.generated : []))
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!shownGenerated) {
-      setGeneratedHtml("");
-      return;
-    }
-    let alive = true;
-    fetch(`/api/cv/generated?file=${encodeURIComponent(shownGenerated)}`)
-      .then((r) => (r.ok ? r.text() : ""))
-      .then((html) => alive && setGeneratedHtml(html))
-      .catch(() => alive && setGeneratedHtml(""));
-    return () => {
-      alive = false;
-    };
-  }, [shownGenerated]);
-
   // The base CV backs the tailoring diff (S08 · blueprint item 7). Only a
   // non-canonical source can be "tailored", so cv.md never diffs against itself.
   useEffect(() => {
@@ -360,7 +330,7 @@ export function CvEditor() {
     return () => window.removeEventListener("keydown", onKey);
   }, [dirty, save]);
 
-  /** Load a source into the editor and remember it as the active one in profile.yml. */
+  /** Browsing a source never changes the default used by workers. */
   async function loadSource(pathRel: string) {
     setSwitching(true);
     setError("");
@@ -376,15 +346,6 @@ export function CvEditor() {
       setBaseline(d.content ?? "");
       setExists(d.exists ?? false);
 
-      const persisted = await fetch("/api/cv/sources", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: pathRel }),
-      });
-      if (persisted.ok) {
-        const j = await persisted.json();
-        if (Array.isArray(j.sources)) setSources(j.sources);
-      }
       setSettings((prev) => (prev ? { ...prev, source: pathRel } : prev));
     } catch {
       setError("Couldn't switch CV source.");
@@ -470,10 +431,7 @@ export function CvEditor() {
 
   const showEditor = view !== "preview";
   const showPreview = view !== "edit";
-  // What the page pane actually shows: the live render of the buffer, or a
-  // finished tailored render picked from output/.
-  const viewingGenerated = !!shownGenerated && !!generatedHtml;
-  const pageHtml = viewingGenerated ? generatedHtml : previewHtml;
+  const pageHtml = previewHtml;
 
   if (loaded && !exists && !content.trim() && !forceEditor) {
     return (
@@ -488,7 +446,7 @@ export function CvEditor() {
           <CvIngest
             afterSave="stay"
             onSaved={() => {
-              fetch("/api/cv")
+              fetch("/api/cv?source=cv.md")
                 .then((r) => r.json())
                 .then((d: { content?: string; exists?: boolean }) => {
                   setContent(d.content ?? "");
@@ -514,9 +472,10 @@ export function CvEditor() {
           row, style card) collapses into one toolbar so the studio opens fully
           visible instead of asking for three scrolls. */}
       <header className="cv-studio__bar">
-        <span className="md-title-medium shrink-0">CV</span>
+        <Md3Segmented value={section} onChange={setSection} aria-label="CV workspace" options={[{value: "master", label: "Master CV"}, {value: "tailored", label: "Tailored CVs"}]} />
+        {section === "master" && <span className="text-xs">Evidence library · {activeSource}</span>}
 
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        {section === "master" && <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {sources.map((s) => (
             <Md3Chip
               key={s.path}
@@ -525,35 +484,15 @@ export function CvEditor() {
               title={s.exists ? s.path : `${s.path} — not created yet`}
               onClick={() => switchSource(s.path)}
             >
-              {s.label}
+              {s.path === "cv.md" ? "Master · cv.md" : `Source · ${s.label}`}
             </Md3Chip>
           ))}
           {!exists && loaded && (
             <span className="text-[11px] text-[var(--md-sys-color-outline)]">not created yet — saving creates it</span>
           )}
-        </div>
+        </div>}
 
-        {generated.length > 0 && (
-          <div data-co-tour="cv-export">
-          <Md3Select
-            className="min-w-[190px]"
-            aria-label="Which CV to show"
-            value={shownGenerated}
-            onChange={setShownGenerated}
-            options={[
-              { value: "", label: "Live preview (this buffer)" },
-              ...generated.map((g) => ({
-                value: g.file,
-                label: `${g.label}${g.pdf ? " · PDF" : ""}`,
-              })),
-            ]}
-          />
-          </div>
-        )}
-
-        {!generated.length && <div data-co-tour="cv-export" className="sr-only" aria-hidden />}
-
-        <Md3Segmented<ViewMode>
+        {section === "master" && <><Md3Segmented<ViewMode>
           value={view}
           onChange={setView}
           aria-label="Editor layout"
@@ -564,7 +503,7 @@ export function CvEditor() {
           ]}
         />
 
-        <span
+        {activeSource !== "cv.md" && <span
           className={cn(
             "inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium",
             fit.pages <= 1
@@ -575,7 +514,7 @@ export function CvEditor() {
         >
           <MaterialSymbol name={fit.pages <= 1 ? "check_circle" : "warning"} size={13} />
           {fit.message}
-        </span>
+        </span>}
         <span
           className={cn(
             "inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium",
@@ -594,7 +533,7 @@ export function CvEditor() {
           <button
             type="button"
             onClick={() => setFullPreview(true)}
-            disabled={!previewHtml}
+            disabled={!previewHtml || activeSource === "cv.md"}
             className="md3-btn-text min-h-9 text-xs disabled:opacity-40"
           >
             <MaterialSymbol name="fullscreen" size={16} />
@@ -627,15 +566,16 @@ export function CvEditor() {
             ) : (
               <MaterialSymbol name="save" size={16} />
             )}
-            {saving ? "Saving" : saved ? "Saved" : dirty ? "Save" : "Saved"}
+            {saving ? "Saving" : dirty ? `Save ${activeSource}` : `Saved ${activeSource}`}
           </Button>
-        </div>
+        </div></>}
       </header>
 
       <p aria-live="polite" className="sr-only">
-        {saving ? "Saving CV" : saved ? "CV saved" : dirty ? "Unsaved changes" : "All changes saved"}
+        {saving ? "Saving CV" : saved ? `${activeSource} saved` : dirty ? "Unsaved changes" : "All changes saved"}
       </p>
 
+      {section === "master" && <p className="px-4 py-2 text-sm">Keep the complete evidence here; master length does not affect readiness. Experience: {readiness.hasExperience ? "present" : "add roles and achievements"} · Skills: {readiness.hasSkills ? "present" : "add a skills section"}. Tailor from an application when ready.</p>}
       {error && (
         <div className="md3-alert md3-alert--warning mx-4 mt-3 flex items-center gap-2 py-2" role="alert">
           <MaterialSymbol name="warning" size={16} className="shrink-0" />
@@ -646,12 +586,12 @@ export function CvEditor() {
         </div>
       )}
 
-      {!loaded ? (
+      {section === "tailored" ? <TailoredCvLibrary /> : !loaded ? (
         <div className="flex flex-1 items-center justify-center">
           <MaterialSymbol name="progress_activity" size={32} className="animate-spin text-[var(--md-sys-color-primary)]" />
         </div>
       ) : (
-        <div className="cv-studio__panes" data-view={view}>
+        <div className="cv-studio__panes" data-view={view} style={activeSource === "cv.md" ? {gridTemplateColumns: view === "split" ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)"} : undefined}>
           {showEditor && (
             // Raw field markup (not Md3Textarea) so the textarea fills its pane
             // instead of growing the page as the CV gets longer.
@@ -672,19 +612,7 @@ export function CvEditor() {
           )}
           {showPreview && (
             <section className="cv-studio__page">
-              {viewingGenerated && (
-                <p className="flex items-center gap-2 bg-[var(--md-sys-color-secondary-container)] px-3 py-2 text-[11px] text-[var(--md-sys-color-on-secondary-container)]">
-                  <MaterialSymbol name="lock" size={14} className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">
-                    Finished render — {generated.find((g) => g.file === shownGenerated)?.label ?? shownGenerated}. Style
-                    controls do not affect it.
-                  </span>
-                  <button type="button" className="shrink-0 underline" onClick={() => setShownGenerated("")}>
-                    Back to live
-                  </button>
-                </p>
-              )}
-              {!viewingGenerated && previewHtml && parseHint && (
+              {previewHtml && parseHint && (
                 <p className="flex items-start gap-1.5 bg-[var(--md-sys-color-tertiary-container)] px-3 py-2 text-[11px] text-[var(--md-sys-color-on-tertiary-container)]">
                   <MaterialSymbol name="info" size={14} className="mt-px shrink-0" />
                   {parseHint}
@@ -695,12 +623,12 @@ export function CvEditor() {
                 data-lenis-prevent
                 className="relative flex min-h-0 flex-1 justify-center overflow-auto bg-white p-4"
               >
-                      {previewLoading && !viewingGenerated && (
+                      {previewLoading && (
                         <div className="absolute right-3 top-3 z-10 rounded-full bg-black/5 p-1.5">
                           <MaterialSymbol name="progress_activity" size={18} className="animate-spin text-[var(--md-sys-color-primary)]" />
                         </div>
                       )}
-                      {previewError && !viewingGenerated && (
+                      {previewError && (
                         <p className="p-4 text-sm text-[var(--md-sys-color-error)]">{previewError}</p>
                       )}
                       {!pageHtml && !previewLoading && (
@@ -708,7 +636,7 @@ export function CvEditor() {
                           Add CV content to see how it will print.
                         </p>
                       )}
-                      {pageHtml && (viewingGenerated || !previewError) && (
+                      {pageHtml && !previewError && (
                         // The document is laid out at real page width and scaled down to the
                         // pane, so the preview shows the printed proportions rather than a
                         // reflowed, narrow version of the page.
@@ -746,7 +674,7 @@ export function CvEditor() {
             </section>
           )}
 
-          {settings && (
+          {settings && activeSource !== "cv.md" && (
             <aside className="cv-studio__rail" data-lenis-prevent>
                   <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">
                     Changes preview instantly. Save to write them to <code>config/profile.yml</code> so PDF runs use them too.
