@@ -93,7 +93,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
                 : "Heuristic fit from CV overlap, title match, comp band, freshness, and trust"
             }
           >
-            Fit {offer.fitScore}
+            Preliminary fit {offer.fitScore}/100
           </span>
         )}
         <span className="rounded-[var(--md-sys-shape-corner-small)] border border-[var(--md-sys-color-outline-variant)] px-2 py-0.5 font-medium text-[var(--md-sys-color-outline)]">
@@ -111,6 +111,16 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
         <p className="mt-2 flex items-start gap-1.5 text-sm text-[var(--md-sys-color-primary)]">
           <MaterialSymbol name="auto_awesome" size={16} className="mt-0.5 shrink-0" />
           {offer.why}
+        </p>
+      )}
+      {!offer.why && offer.fitSignalReasons && offer.fitSignalReasons.length > 0 && (
+        <p className="mt-2 mb-0 text-xs text-[var(--md-sys-color-on-surface-variant)]">
+          Matched on {offer.fitSignalReasons.slice(0, 2).join(" and ")}
+        </p>
+      )}
+      {!offer.why && (!offer.fitSignalReasons || offer.fitSignalReasons.length === 0) && typeof offer.fitScore === "number" && (
+        <p className="mt-2 mb-0 text-xs text-[var(--md-sys-color-on-surface-variant)]">
+          Ranked by CV and title overlap, compensation fit, freshness, and source trust.
         </p>
       )}
 

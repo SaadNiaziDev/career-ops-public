@@ -4,7 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import yaml from "js-yaml";
 import { careerOpsRoot } from "@/lib/career-ops";
-import { DEFAULT_FILTERS, cleanChips, type ExploreFilters } from "@/lib/explore";
+import { DEFAULT_FILTERS, cleanRoleTitles, cleanChips, type ExploreFilters } from "@/lib/explore";
 
 /**
  * ACL for portals.yml — the core's scan-filter config (a CONTRACT entry-point,
@@ -143,6 +143,7 @@ export function seedExploreFilters(): { filters: ExploreFilters; seededFrom: str
     }
   }
 
+  filters.positive = cleanRoleTitles(filters.positive);
   return { filters, seededFrom };
 }
 

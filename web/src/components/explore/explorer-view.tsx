@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { Application, InboxJob, ScanFind } from "@/lib/career-ops";
-import { paramsToFilters, paramsToAi, type ExploreFilters } from "@/lib/explore";
+import { cleanRoleTitles, paramsToFilters, paramsToAi, type ExploreFilters } from "@/lib/explore";
 import { useCliConfig, resolveCliIdForRun } from "@/lib/cli-config";
 import { fmtUsd } from "@/lib/explore-spend";
 import { PageShell } from "@/components/dossier/page-shell";
@@ -77,6 +77,7 @@ export function ExplorerView({
   const [refineOpen, setRefineOpen] = useState(false);
   const { cliName, cliConfigured } = useCliConfig();
   const [firstRun, setFirstRun] = useState(false);
+  const [scanQuery, setScanQuery] = useState(seed.filters.positive.join(", "));
 
   // AI URL hydration + auto-hunt lives in ExploreProvider (URL beats sessionStorage).
   // Here we only seed Scan filters / optional ?run=1 — never touch AI intent, or we'd
@@ -92,6 +93,15 @@ export function ExplorerView({
       void discover();
     }
   }, [seed.filters, initFilters, discover]);
+
+  useEffect(() => setScanQuery(filters.positive.join(", ")), [filters.positive]);
+
+  const searchScan = () => {
+    const positive = cleanRoleTitles(scanQuery.split(/[,;\n]+/));
+    if (!positive.length || !filters.ats.length) return;
+    setFilters({ ...filters, positive });
+    void discover();
+  };
 
   const inboxUrls = useMemo(() => new Set(inboxSnapshot.map((j) => j.url)), [inboxSnapshot]);
   const enriched: EnrichedOffer[] = useMemo(
@@ -210,31 +220,41 @@ export function ExplorerView({
           )
         ) : (
           <>
-            {isResults ? (
-              <ControlledMd3Collapse
-                className="mb-6"
-                open={refineOpen}
-                onOpenChange={setRefineOpen}
-                title={
-                  <span className="inline-flex items-center gap-2">
-                    <MaterialSymbol name="explore" size={18} />
-                    Refine search
-                  </span>
-                }
-              >
-                <div className="flex w-full flex-col gap-4">
-                  <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
-                  <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Re-cast (free)" />
+            <section className="rounded-[var(--md-sys-shape-corner-large)] border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] p-4 sm:p-5">
+              <label htmlFor="explore-role-search" className="mb-2 block md-title-small text-[var(--md-sys-color-on-surface)]">
+                What roles are you looking for?
+              </label>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="relative min-w-0 flex-1">
+                  <MaterialSymbol name="search" size={20} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-outline)]" />
+                  <input
+                    id="explore-role-search"
+                    type="search"
+                    value={scanQuery}
+                    onChange={(event) => setScanQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        searchScan();
+                      }
+                    }}
+                    placeholder="Staff ML engineer, AI platform…"
+                    className="min-h-12 w-full rounded-[var(--md-sys-shape-corner-medium)] border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface)] py-2 pl-10 pr-3 text-base text-[var(--md-sys-color-on-surface)] outline-none placeholder:text-[var(--md-sys-color-outline)] focus:border-[var(--md-sys-color-primary)]"
+                  />
                 </div>
-              </ControlledMd3Collapse>
-            ) : (
-              <Md3Card className="mb-6" data-co-tour="explore-filters">
-                <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
-                <div className="mt-5">
-                  <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Discover (free)" />
-                </div>
-              </Md3Card>
-            )}
+                <button type="button" onClick={searchScan} disabled={!scanQuery.trim() || !canDiscover} className="md3-btn-filled min-h-12 shrink-0 disabled:opacity-50">
+                  <MaterialSymbol name="explore" size={18} />
+                  Free scan
+                  <CostBadge kind="free-network" size="xs" />
+                </button>
+              </div>
+              <p className="mb-0 mt-2 md-body-small text-[var(--md-sys-color-on-surface-variant)]">
+                Matches role titles across public job boards. Use AI search for broader intent and context; it spends your tokens.
+              </p>
+              {!filters.positive.length && (
+                <p className="mb-0 mt-2 text-sm text-[var(--md-sys-color-primary)]">Add a target role to start. Your profile roles will appear here when configured.</p>
+              )}
+            </section>
 
             {isResults && firstRun && (
               <p className="md3-alert md3-alert--success mb-4">
@@ -300,6 +320,18 @@ export function ExplorerView({
               />
             )}
             {showPhase("failed") && <FailedCard msg={error || status} onRetry={() => void discover()} />}
+
+            <ControlledMd3Collapse
+              className="mb-6 mt-4"
+              open={refineOpen}
+              onOpenChange={setRefineOpen}
+              title={<span className="inline-flex items-center gap-2"><MaterialSymbol name="tune" size={18} />Refine search</span>}
+            >
+              <div className="flex w-full flex-col gap-4" data-co-tour="explore-filters">
+                <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
+                <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Search again · free" />
+              </div>
+            </ControlledMd3Collapse>
           </>
         )}
       </DossierStack>

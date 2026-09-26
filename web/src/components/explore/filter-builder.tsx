@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/cn";
-import { ATS_LABEL, ATS_SOURCES, cleanChips, type AtsSource, type ExploreFilters } from "@/lib/explore";
+import { ATS_LABEL, ATS_SOURCES, cleanChips, cleanRoleTitles, type AtsSource, type ExploreFilters } from "@/lib/explore";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { Md3Chip } from "@/components/ui/md3-chip";
 import { Md3Segmented } from "@/components/ui/md3-segmented";
@@ -41,7 +41,7 @@ function KeywordField({
   // "New York", "Costa Rica"). A space-only paste stays one chip on purpose (#1147).
   const commit = (text: string) => {
     const parts = text.split(/[,\n;\t\r]+/);
-    const next = cleanChips([...values, ...parts]);
+    const next = tone === "inc" ? cleanRoleTitles([...values, ...parts]) : cleanChips([...values, ...parts]);
     onChange(next);
     setDraft("");
   };

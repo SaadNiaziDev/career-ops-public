@@ -130,6 +130,17 @@ export type ScanEvent =
 import { cleanChips } from "./clean-chips.mjs";
 export { cleanChips };
 
+/** Drop title chips that differ only by punctuation, spacing, or case. */
+export function cleanRoleTitles(values: unknown): string[] {
+  const seen = new Set<string>();
+  return cleanChips(values).filter((value) => {
+    const key = value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function clampNum(v: unknown, lo: number, hi: number, fallback: number): number {
   const n = Number(v);
   if (!Number.isFinite(n)) return fallback;
@@ -166,6 +177,7 @@ export function parseExplorePatch(
     const incoming = cleanChips(raw[key]);
     next[field] = (merge ? cleanChips([...(base[field] as string[]), ...incoming]) : incoming) as never;
   }
+  next.positive = cleanRoleTitles(next.positive);
   if (raw.since !== undefined) next.sinceDays = clampNum(raw.since, 1, 60, base.sinceDays);
   if (raw.sinceDays !== undefined) next.sinceDays = clampNum(raw.sinceDays, 1, 60, base.sinceDays);
   if (raw.limit !== undefined) next.limitPerAts = clampNum(raw.limit, 50, 500, base.limitPerAts);

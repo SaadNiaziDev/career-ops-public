@@ -36,6 +36,9 @@ export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
   }, [offers, q, sort]);
 
   const addable = offers.filter((o) => !o.inPipeline && !o.evaluatedN && !added.has(o.url));
+  const groupedByFit = sort === "fit";
+  const bestBets = groupedByFit ? view.slice(0, 3) : view;
+  const moreMatches = groupedByFit ? view.slice(3) : [];
 
   return (
     <div className="space-y-4">
@@ -49,7 +52,7 @@ export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
           <p className="md-body-small text-[var(--md-sys-color-on-surface-variant)]">
             {isAi
               ? "found by AI on the open web · unverified until you evaluate"
-              : `${companiesScanned > 0 ? `${companiesScanned.toLocaleString()} companies scanned · ` : ""}0 tokens spent${partial ? " · some boards were unreachable (normal for public directories)" : ""}`}
+              : `${companiesScanned > 0 ? `${companiesScanned.toLocaleString()} companies scanned · ` : ""}preliminary match ranking · 0 tokens spent${partial ? " · some boards were unreachable (normal for public directories)" : ""}`}
           </p>
         </div>
 
@@ -80,11 +83,26 @@ export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {view.map((o) => (
+      {bestBets.length > 0 && (
+        <section aria-label={groupedByFit ? "Best matches" : "Matches"} className="space-y-3">
+          <h2 className="mb-0 md-title-medium text-[var(--md-sys-color-on-surface)]">{groupedByFit ? "Best matches" : "Matches"}</h2>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {bestBets.map((o) => (
+              <DiscoveryCard key={o.url} offer={o} inPipeline={o.inPipeline} evaluatedN={o.evaluatedN} />
+            ))}
+          </div>
+        </section>
+      )}
+      {moreMatches.length > 0 && (
+        <details className="rounded-[var(--md-sys-shape-corner-large)] bg-[var(--md-sys-color-surface-container)] px-4">
+          <summary className="cursor-pointer py-3 md-title-small text-[var(--md-sys-color-on-surface)]">More matches ({moreMatches.length})</summary>
+          <div className="grid gap-3 pb-4 sm:grid-cols-2 xl:grid-cols-3">
+            {moreMatches.map((o) => (
           <DiscoveryCard key={o.url} offer={o} inPipeline={o.inPipeline} evaluatedN={o.evaluatedN} />
-        ))}
-      </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
