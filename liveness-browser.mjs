@@ -138,7 +138,16 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0 } = {}) {
     return { result: 'uncertain', code: 'blocked_host', reason: error instanceof Error ? error.message : 'URL host is not public' };
   }
   try {
-    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAVIGATE_TIMEOUT_MS });
+    let response;
+    try {
+      response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAVIGATE_TIMEOUT_MS });
+    } catch (error) {
+      if (error.name !== 'TimeoutError' || page.url() === 'about:blank') throw error;
+      // A slow deferred script can hold DOMContentLoaded after useful content
+      // has rendered. Inspect that document, never a page from the prior URL.
+      if (page.url() !== new URL(url).href) throw error;
+      await page.waitForFunction(() => (document.body?.innerText ?? '').trim().length >= 300, undefined, { timeout: 10_000 });
+    }
     const status = response?.status() ?? 0;
 
     // Give SPAs (Ashby, Lever, Workday) time to hydrate. extraSettleMs adds slack

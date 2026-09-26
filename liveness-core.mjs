@@ -123,7 +123,7 @@ export function classifyLiveness({ status = 0, requestedUrl = '', finalUrl = '',
     };
   }
 
-  if (hasApplyControl(applyControls)) {
+  if (bodyText.trim().length >= MIN_CONTENT_CHARS && hasApplyControl(applyControls)) {
     return { result: 'active', code: 'apply_control_visible', reason: 'visible apply control detected' };
   }
 
@@ -133,7 +133,7 @@ export function classifyLiveness({ status = 0, requestedUrl = '', finalUrl = '',
   }
 
   if (bodyText.trim().length < MIN_CONTENT_CHARS) {
-    return { result: 'expired', code: 'insufficient_content', reason: 'insufficient content — likely nav/footer only' };
+    return { result: 'uncertain', code: 'insufficient_content', reason: 'not enough job content loaded — retry or check the posting manually' };
   }
 
   return { result: 'uncertain', code: 'no_apply_control', reason: 'content present but no visible apply control found' };

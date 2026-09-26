@@ -9,7 +9,8 @@ import { artifactChanged, fatalExitMessage, intentKey } from "@/lib/jobs/run-pol
 import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
 import { spawnSandboxedWorker, workerRoots, WorkerCapacityError } from "@/lib/worker-sandbox";
 import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
-import { fetchPublicUrl } from "@/lib/public-url-policy";
+import { validatePublicUrl } from "@/lib/public-url-policy";
+import { fetchPostingContent } from "@/lib/posting-content";
 import { readBoundedJson, RequestTooLargeError } from "@/lib/core/request-bounds";
 import { workerClientId } from "@/lib/core/worker-admission";
 import { completionError, createRunTaskRegistry, getRunTask, type RunTaskDescriptor } from "@/lib/jobs/run-task-registry";
@@ -30,6 +31,7 @@ const MAX_RUN_PROMPT_BYTES = 192_000;
 // so a web evaluation is byte-identical to a CLI one (single source of truth, no
 // drift). kind "research" stays read-only. Streams progress as NDJSON events.
 type InterviewContext = {
+  postingText?: string;
   round?: number;
   roundType?: string;
   audience?: string;
@@ -208,32 +210,6 @@ Posting URL: ${input}`;
 }
 
 const RUN_TASKS = createRunTaskRegistry(buildPrompt);
-
-function externalHtmlToText(input: string): string {
-  return input
-    .replace(/<(script|style|noscript|svg)[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
-    .replace(/<!--([\s\S]*?)-->/g, " ")
-    .replace(/<\/(p|div|li|h[1-6]|tr|section|article|br|main|header|footer)\s*>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;|&#160;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n\s+/g, "\n")
-    .trim()
-    .slice(0, 40_000);
-}
-
-async function fetchPostingContent(url: string): Promise<string> {
-  const response = await fetchPublicUrl(url, { headers: { "user-agent": "Career-Ops local job evaluator" } }, { maxBytes: 1_500_000, timeoutMs: 12_000, maxRedirects: 4 });
-  if (!response.ok) throw new Error(`Posting fetch returned HTTP ${response.status}.`);
-  const content = externalHtmlToText(await response.text());
-  if (content.length < 100) throw new Error("The posting page did not contain enough readable text to evaluate.");
-  return content;
-}
 
 function streamEvents(events: unknown[]): Response {
   const enc = new TextEncoder();
@@ -440,7 +416,13 @@ export async function POST(req: Request) {
   let postingContent = "";
   if (task.fetchPosting) {
     try {
-      postingContent = await fetchPostingContent(input);
+      await validatePublicUrl(input);
+      if (context?.postingText !== undefined) {
+        if (typeof context.postingText !== "string" || context.postingText.trim().length < 300 || context.postingText.length > 40_000) {
+          throw new Error("Paste a job description between 300 and 40,000 characters.");
+        }
+        postingContent = `User-provided job description; posting liveness is unconfirmed.\n\n${context.postingText.trim()}`;
+      } else postingContent = await fetchPostingContent(input);
     } catch (error) {
       releaseRun(runId);
       return Response.json({ error: error instanceof Error ? error.message : "The posting could not be safely fetched." }, { status: 422 });
