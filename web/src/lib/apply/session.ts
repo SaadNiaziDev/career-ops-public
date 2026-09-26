@@ -3,7 +3,7 @@ import { extractForm, type ApplyField, type ExtractedForm } from "./extract";
 import { parseGreenhouse, fetchGreenhouseSchema } from "./greenhouse";
 import { statusBlock, dismissConsent, tryApplyTrigger, dropNewTabs, classifyEmpty, captchaWarning, multiStepInfo, verifyFill, type ApplyIssue } from "./diagnose";
 import { agentInterpretForm } from "./agent-interpret";
-import { installPublicUrlPolicy, launchPublicBrowser, validatePublicUrl } from "@/lib/public-url-policy";
+import { installPublicUrlPolicy, validatePublicUrl } from "@/lib/public-url-policy";
 
 /** The frame with the most interactive controls — where the agentic interpreter
  *  should look when deterministic extraction found nothing usable. */
@@ -111,13 +111,26 @@ async function enrichFromAts(url: string, fields: ApplyField[]): Promise<void> {
 // so we can: extract → (user verifies pre-filled answers) → FILL the real form →
 // bringToFront() for the human to submit it themselves. Headed (channel:chrome) =
 // the user's own Chrome on their residential IP (best ATS success); never submits.
-type Session = { id: string; url: string; title: string; fields: ApplyField[]; context: BrowserContext; page: Page; frame: Frame; createdAt: number; formShot?: string };
+type Session = {
+  id: string;
+  url: string;
+  title: string;
+  fields: ApplyField[];
+  context: BrowserContext;
+  closeContext: boolean;
+  page: Page;
+  frame: Frame;
+  createdAt: number;
+  formShot?: string;
+};
 
 declare global {
   // eslint-disable-next-line no-var
   var __coApplySessions: Map<string, Session> | undefined;
   // eslint-disable-next-line no-var
   var __coHeadedBrowser: Browser | undefined;
+  // eslint-disable-next-line no-var
+  var __coHeadedBrowserOwned: boolean | undefined;
   // eslint-disable-next-line no-var
   var __coIdleTimer: ReturnType<typeof setTimeout> | undefined;
 }
@@ -126,26 +139,61 @@ const IN_CODEX_SANDBOX = process.env.CODEX_SANDBOX === "seatbelt";
 
 async function headedBrowser(): Promise<Browser> {
   const b = globalThis.__coHeadedBrowser;
-  if (b && b.isConnected()) return b;
+  if (b && b.isConnected()) {
+    // A dev-server hot reload can leave the pre-fix proxy browser on globalThis.
+    // It has no ownership marker, so retire it once before launching the direct
+    // Chrome path below.
+    if (globalThis.__coHeadedBrowserOwned === undefined) {
+      await b.close().catch(() => {});
+      globalThis.__coHeadedBrowser = undefined;
+    } else {
+      return b;
+    }
+  }
   if (IN_CODEX_SANDBOX && process.platform === "darwin") {
     throw new Error("Visible Chrome cannot start inside the Codex macOS sandbox. Run the web app outside Codex, or use Codex with -s danger-full-access for this session.");
   }
-  // Playwright 1.57+ ships Chrome for Testing as its default `chromium`
-  // executable. On macOS, a headed launch of that cached app can abort inside
-  // AppKit before Playwright gets a page. Use the user's installed Chrome for
-  // headed application sessions and do not retry with the crash-prone bundled
-  // browser. Headless callers still use the bundled browser elsewhere.
+  // When configured, attach to the user's already-running Chrome. This keeps
+  // its cookies and authenticated ATS sessions instead of creating an anonymous
+  // Playwright context.
+  const cdpUrl = process.env.CAREER_OPS_CHROME_CDP_URL?.trim();
+  if (cdpUrl) {
+    try {
+      const connected = await chromium.connectOverCDP(cdpUrl);
+      globalThis.__coHeadedBrowser = connected;
+      globalThis.__coHeadedBrowserOwned = false;
+      return connected;
+    } catch {
+      throw new Error("Could not connect to authenticated Chrome. Check CAREER_OPS_CHROME_CDP_URL and retry.");
+    }
+  }
+  // Apply uses installed Chrome directly. The public-URL proxy is appropriate
+  // for headless fetch/liveness checks but breaks some ATS pages and can surface
+  // as ERR_TIMED_OUT in the visible browser. URL validation and page-level
+  // request filtering still run below.
   try {
-    const nb = await launchPublicBrowser(chromium, {
+    const nb = await chromium.launch({
       channel: "chrome",
       headless: false,
       args: ["--window-position=-3200,-3200", "--window-size=1280,940"], // off-screen during fill; moved on-screen at handoff
     });
     globalThis.__coHeadedBrowser = nb;
+    globalThis.__coHeadedBrowserOwned = true;
     return nb;
   } catch {
     throw new Error("The apply feature needs installed Google Chrome. Open Chrome once, then retry; headless Chrome for Testing is not used for visible application sessions.");
   }
+}
+
+async function sessionContext(browser: Browser): Promise<{ context: BrowserContext; closeContext: boolean }> {
+  // A CDP connection exposes the user's existing default context. Reuse it so
+  // its authenticated cookies are available to the new tab. A browser launched
+  // by us has no contexts yet, so use an isolated context for cleanup safety.
+  if (globalThis.__coHeadedBrowserOwned === false) {
+    const existing = browser.contexts()[0];
+    if (existing) return { context: existing, closeContext: false };
+  }
+  return { context: await browser.newContext({ viewport: { width: 1280, height: 900 } }), closeContext: true };
 }
 
 /** Close the headed Chrome once no sessions have been active for a while, so we
@@ -156,7 +204,9 @@ function scheduleIdleClose() {
     if (SESSIONS.size === 0) {
       const b = globalThis.__coHeadedBrowser;
       globalThis.__coHeadedBrowser = undefined;
-      void b?.close().catch(() => {});
+      const owned = globalThis.__coHeadedBrowserOwned;
+      globalThis.__coHeadedBrowserOwned = undefined;
+      if (owned) void b?.close().catch(() => {});
     }
   }, 5 * 60_000);
 }
@@ -181,12 +231,13 @@ export async function openSession(url: string, cliId?: string, forceAgent?: bool
   prune();
   if (globalThis.__coIdleTimer) clearTimeout(globalThis.__coIdleTimer); // someone's active
   const browser = await headedBrowser();
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  await installPublicUrlPolicy(context);
-  context.setDefaultTimeout(8000); // no single action hangs the whole open/fill
+  const { context, closeContext } = await sessionContext(browser);
   const page = await context.newPage();
+  page.setDefaultTimeout(8000); // no single action hangs the whole open/fill
+  await installPublicUrlPolicy(page);
   const abort = async (msg: string): Promise<never> => {
-    await context.close().catch(() => {});
+    await page.close().catch(() => {});
+    if (closeContext) await context.close().catch(() => {});
     if (SESSIONS.size === 0) scheduleIdleClose();
     throw new Error(msg);
   };
@@ -267,7 +318,7 @@ export async function openSession(url: string, cliId?: string, forceAgent?: bool
     if (cliId && why.code === "no-form") {
       const id = `apply-${crypto.randomUUID()}`;
       const title = form.title || (await page.title().catch(() => "")) || "Application";
-      SESSIONS.set(id, { id, url, title, fields: [], context, page, frame, createdAt: Date.now(), formShot: shots[shots.length - 1] });
+      SESSIONS.set(id, { id, url, title, fields: [], context, closeContext, page, frame, createdAt: Date.now(), formShot: shots[shots.length - 1] });
       return { id, title, fields: [], shots, issues: [], needsDrive: true };
     }
     return abort(why.message);
@@ -283,7 +334,7 @@ export async function openSession(url: string, cliId?: string, forceAgent?: bool
   if (unlabeled > 0) issues.push({ level: "warn", code: "unlabeled-fields", message: `${unlabeled} field${unlabeled > 1 ? "s" : ""} couldn't be labelled cleanly — double-check ${unlabeled > 1 ? "them" : "it"} before submitting.` });
 
   const id = `apply-${crypto.randomUUID()}`;
-  SESSIONS.set(id, { id, url, title: form.title, fields: form.fields, context, page, frame, createdAt: Date.now(), formShot: shots[shots.length - 1] });
+  SESSIONS.set(id, { id, url, title: form.title, fields: form.fields, context, closeContext, page, frame, createdAt: Date.now(), formShot: shots[shots.length - 1] });
   return { id, title: form.title, fields: form.fields, shots, issues };
 }
 
@@ -332,18 +383,18 @@ export async function readSessionSnapshot(id: string): Promise<{
 
 /** Open a bare headed page on a URL (for the agentic drive loop / validation),
  *  without the full extract pipeline. Caller must close the context. */
-export async function newDrivePage(url: string): Promise<{ page: Page; context: BrowserContext }> {
+export async function newDrivePage(url: string): Promise<{ page: Page; context: BrowserContext; closeContext: boolean }> {
   await validatePublicUrl(url);
   if (globalThis.__coIdleTimer) clearTimeout(globalThis.__coIdleTimer);
   const browser = await headedBrowser();
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  await installPublicUrlPolicy(context);
-  context.setDefaultTimeout(8000);
+  const { context, closeContext } = await sessionContext(browser);
   const page = await context.newPage();
+  page.setDefaultTimeout(8000);
+  await installPublicUrlPolicy(page);
   await gotoResilient(page, url);
   await dismissConsent(page).catch(() => {});
   await page.waitForTimeout(1000);
-  return { page, context };
+  return { page, context, closeContext };
 }
 
 /** Extract+enrich the current page (used after the drive loop reaches a form). */
@@ -389,7 +440,8 @@ export async function finalizeDrivenSession(id: string, cliId?: string): Promise
 export async function closeSession(id: string): Promise<void> {
   const s = SESSIONS.get(id);
   SESSIONS.delete(id);
-  await s?.context.close().catch(() => {});
+  await s?.page.close().catch(() => {});
+  if (s?.closeContext) await s.context.close().catch(() => {});
   if (SESSIONS.size === 0) scheduleIdleClose();
 }
 

@@ -49,6 +49,7 @@ export type QuestionBankRow = {
 
 export type SessionIndex = {
   file: string;
+  trackerNum: string | null;
   company: string;
   role: string;
   round: RoundType | string;

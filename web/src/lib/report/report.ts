@@ -1,6 +1,5 @@
 import { recentLogs } from "./logbuf";
-
-const REPO = "santifer/career-ops";
+import { newIssueUrl } from "./repository.mjs";
 
 /** Strip PII / secrets that could ride in error text, paths or logs BEFORE anything
  *  leaves the machine. Defence-in-depth — the user also reviews the full payload
@@ -164,5 +163,5 @@ export function issueBody(d: Diag, description: string): string {
 export function issueUrl(d: Diag, description: string): string {
   const title = `[web ${d.channel}] ${(scrub(description) || "bug report").replace(/\s+/g, " ").trim().slice(0, 70)}`;
   const params = new URLSearchParams({ title, body: issueBody(d, description), labels: "web-alpha,area:web" });
-  return `https://github.com/${REPO}/issues/new?${params.toString()}`;
+  return newIssueUrl(params);
 }

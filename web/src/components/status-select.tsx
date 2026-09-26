@@ -6,28 +6,38 @@ import { MaterialSymbol } from "@/components/material-symbol";
 import { Md3Select } from "@/components/ui/md3-select";
 import { CANONICAL_STATES } from "@/lib/format";
 
-export function StatusSelect({ n, current }: { n: string; current: string }) {
+export function StatusSelect({ n, current, score }: { n: string; current: string; score?: string }) {
   const [status, setStatus] = useState(current);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   async function onChange(next: string) {
     const prev = status;
+    let overrideReason: string | undefined;
+    const scoreValue = Number.parseFloat(String(score ?? "").replace(/[^\d.\-]/g, ""));
+    if (next === "Applied" && Number.isFinite(scoreValue) && scoreValue < 4) {
+      overrideReason = window.prompt("This role scored below 4.0. Why do you want to apply anyway?")?.trim();
+      if (!overrideReason) return;
+    }
     setStatus(next);
     setBusy(true);
+    setError(null);
     try {
       const res = await fetch("/api/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ n, status: next }),
+        body: JSON.stringify({ n, status: next, overrideReason }),
       });
-      if (!res.ok) throw new Error("write failed");
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || "Status update failed. Please retry.");
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       router.refresh();
-    } catch {
+    } catch (cause) {
       setStatus(prev);
+      setError(cause instanceof Error ? cause.message : "Status update failed. Please retry.");
     } finally {
       setBusy(false);
     }
@@ -40,7 +50,7 @@ export function StatusSelect({ n, current }: { n: string; current: string }) {
   ];
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Md3Select
         value={status}
         onChange={(next) => void onChange(next)}
@@ -55,6 +65,7 @@ export function StatusSelect({ n, current }: { n: string; current: string }) {
           saved
         </span>
       ) : null}
+      {error && <span role="alert" className="text-xs text-[var(--md-sys-color-error)]">{error}</span>}
     </div>
   );
 }

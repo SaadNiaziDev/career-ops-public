@@ -3,8 +3,10 @@ import "server-only";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { careerOpsRoot, findApplication, rootScript } from "@/lib/career-ops";
+import { careerOpsRoot, findApplication, readApplications, rootScript, type Application } from "@/lib/career-ops";
 import { atomicWrite } from "@/lib/core/safe-write";
+import { readInterviewProgressMap as calculateInterviewProgress } from "./interview-progress.mjs";
+import { resolveSessionOwner, sessionFilenameParts } from "./interview-session-identity.mjs";
 import {
   audienceForType,
   mergeRounds,
@@ -81,66 +83,57 @@ function parseSessionFrontmatter(content: string): Record<string, string> {
   return out;
 }
 
-function parseSessionFilename(file: string): { companySlug: string; roleSlug: string; round: string; date: string } | null {
-  const base = path.basename(file, ".md");
-  const dateMatch = base.match(/(\d{4}-\d{2}-\d{2})$/);
-  if (!dateMatch) return null;
-  const date = dateMatch[1];
-  const beforeDate = base.slice(0, -(date.length + 1));
-  const roundTypes = ["hiring-manager", "system-design", "screen", "technical", "behavioral", "onsite", "final", "practice"];
-  for (const rt of roundTypes.sort((a, b) => b.length - a.length)) {
-    if (beforeDate.endsWith(`-${rt}`)) {
-      const prefix = beforeDate.slice(0, -(rt.length + 1));
-      const parts = prefix.split("-");
-      if (parts.length < 2) return null;
-      return {
-        companySlug: parts.slice(0, -1).join("-"),
-        roleSlug: parts[parts.length - 1] ?? "",
-        round: rt,
-        date,
-      };
-    }
-  }
-  return null;
-}
-
-export function listSessions(companySlug: string, roleSlug?: string): SessionIndex[] {
-  const dir = sessionsDir();
-  let files: string[] = [];
+function readSessionFiles(): Array<{ file: string; content: string }> {
   try {
-    files = fs.readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "README.md");
+    return fs.readdirSync(sessionsDir())
+      .filter((file) => file.endsWith(".md") && file !== "README.md")
+      .flatMap((file) => {
+        try {
+          return [{ file, content: fs.readFileSync(path.join(sessionsDir(), file), "utf8") }];
+        } catch {
+          return [];
+        }
+      });
   } catch {
     return [];
   }
+}
+
+function sessionsForDocuments(
+  files: Array<{ file: string; content: string }>,
+  application: Application,
+  applications: Application[],
+): SessionIndex[] {
   const out: SessionIndex[] = [];
   for (const file of files) {
-    if (!file.startsWith(`${companySlug}-`)) continue;
-    let content = "";
-    try {
-      content = fs.readFileSync(path.join(dir, file), "utf8");
-    } catch {
-      continue;
-    }
-    const fm = parseSessionFrontmatter(content);
-    const parsed = parseSessionFilename(file);
-    const resolvedCompany = fm.company ?? parsed?.companySlug ?? "";
-    const resolvedRole = fm.role ?? parsed?.roleSlug ?? "";
-    if (slugify(resolvedCompany) !== companySlug) continue;
-    if (roleSlug && fm.role && slugify(resolvedRole) !== roleSlug) continue;
+    const fm = parseSessionFrontmatter(file.content);
+    const filename = sessionFilenameParts(file.file);
+    const owner = resolveSessionOwner({ file: file.file, frontmatter: fm, applications });
+    if (owner.status !== "matched" || owner.trackerNum !== String(application.n)) continue;
+    const resolvedCompany = fm.company ?? application.company;
+    const resolvedRole = fm.role ?? application.role;
     const parsedRoundNo = Number.parseInt(fm.round_no ?? "", 10);
     out.push({
-      file,
+      file: file.file,
+      trackerNum: owner.trackerNum,
       company: resolvedCompany,
       role: resolvedRole,
-      round: fm.round ?? parsed?.round ?? "",
+      round: fm.round ?? filename?.round ?? "",
       roundNo: Number.isInteger(parsedRoundNo) && parsedRoundNo > 0 ? parsedRoundNo : null,
-      date: fm.date ?? parsed?.date ?? "",
+      date: fm.date ?? filename?.date ?? "",
       interviewerRole: fm.interviewer_role ?? "",
       source: fm.source ?? "",
       outcome: ROUND_OUTCOMES.has(fm.outcome as RoundOutcome) ? (fm.outcome as RoundOutcome) : "pending",
     });
   }
   return out.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export function listSessions(companySlug: string, roleSlug: string, trackerNum: string): SessionIndex[] {
+  const applications = readApplications();
+  const application = applications.find((app) => String(app.n) === String(trackerNum));
+  if (!application || slugify(application.company) !== companySlug || slugify(application.role) !== roleSlug) return [];
+  return sessionsForDocuments(readSessionFiles(), application, applications);
 }
 
 function parseLedgerRow(cols: string[]): InterviewRound | null {
@@ -348,7 +341,7 @@ export function loadInterviewBundle(trackerNum: string): InterviewBundle | null 
     redflagsContent = null;
   }
 
-  const sessions = listSessions(slugify(company), slugify(role));
+  const sessions = listSessions(slugify(company), slugify(role), trackerNum);
   const prepRounds = prepContent ? parsePrepRounds(prepContent) : [];
   const ledgerRounds = readInterviewRounds(trackerNum);
   const knownRounds = mergeRounds(prepRounds, ledgerRounds, []);
@@ -427,13 +420,69 @@ export function importPrepRounds(trackerNum: string): InterviewRound[] {
   return merged;
 }
 
-export function readInterviewProgressMap(trackerNums: string[]): Map<string, { done: number; total: number }> {
-  const out = new Map<string, { done: number; total: number }>();
-  for (const n of trackerNums) {
-    const bundle = loadInterviewBundle(n);
-    if (!bundle) continue;
-    const { done, total } = roundProgress(bundle.rounds);
-    if (total > 0) out.set(n, { done, total });
-  }
-  return out;
+export function readInterviewProgressMap(
+  trackerNums: string[],
+  applications: Application[] = readApplications(),
+): Map<string, { done: number; total: number }> {
+  const wanted = new Set(trackerNums.map(String));
+  return calculateInterviewProgress(trackerNums, {
+    applications,
+    readRounds: () => {
+      try {
+        return fs.readFileSync(roundsPath(), "utf8");
+      } catch {
+        return "";
+      }
+    },
+    readPrepFiles: () => {
+      try {
+        return fs.readdirSync(interviewPrepDir())
+          .filter((file) => file.endsWith(".md") && file !== "story-bank.md" && file !== "question-bank.md" && !file.endsWith("-redflags.md"))
+          .flatMap((file) => {
+            try {
+              return [{ file, content: fs.readFileSync(path.join(interviewPrepDir(), file), "utf8") }];
+            } catch {
+              return [];
+            }
+          });
+      } catch {
+        return [];
+      }
+    },
+    readSessionFiles,
+    prepRoundsFor: (app: Application, files: Array<{ file: string; content: string }>) => {
+      const company = app.company;
+      const role = app.role;
+      const primary = `${prepSlug(company, role)}.md`;
+      let prep = files.find((entry) => entry.file === primary);
+      if (!prep) {
+        const reportNeedles = [
+          `#${app.n}`,
+          `reports/${app.n.padStart(3, "0")}`,
+          `reports/${app.n}-`,
+          `**Report:** [${app.n}]`,
+          `**Report:** ${app.n}`,
+        ];
+        prep = files.find((entry) => reportNeedles.some((needle) => entry.content.includes(needle)));
+      }
+      if (!prep) prep = files.find((entry) => entry.file.startsWith(slugify(company)));
+      return prep ? parsePrepRounds(prep.content) : [];
+    },
+    ledgerRoundsFor: (trackerNum: string, text: string) => {
+      const rounds: InterviewRound[] = [];
+      for (const [index, line] of text.split("\n").filter(Boolean).entries()) {
+        if (index === 0 && line.startsWith("tracker#")) continue;
+        const columns = line.split("\t");
+        if (columns[0] !== trackerNum) continue;
+        const round = parseLedgerRow(columns);
+        if (round) rounds.push(round);
+      }
+      return rounds.sort((a, b) => a.roundNo - b.roundNo);
+    },
+    sessionsFor: (app: Application, files: Array<{ file: string; content: string }>) =>
+      sessionsForDocuments(files, app, applications),
+    mergeRounds,
+    roundsFromSessions,
+    roundProgress,
+  });
 }

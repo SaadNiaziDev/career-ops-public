@@ -31,6 +31,8 @@ export function TriageRow({
   onToggleSelect,
   onSave,
   onSkip,
+  onRemove,
+  removing,
 }: {
   job: InboxJob;
   source: AtsSource | null;
@@ -41,6 +43,8 @@ export function TriageRow({
   onToggleSelect: () => void;
   onSave: () => void;
   onSkip: () => void;
+  onRemove: () => void;
+  removing: boolean;
 }) {
   const ago = agoLabel(age);
   const evaluated = !!scored && (scored.running || scored.score != null);
@@ -132,6 +136,16 @@ export function TriageRow({
             </Md3ActionButton>
           </>
         )}
+        <Md3ActionButton
+          variant="text"
+          icon={removing ? "progress_activity" : "delete"}
+          onClick={onRemove}
+          disabled={removing}
+          aria-label={`Remove ${job.company} from inbox`}
+          className={cn("min-h-10 text-[var(--md-sys-color-error)]", removing && "pointer-events-none")}
+        >
+          {removing ? "Removing" : "Remove"}
+        </Md3ActionButton>
       </div>
     </div>
   );

@@ -22,8 +22,8 @@
 13. Inject keywords naturally into existing achievements (NEVER invent)
 14. Apply the six-second clarity gate from `modes/heuristics/recruiter-side.md`: top third must make target role, strongest fit, and proof obvious
 15. Read `name` from `config/profile.yml` → normalize to kebab-case lowercase (e.g. "John Doe" → "john-doe") → `{candidate}`
-16. Build the render payload (see the **Tailored-CV Content Contract** below) from the tailored content — emit compact structured JSON, **not** full HTML markup — and write it to `/tmp/cv-{candidate}-{company}.json`.
-17. Execute exactly one rendering command: `node render-cv.mjs /tmp/cv-{candidate}-{company}.json output/cv-{candidate}-{company}.html output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4} --report={report number}`. Use the NNN from the report filename/link (for example `008`), not the tracker row number. Omit `--report` only for a one-off CV with no report.
+16. Build the render payload (see the **Tailored-CV Content Contract** below) from the tailored content — emit compact structured JSON, **not** full HTML markup — and write it to `output/cv-{candidate}-{company}.json`. Keep the payload inside `output/` so sandboxed workers and the local renderer use the same file.
+17. Execute exactly one rendering command: `node render-cv.mjs output/cv-{candidate}-{company}.json output/cv-{candidate}-{company}.html output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4} --report={report number}`. Use the NNN from the report filename/link (for example `008`), not the tracker row number. Omit `--report` only for a one-off CV with no report.
 18. `render-cv.mjs` is the only layout owner. It resolves the selected template and profile style, builds HTML, runs the fact gate, renders the PDF, verifies the PDF and expected sections, then records template/style/source-report metadata. If it fails, stop and surface the error. Never write or patch HTML/CSS yourself and never call `build-cv-html.mjs` or `generate-pdf.mjs` directly.
 19. Report: PDF path, number of pages, keyword coverage %, and any skill gaps from Step 4 still unaddressed
 

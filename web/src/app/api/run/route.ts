@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveCli } from "@/lib/clis";
@@ -60,14 +61,14 @@ End with EXACTLY one final line: VERDICT: {0-5 signal strength}/5 — {why it he
 Target: ${input}`;
   }
   if (kind === "pdf") {
-    return `You are generating the user's ATS-optimized, TAILORED CV PDF for application #${input}, headless, on their machine. Run the REAL career-ops "pdf" mode — follow modes/pdf.md EXACTLY (do not improvise a format).
+    return `You are preparing the user's ATS-optimized, TAILORED CV PDF for application #${input}, headless, on their machine. Run the REAL career-ops "pdf" mode — follow its content and factuality rules exactly (do not improvise a format).
 1. Read modes/pdf.md, cv.md, config/profile.yml, and the evaluation report at reports/${input}-*.md (for the JD keywords + analysis).
 2. Tailor the CV per modes/pdf.md: inject the JD's keywords into the summary + first bullets, reorder experience by relevance, build the competency grid, pick the top 3–4 projects. NEVER invent skills — only reword REAL experience using the JD's vocabulary.
 3. Write only the tailored-cv v1 JSON content contract. Never create or edit HTML/CSS.
-4. Run the single \`render-cv.mjs\` command from modes/pdf.md with \`--report=${input}\`; it owns template, style, HTML, PDF, verification, and the artifact manifest.
+4. Write the payload to output/cv-{candidate}-{company}.json. Do NOT run render-cv.mjs or launch a browser: the local web app renders and verifies the PDF after the worker exits, outside the restricted worker sandbox. Never write the payload to a temporary folder.
 Do not submit anything anywhere.
 
-End with EXACTLY one final line: VERDICT: {5 if the PDF was written, else 1}/5 — {the output/ path, ≤12 words}`;
+End with EXACTLY one final line: PAYLOAD: output/cv-{candidate}-{company}.json`;
   }
   if (kind === "cover") {
     return `Run career-ops COVER LETTER mode for application #${input}, headless. Follow modes/cover.md EXACTLY.
@@ -311,6 +312,25 @@ function pdfArtifactForReport(report: string): PdfArtifact | null {
   } catch {
     return null;
   }
+}
+
+function finishSandboxedPdfRender(report: string, workerText: string, today: string): string | null {
+  const match = workerText.match(/output\/(cv-[a-z0-9-]+)\.json/i);
+  if (!match) return null;
+  const root = careerOpsRoot();
+  const payload = path.join(root, "output", `${match[1]}.json`);
+  try {
+    if (!fs.statSync(payload).isFile()) return `Tailored CV payload was not found: ${match[1]}.json`;
+  } catch {
+    return `Tailored CV payload was not found: ${match[1]}.json`;
+  }
+  const html = path.join(root, "output", `${match[1]}.html`);
+  const pdf = path.join(root, "output", `${match[1]}-${today}.pdf`);
+  const rendered = spawnSync(process.execPath, [path.join(root, "render-cv.mjs"), payload, html, pdf, `--report=${report}`], {
+    cwd: root, encoding: "utf8", timeout: 120_000,
+  });
+  if (rendered.status === 0) return null;
+  return (rendered.stderr || rendered.stdout || "CV renderer failed").trim();
 }
 
 function snapshotWriteRoots(roots: string[]): Map<string, string> {
@@ -573,6 +593,7 @@ export async function POST(req: Request) {
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let codexFinalText = "";
+      let workerOutput = "";
       let emittedText = false; // any assistant text delta → the CLI actually ran
       let announcedScoring = false;
       let stderr = "";
@@ -602,6 +623,7 @@ export async function POST(req: Request) {
             if (event.costUsd !== undefined) lastCostUsd = event.costUsd;
           } else if (event.type === "final-text") {
             codexFinalText = event.text;
+            workerOutput = event.text;
             emittedText = true;
           } else if (event.type === "text") {
             if (task.kind === "evaluate" && !announcedScoring) {
@@ -609,6 +631,7 @@ export async function POST(req: Request) {
               send({ type: "status", label: "Scoring the role against your profile" });
             }
             emittedText = true;
+            workerOutput = (workerOutput + event.text).slice(-64_000);
             send({ type: "text", text: event.text });
           }
         }
@@ -652,10 +675,15 @@ export async function POST(req: Request) {
         } else if (task.completionCheck === "report" && completionError(task, { reportChanged: Boolean(changedReport) })) {
           send({ type: "error", msg: completionError(task, { reportChanged: Boolean(changedReport) }) });
         } else if (task.completionCheck === "pdf") {
-          const artifact = pdfArtifactForReport(artifactInput);
+          let artifact = pdfArtifactForReport(artifactInput);
+          let renderError: string | null = null;
+          if (!artifact || artifact.signature === pdfBefore?.signature || !artifact.template || !artifact.sourceReport) {
+            renderError = finishSandboxedPdfRender(artifactInput, workerOutput || codexFinalText, new Date().toISOString().slice(0, 10));
+            artifact = pdfArtifactForReport(artifactInput);
+          }
           const pdfVerified = Boolean(artifact && artifact.signature !== pdfBefore?.signature && artifact.template && artifact.sourceReport);
           if (!pdfVerified) {
-            send({ type: "error", msg: completionError(task, { pdfVerified }) });
+            send({ type: "error", msg: renderError || completionError(task, { pdfVerified }) });
           } else {
             if (stderr.trim()) send({ type: "warning", msg: "The CLI reported a warning but completed successfully." });
             send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd, reportN: artifactInput });

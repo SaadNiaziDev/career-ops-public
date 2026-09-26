@@ -14,7 +14,7 @@ export default function PipelinePage() {
       return c.includes("INTERVIEW") || c.includes("OFFER");
     })
     .map((a) => a.n);
-  const interviewProgress = Object.fromEntries(readInterviewProgressMap(interviewIds));
+  const interviewProgress = Object.fromEntries(readInterviewProgressMap(interviewIds, applications));
   return (
     <Suspense>
       <PipelineView applications={applications} inbox={inbox} interviewProgress={interviewProgress} />

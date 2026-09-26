@@ -18,6 +18,9 @@ npm run web:dev
 Open http://localhost:3000.
 
 Point at another checkout with `CAREER_OPS_ROOT=/path/to/career-ops` in `web/.env.local`.
+Set `NEXT_PUBLIC_ISSUE_REPOSITORY=owner/repo` in `web/.env.local` to redirect bug reports and duplicate searches in a downstream fork; this fork defaults to `SaadNiaziDev/career-ops-public`.
+
+Interview session transcripts are joined by `tracker_num` frontmatter. Preview a safe backfill of legacy session files with `npm run sessions:backfill` from `web/`; apply only unambiguous matches with `npm run sessions:backfill:apply`. The apply command creates a timestamped backup beside each changed file and leaves ambiguous or unmatched sessions untouched.
 
 ## Agents
 

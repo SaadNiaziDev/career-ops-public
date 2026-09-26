@@ -26,6 +26,7 @@ export default function Home() {
           return status.includes("INTERVIEW") || status.includes("OFFER");
         })
         .map((a) => a.n),
+      applications,
     ),
   );
   // Established / in-between: the dual-loop retention dashboard. Show the setup

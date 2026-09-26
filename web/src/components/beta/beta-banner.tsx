@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { collect, fingerprint, issueBody, issueUrl, type Diag } from "@/lib/report/report";
+import { issueSearchUrl } from "@/lib/report/repository.mjs";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Md3Collapse } from "@/components/ui/md3-collapse";
@@ -20,10 +21,7 @@ async function searchIssues(q: string): Promise<SimilarIssue[]> {
   const cached = searchCache.get(q);
   if (cached) return cached;
   try {
-    const res = await fetch(
-      `https://api.github.com/search/issues?per_page=4&q=${encodeURIComponent(`repo:santifer/career-ops is:issue is:open ${q}`)}`,
-      { headers: { Accept: "application/vnd.github+json" } },
-    );
+    const res = await fetch(issueSearchUrl(q), { headers: { Accept: "application/vnd.github+json" } });
     if (!res.ok) return [];
     const d = await res.json();
     const items: SimilarIssue[] = (d.items || []).map((i: { number: number; title: string; html_url: string }) => ({

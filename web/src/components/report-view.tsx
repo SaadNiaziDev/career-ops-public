@@ -462,7 +462,7 @@ export function ReportView({
                 {app?.status && (
                   <div className="report-glance-row">
                     <span className="report-glance-label">Status</span>
-                    <StatusSelect n={id} current={app.status} />
+                    <StatusSelect n={id} current={app.status} score={app.score} />
                   </div>
                 )}
               </div>

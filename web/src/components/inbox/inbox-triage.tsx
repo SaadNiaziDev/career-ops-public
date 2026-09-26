@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { useJobs } from "@/components/jobs/job-store";
 import { usePipeline } from "@/components/pipeline/pipeline-provider";
@@ -26,8 +27,9 @@ const BATCH = 20;
 // it; only "Score shortlist" spends tokens. 🔴 The shell is agnostic to what makes a
 // role relevant — order is freshness with a single documented plug point.
 export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
+  const router = useRouter();
   const { jobs, startJob } = useJobs();
-  const { applications } = usePipeline();
+  const { applications, refetch } = usePipeline();
   const { toast } = useToast();
 
   // facets
@@ -51,6 +53,8 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [hasCli, setHasCli] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [removed, setRemoved] = useState<string[]>([]);
+  const [removing, setRemoving] = useState<string[]>([]);
 
   useEffect(() => {
     try {
@@ -81,12 +85,13 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
     const seen = new Set<string>();
     const out: { job: InboxJob; source: AtsSource | null; seniority: Seniority | null; age: number | null }[] = [];
     for (const job of inbox) {
+      if (removed.includes(job.url)) continue;
       if (seen.has(job.url)) continue;
       seen.add(job.url);
       out.push({ job, source: sourceFromUrl(job.url), seniority: seniorityFromTitle(job.role), age: daysSince(job.postedAt, now) });
     }
     return out;
-  }, [inbox, now]);
+  }, [inbox, now, removed]);
 
   // EVALUADA lookup: the latest evaluate worker per posting URL (running → badge).
   const scoreByUrl = useMemo(() => {
@@ -163,6 +168,35 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
         onClick: () => setHidden((h) => h.filter((u) => u !== job.url)),
       },
     });
+  };
+  const remove = async (job: InboxJob) => {
+    if (!window.confirm(`Remove ${job.company} — ${job.role} from the inbox?`)) return;
+    setRemoving((urls) => [...urls, job.url]);
+    try {
+      const response = await fetch("/api/pipeline", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: job.url }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Could not remove role");
+
+      setRemoved((urls) => [...urls, job.url]);
+      setShortlist((items) => items.filter((item) => item.url !== job.url));
+      setHidden((urls) => urls.filter((url) => url !== job.url));
+      setSelected((urls) => {
+        const next = new Set(urls);
+        next.delete(job.url);
+        return next;
+      });
+      toast({ message: `Removed ${job.company} from inbox`, tone: "neutral" });
+      refetch();
+      router.refresh();
+    } catch (error) {
+      toast({ message: error instanceof Error ? error.message : "Could not remove role", tone: "error" });
+    } finally {
+      setRemoving((urls) => urls.filter((url) => url !== job.url));
+    }
   };
   const toggleSelect = (url: string) =>
     setSelected((s) => {
@@ -268,6 +302,8 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
               onToggleSelect={() => toggleSelect(e.job.url)}
               onSave={() => save(e.job)}
               onSkip={() => skip(e.job)}
+              onRemove={() => void remove(e.job)}
+              removing={removing.includes(e.job.url)}
             />
           ))
         ) : (

@@ -72,10 +72,10 @@ const TASK_PHASE: Record<string, WorkerPhase> = {
 
 const PROVIDER = {
   claude: { domains: ["api.anthropic.com"], env: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"] },
-  codex: { domains: ["api.openai.com", "chatgpt.com"], env: ["OPENAI_API_KEY"] },
+  codex: { domains: ["api.openai.com", "chatgpt.com"], env: ["OPENAI_API_KEY", "CODEX_ACCESS_TOKEN"] },
 } as const;
 
-const COMBINED_FETCH_WRITE_TASKS = new Set(["pdf", "cover", "contacto", "interview-prep", "interview-questions"]);
+const COMBINED_FETCH_WRITE_TASKS = new Set(["cover", "contacto", "interview-prep", "interview-questions"]);
 
 let initialized: Promise<void> | undefined;
 
@@ -193,6 +193,16 @@ function allowlistedEnv(cliId: keyof typeof PROVIDER, input: NodeJS.ProcessEnv):
   return out;
 }
 
+function codexLoginAuth(): string | undefined {
+  try {
+    const contents = fs.readFileSync(path.join(os.homedir(), ".codex", "auth.json"), "utf8");
+    const auth = JSON.parse(contents) as { tokens?: { access_token?: unknown } };
+    return typeof auth.tokens?.access_token === "string" ? contents : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
@@ -247,7 +257,16 @@ export function workerCliArgs(cliId: string, args: string[], capabilities: Worke
       bounded.push(arg);
     }
     const prompt = bounded.pop();
-    return [...bounded, "--sandbox", capabilities.readOnly ? "read-only" : "workspace-write", "--ask-for-approval", "never", ...(prompt === undefined ? [] : [prompt])];
+    return [
+      ...bounded,
+      "--ephemeral",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--skip-git-repo-check",
+      "--sandbox",
+      capabilities.readOnly ? "read-only" : "workspace-write",
+      ...(prompt === undefined ? [] : [prompt]),
+    ];
   }
   throw new Error(`CLI '${cliId}' has no enforceable worker capability profile.`);
 }
@@ -270,6 +289,18 @@ export async function buildWorkerLaunch(options: LaunchOptions): Promise<WorkerL
   const cliId = options.cliId as keyof typeof PROVIDER;
   const cwd = path.resolve(options.cwd);
   const scopeRoot = path.resolve(options.scopeRoot);
+  const env = allowlistedEnv(cliId, options.env ?? process.env);
+  if (cliId === "codex") {
+    if (!env.OPENAI_API_KEY && !env.CODEX_ACCESS_TOKEN && !codexLoginAuth()) {
+      throw new Error("No Codex credential is available. Run `codex login`, then retry.");
+    }
+    return {
+      command: options.binPath,
+      args: workerCliArgs(cliId, options.args, capabilities),
+      cwd,
+      env,
+    };
+  }
   let cliRuntimeRoots = [options.binPath];
   try {
     const realBin = fs.realpathSync(options.binPath);
@@ -279,7 +310,6 @@ export async function buildWorkerLaunch(options: LaunchOptions): Promise<WorkerL
   }
   const readRoots = [...new Set([...options.readRoots, ...cliRuntimeRoots].map((root) => path.resolve(root)))];
   const writeRoots = [...new Set(options.writeRoots.map((root) => path.resolve(root)))];
-  const env = allowlistedEnv(cliId, options.env ?? process.env);
   if (!PROVIDER[cliId].env.some((key) => env[key])) {
     throw new Error(`No sandbox-safe credential is available for ${cliId}. Configure a provider API/OAuth token in the server environment; CLI login files are intentionally inaccessible.`);
   }

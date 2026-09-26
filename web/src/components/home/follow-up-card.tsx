@@ -23,21 +23,26 @@ export function FollowUpCard({
   onLogged?: () => void;
 }) {
   const [state, setState] = useState<"idle" | "logging" | "done" | "snoozed">("idle");
+  const [error, setError] = useState<string | null>(null);
   if (state === "snoozed" || state === "done") return null;
 
   const log = async () => {
     setState("logging");
     try {
-      await fetch("/api/followups/log", {
+      const response = await fetch("/api/followups/log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ num: followup.num, company: followup.company, note: "Followed up" }),
       });
-    } catch {
-      /* best-effort */
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Could not log follow-up. Please retry.");
+      setError(null);
+      onLogged?.();
+      setState("done");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not log follow-up. Please retry.");
+      setState("idle");
     }
-    onLogged?.();
-    setState("done");
   };
 
   return (
@@ -58,7 +63,7 @@ export function FollowUpCard({
         </div>
       </div>
       <div className="md3-actions-row ml-auto">
-        <Md3ActionButton variant="filled" icon="check" loading={state === "logging"} onClick={log}>
+        <Md3ActionButton variant="filled" icon="check" loading={state === "logging"} disabled={state === "logging"} onClick={() => void log()}>
           Mark followed up
         </Md3ActionButton>
         {followup.num != null && (
@@ -70,6 +75,7 @@ export function FollowUpCard({
           Snooze
         </Md3ActionButton>
       </div>
+      {error && <p role="alert" className="basis-full text-sm text-[var(--md-sys-color-error)]">{error}</p>}
     </div>
   );
 }

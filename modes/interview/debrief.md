@@ -165,6 +165,7 @@ Format:
 ---
 company: [company]
 role: [role]
+tracker_num: [application tracker number]
 round: [screen | hiring-manager | technical | system-design | behavioral | onsite | final]
 date: YYYY-MM-DD
 interviewer_role: [role, if known]
@@ -186,6 +187,7 @@ Rules for the transcript:
 - **Tag each answer.** On the line directly above each `**Candidate:**` line, emit `<!-- competency: tag[, tag...] -->` — lowercase-kebab-case, comma-separated for multi-competency answers (e.g. `system-design`, `people-leadership`, `incident-response`). You already assessed each answer in Step 2, so tag from that assessment rather than re-reading. Tags are free-form; pick the competency the question actually tested.
 - **Reconstruct the candidate turn faithfully.** Use what the candidate reported saying in Step 1, not an idealized answer. The "correct/complete answer" from Step 2 belongs in the debrief file, never in the transcript — the transcript records what happened.
 - **`source: debrief`.**
+- **`tracker_num` is required** and must be the exact application number from the tracker. Never infer ownership from the filename.
 - The session file lands in a gitignored directory (real names/companies never enter version control); write it without redacting.
 
 ---

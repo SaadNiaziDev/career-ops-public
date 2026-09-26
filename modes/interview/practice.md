@@ -141,6 +141,7 @@ Format:
 ---
 company: [company, or "practice"]
 role: [role]
+tracker_num: [application tracker number]
 round: [screen | hiring-manager | technical | system-design | behavioral | onsite | final]
 date: YYYY-MM-DD
 interviewer_role: [persona role, if set]
@@ -162,6 +163,7 @@ Rules for the transcript:
 - **Tag each answer.** On the line directly above each `**Candidate:**` line, emit `<!-- competency: tag[, tag...] -->` — lowercase-kebab-case, comma-separated for multi-competency answers. You already assessed each answer during the session, so tag from that. Tags are free-form; pick the competency the question actually tested.
 - **Record the candidate's answer verbatim**, not the "stronger version" — the transcript records what happened, not the coaching.
 - **`source: practice`.**
+- **`tracker_num` is required** and must be the exact application number from the tracker. Never infer ownership from the filename.
 - The session file lands in a gitignored directory (real names/companies never enter version control); write it without redacting.
 
 ---
