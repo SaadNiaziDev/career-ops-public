@@ -508,6 +508,7 @@ export function CvEditor() {
 
   return (
     <div className="cv-studio" data-co-tour="cv-editor">
+      <h1 className="sr-only">Master CV and tailored CVs</h1>
       {/* Blueprint S07 — three peers on one screen: markdown, the printed page,
           style. Everything that used to stack (page header, source row, view
           row, style card) collapses into one toolbar so the studio opens fully

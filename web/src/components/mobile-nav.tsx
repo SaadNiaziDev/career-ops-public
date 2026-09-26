@@ -10,6 +10,7 @@ import { WorkerTray } from "@/components/jobs/worker-sheet";
 import { UsageMeter } from "@/components/usage-meter";
 import { NAV_ITEMS, isActivePath } from "@/lib/nav-items";
 import { useJobs } from "@/components/jobs/job-store";
+import { useDialogFocus } from "@/lib/use-dialog-focus";
 
 const STYLE = `
 .co-mscrim{position:fixed;inset:0;z-index:60;background:rgba(8,8,12,.45);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard)}
@@ -23,6 +24,7 @@ export function MobileNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
+  useDialogFocus(open, panelRef);
   const { jobs } = useJobs();
   const running = jobs.filter((j) => j.status === "running").length;
 

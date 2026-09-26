@@ -7,6 +7,7 @@ import { runAtsChecks } from "@/lib/cv/ats";
 import { assessFit, describeChange, type CvStyleLike } from "@/lib/cv/fit";
 import { pageBox, pageCount, type CvPageFormat } from "@/lib/cv/page";
 import { cn } from "@/lib/cn";
+import { useDialogFocus } from "@/lib/use-dialog-focus";
 
 // Blueprint S08 · CV full preview. It is an OVERLAY over the studio that renders
 // the CURRENT BUFFER — page thumbnails, the real page-break line, what spills
@@ -78,6 +79,8 @@ export function FullPreviewOverlay({
   const [generating, setGenerating] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocus(open, dialogRef);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const box = pageBox(pageFormat);
@@ -145,7 +148,7 @@ export function FullPreviewOverlay({
   const thumbScale = THUMB_WIDTH / box.width;
 
   return (
-    <div className="cv-overlay" role="dialog" aria-modal="true" aria-label="CV full preview">
+    <div ref={dialogRef} tabIndex={-1} className="cv-overlay" role="dialog" aria-modal="true" aria-label="CV full preview">
       <header className="cv-overlay__bar">
         <button type="button" className="md3-btn-text" onClick={onClose} aria-label="Close full preview">
           <MaterialSymbol name="close" size={20} />

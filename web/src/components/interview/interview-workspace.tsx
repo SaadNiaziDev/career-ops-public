@@ -16,6 +16,7 @@ import { Md3Select } from "@/components/ui/md3-select";
 import { useJobs } from "@/components/jobs/job-store";
 import { InterviewPracticeLab } from "@/components/interview/interview-practice-lab";
 import { cn } from "@/lib/cn";
+import { useDialogFocus } from "@/lib/use-dialog-focus";
 import {
   AUDIENCE_OPTIONS,
   PROVENANCE_LABEL,
@@ -129,6 +130,8 @@ export function InterviewWorkspace({ id, initial }: { id: string; initial: Inter
   const [debriefNext, setDebriefNext] = useState("");
 
   const [editOpen, setEditOpen] = useState(false);
+  const editDialogRef = useRef<HTMLElement>(null);
+  useDialogFocus(editOpen, editDialogRef);
   const [editRound, setEditRound] = useState<Partial<InterviewRound>>({});
   const editTitleRef = useRef<HTMLHeadingElement>(null);
   const [now, setNow] = useState<number | null>(null);
@@ -616,6 +619,8 @@ export function InterviewWorkspace({ id, initial }: { id: string; initial: Inter
         <>
           <div className="fixed inset-0 z-50 bg-black/40" aria-hidden onClick={() => setEditOpen(false)} />
           <aside
+            ref={editDialogRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-labelledby="edit-round-title"

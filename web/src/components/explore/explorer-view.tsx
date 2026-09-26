@@ -143,7 +143,7 @@ export function ExplorerView({
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex flex-wrap items-center gap-3">
               <MaterialSymbol name="explore" size={24} className="text-[var(--md-sys-color-primary)]" />
-              <h2 className="mb-0 md-headline-medium">Explore</h2>
+              <h1 className="mb-0 md-headline-medium">Explore</h1>
               <Badge tone="warn">New</Badge>
             </div>
             <div className="w-full sm:ml-auto sm:w-auto" data-co-tour="explore-modes">

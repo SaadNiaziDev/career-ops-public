@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MaterialSymbol } from "@/components/material-symbol";
@@ -14,6 +14,7 @@ import { CostBadge } from "@/components/cost/cost-badge";
 import type { DraftKind } from "@/lib/contacts";
 import { cn } from "@/lib/cn";
 import { canonStatus } from "@/lib/format";
+import { useDialogFocus } from "@/lib/use-dialog-focus";
 
 type DraftState = { kind: DraftKind; content: string } | null;
 
@@ -55,6 +56,8 @@ export function PipelineActions({
   const { jobs, startJob } = useJobs();
   const [draft, setDraft] = useState<DraftState>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const panelRef = useRef<HTMLElement>(null);
+  useDialogFocus(panelOpen, panelRef);
   const [available, setAvailable] = useState<DraftKind[]>([]);
   const [notice, setNotice] = useState<{ tone: "info" | "warning" | "success"; text: string } | null>(null);
   const rail = variant === "rail";
@@ -201,6 +204,8 @@ export function PipelineActions({
             onClick={() => setPanelOpen(false)}
           />
           <aside
+            ref={panelRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label={KIND_LABEL[draft.kind]}
