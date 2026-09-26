@@ -87,7 +87,13 @@ async function browserCheck(): Promise<ReadinessCheck> {
   try {
     const { chromium } = await import("playwright-core");
     browser = await chromium.launch({ headless: true });
-    return { id: "pdf", label: "PDF browser launches", ok: true };
+    const page = await browser.newPage();
+    await page.setContent("<!doctype html><title>PDF check</title><main>Career-Ops PDF readiness check</main>");
+    const pdf = await page.pdf({format: "A4", printBackground: true});
+    const ok = pdf.byteLength > 500 && Buffer.from(pdf.subarray(0, 5)).toString("ascii") === "%PDF-";
+    return ok
+      ? { id: "pdf", label: "PDF rendered successfully", ok: true }
+      : { id: "pdf", label: "PDF output is invalid", ok: false, recovery: "Check Chromium and Playwright installation, then retry." };
   } catch {
     return { id: "pdf", label: "PDF browser is unavailable", ok: false, cause: "Playwright could not launch Chromium.", recovery: "Run `npx playwright install chromium`, then retry verification." };
   } finally {

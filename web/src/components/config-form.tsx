@@ -12,6 +12,7 @@ import { Md3Switch } from "@/components/ui/md3-switch";
 import { useTheme } from "@/components/providers/theme-provider";
 import { cliDisplayName, readCliConfig, writeCliConfig, CONFIG_KEY } from "@/lib/cli-config";
 import { cn } from "@/lib/cn";
+import type { ReadinessResult } from "@/lib/onboarding/readiness";
 import { ProductTourControls } from "@/components/product-tour/product-tour-host";
 
 // The rail switches between groups: one group is mounted at a time. This is a
@@ -22,10 +23,14 @@ import { ProductTourControls } from "@/components/product-tour/product-tour-host
 // right-aligned and muted.
 
 const SECTIONS = [
-  { id: "appearance", label: "Appearance", icon: "palette", file: "this browser" },
-  { id: "engines", label: "Engines & keys", icon: "terminal", file: `${CONFIG_KEY} · .env` },
-  { id: "profile", label: "Profile & ranking", icon: "badge", file: "config/profile.yml · portals.yml" },
-  { id: "data", label: "Data", icon: "database", file: "data/ · reports/" },
+  { id: "goals", label: "Search goals", icon: "track_changes", file: "config/profile.yml", keywords: "roles location eligibility compensation currency" },
+  { id: "identity", label: "Identity", icon: "person", file: "config/profile.yml", keywords: "name email current country timezone visa" },
+  { id: "constraints", label: "Constraints", icon: "rule", file: "config/profile.yml · modes/_profile.md", keywords: "deal breakers remote hybrid onsite location" },
+  { id: "engines", label: "AI engine", icon: "terminal", file: `${CONFIG_KEY} · .env`, keywords: "cli authentication keys workers timeout" },
+  { id: "documents", label: "Documents", icon: "description", file: "config/profile.yml · cv.md", keywords: "master tailored cv pdf template" },
+  { id: "followups", label: "Follow-ups", icon: "event_repeat", file: "config/profile.yml", keywords: "cadence reminder applied interview days" },
+  { id: "data", label: "Data & diagnostics", icon: "database", file: "data/ · reports/", keywords: "export backup diagnostics files" },
+  { id: "appearance", label: "Appearance · advanced", icon: "palette", file: "this browser", keywords: "theme contrast motion logos" },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -34,10 +39,13 @@ type LocalSettings = { logos: boolean; runTimeout: number; maxWorkers: number; c
 
 export function ConfigForm() {
   const { theme, contrast, reduceMotion, setTheme, setContrast, setReduceMotion } = useTheme();
-  const [activeSection, setActiveSection] = useState<SectionId>("appearance");
+  const [activeSection, setActiveSection] = useState<SectionId>("goals");
   const [local, setLocal] = useState<LocalSettings>({ logos: true, runTimeout: 230, maxWorkers: 3, cliId: "" });
   const [savedLocal, setSavedLocal] = useState<LocalSettings>(local);
   const [clis, setClis] = useState<ConfigCli[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [readiness, setReadiness] = useState<ReadinessResult | null>(null);
+  const [checking, setChecking] = useState(false);
   const [stats, setStats] = useState({ jobs: 0, reports: 0, contacts: 0 });
 
   useEffect(() => {
@@ -114,6 +122,13 @@ export function ConfigForm() {
   const activeCli = clis?.find((c) => c.id === local.cliId);
   const cliReady = !!activeCli?.installed;
   const cliName = cliDisplayName(local.cliId);
+  const matchingSections = SECTIONS.filter(section => `${section.label} ${section.keywords} ${section.file}`.toLowerCase().includes(query.trim().toLowerCase()));
+  async function testConfiguration() {
+    setChecking(true); setReadiness(null);
+    try { const res = await fetch("/api/onboarding/readiness", {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({cliId:local.cliId})}); const result = await res.json() as ReadinessResult; setReadiness(result); }
+    catch { setReadiness({ready:false,checks:[{id:"request",label:"Configuration check failed",ok:false,cause:"Could not reach the local server. Retry the check."}]}); }
+    finally {setChecking(false);}
+  }
 
   return (
     <PageShell width="wide" className="config-page">
@@ -122,7 +137,7 @@ export function ConfigForm() {
           <p className="mb-2.5 px-4 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--md-sys-color-outline)]">
             On this page
           </p>
-          {SECTIONS.map((s) => (
+          {matchingSections.map((s) => (
             <button
               key={s.id}
               type="button"
@@ -142,7 +157,7 @@ export function ConfigForm() {
         </nav>
 
         <div className="min-w-0 flex-1">
-          <p className="md-eyebrow">Settings · the same files the CLI reads</p>
+          <p className="md-eyebrow">Search settings by goal · all data stays in your local files</p>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
             <h1 className="md-display-small-emphasized">Config</h1>
             <span
@@ -156,8 +171,9 @@ export function ConfigForm() {
             </span>
           </div>
 
+          <label className="mt-5 block"><span className="sr-only">Search settings</span><input className="md3-field__input w-full" type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search settings" aria-label="Search settings" /></label>
           <div className="mt-4 flex flex-wrap gap-2 lg:hidden" aria-label="Config sections">
-            {SECTIONS.map((s) => (
+            {matchingSections.map((s) => (
               <button
                 key={s.id}
                 type="button"
@@ -175,7 +191,8 @@ export function ConfigForm() {
             ))}
           </div>
 
-          <ConfigGroup
+          <section className={cn("config-panel mt-6", activeSection === "appearance" ? "" : "hidden")} id="appearance"><header className="config-group-head"><h2 className="md-title-medium">Appearance · advanced</h2><code className="config-group-file">this browser</code></header>
+            <ConfigGroup
             id="appearance"
             title="Appearance"
             file="this browser"
@@ -241,6 +258,7 @@ export function ConfigForm() {
               <ThemePreview label="Light" variant="light" />
             </div>
           </ConfigGroup>
+          </section>
 
           <ConfigGroup
             id="engines"
@@ -248,6 +266,8 @@ export function ConfigForm() {
             file={`${CONFIG_KEY} · .env`}
             active={activeSection === "engines"}
           >
+            <div className="mb-4"><button type="button" className="md3-btn-outlined" onClick={()=>void testConfiguration()} disabled={checking}>{checking?"Checking…":"Test configuration"}</button><p className="mt-1 text-xs">Checks CLI sign-in, profile files, local write access, and PDF rendering.</p></div>
+            {readiness && <div role="status" className="mb-4 space-y-2 rounded-xl border p-3"><p className="font-medium">{readiness.ready?"Configuration checks passed":"Review these checks"}</p>{readiness.checks.map(check=><p key={check.id} className="text-sm"><strong>{check.ok?"✓":"!"} {check.label}</strong>{check.cause&&<span> — {check.cause}</span>}{check.recovery&&<span className="block text-xs">{check.recovery}</span>}</p>)}</div>}
             <ConfigRow
               title="Default CLI"
               description={
@@ -312,27 +332,11 @@ export function ConfigForm() {
             </div>
           </ConfigGroup>
 
-          <ConfigGroup
-            id="profile"
-            title="Profile & ranking"
-            file="config/profile.yml · portals.yml"
-            active={activeSection === "profile"}
-          >
-            <div data-co-tour="config-profile">
-            <ProfilePanel />
-
-            <ConfigDivider />
-
-            <div>
-              <p className="text-base font-semibold">Scoring weights</p>
-              <p className="mb-4 mt-1 text-[13px] text-[var(--md-sys-color-outline)]">
-                The heuristic fit score Explore ranks with and every report cites. Sliders always sum to 100 and
-                write to <code className="font-mono text-xs">portals.yml → ranking.weights</code>.
-              </p>
-              <WeightsEditor />
-            </div>
-            </div>
-          </ConfigGroup>
+          <section className={cn("config-panel mt-6", ["identity","goals","constraints","documents","followups"].includes(activeSection) ? "" : "hidden")}>
+            <header className="config-group-head"><h2 className="md-title-medium">{SECTIONS.find(s=>s.id===activeSection)?.label}</h2><code className="config-group-file">config/profile.yml</code></header>
+            <div data-co-tour="config-profile"><ProfilePanel section={activeSection as "identity"|"goals"|"constraints"|"documents"|"followups"}/></div>
+            {activeSection === "goals" && <><ConfigDivider/><div><p className="text-base font-semibold">Scoring weights</p><p className="mb-4 mt-1 text-[13px] text-[var(--md-sys-color-outline)]">Controls how Explore ranks jobs. Saved to <code>portals.yml → ranking.weights</code>.</p><WeightsEditor/></div></>}
+          </section>
 
           <ConfigGroup
             id="data"
