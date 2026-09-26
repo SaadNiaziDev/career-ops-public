@@ -591,7 +591,7 @@ export function CvEditor() {
           <MaterialSymbol name="progress_activity" size={32} className="animate-spin text-[var(--md-sys-color-primary)]" />
         </div>
       ) : (
-        <div className="cv-studio__panes" data-view={view} style={activeSource === "cv.md" ? {gridTemplateColumns: view === "split" ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)"} : undefined}>
+        <div className="cv-studio__panes" data-view={view} data-master={activeSource === "cv.md"}>
           {showEditor && (
             // Raw field markup (not Md3Textarea) so the textarea fills its pane
             // instead of growing the page as the CV gets longer.

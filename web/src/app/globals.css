@@ -2458,3 +2458,9 @@ html.dark .dossier-hero-scrim {
     transition: none;
   }
 }
+
+@media (min-width: 1280px) {
+  .cv-studio__panes[data-master="true"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .cv-studio__panes[data-master="true"][data-view="edit"],
+  .cv-studio__panes[data-master="true"][data-view="preview"] { grid-template-columns: minmax(0, 1fr); }
+}
