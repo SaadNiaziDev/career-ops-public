@@ -11,15 +11,26 @@ import { cliDisplayName, readCliConfig, writeCliConfig } from "@/lib/cli-config"
 import { cn } from "@/lib/cn";
 import { markPhaseComplete } from "@/lib/product-tour";
 
-type WizardStep = "cli" | "cv" | "verify";
+type WizardStep = "cv" | "cli" | "verify";
 type Check = { id: string; label: string; ok: boolean; cause?: string; recovery?: string };
 
 export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
-  const [wizardStep, setWizardStep] = useState<WizardStep>(hasCv ? "verify" : "cli");
+  const [wizardStep, setWizardStep] = useState<WizardStep>(hasCv ? "verify" : "cv");
   const [clis, setClis] = useState<ConfigCli[]>([]);
   const [cliId, setCliId] = useState<string>("");
   const [checks, setChecks] = useState<Check[]>([]);
   const [verifying, setVerifying] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("career-ops:first-run-step");
+      if (saved === "cv" || saved === "cli" || saved === "verify") setWizardStep(saved);
+    } catch { /* storage unavailable */ }
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem("career-ops:first-run-step", wizardStep); } catch { /* storage unavailable */ }
+  }, [wizardStep]);
 
   useEffect(() => {
     fetch("/api/clis")
@@ -73,7 +84,8 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
       if (response.ok && data.ready) {
         localStorage.removeItem("career-ops:onboarding-diagnostics");
         markPhaseComplete("onboarding");
-        window.location.assign("/");
+        localStorage.removeItem("career-ops:first-run-step");
+        window.location.assign("/explore");
       }
     } catch (error) {
       setChecks([{ id: "verification", label: "Setup verification could not run", ok: false, cause: error instanceof Error ? error.message : "request failed", recovery: "Reload this page, then retry verification." }]);
@@ -94,19 +106,18 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
     <PageShell width="default">
       <div data-co-tour="welcome">
         <p className="md-eyebrow">Welcome</p>
-        <h1 className="md-display-small-emphasized mt-2">Set up career-ops</h1>
+        <h1 className="md-display-small-emphasized mt-2">Find your next opportunity</h1>
         <p className="mt-2.5 max-w-[640px] text-[17px] leading-relaxed text-[var(--md-sys-color-on-surface-variant)]">
-          Three quick checks on your machine — connect an AI CLI, add your CV as{" "}
-          <code className="font-mono text-[14px]">cv.md</code>. Nothing is uploaded to us.
+          Add your CV, confirm your local setup, then find a role that fits. Your CV stays on this machine.
         </p>
       </div>
 
       <ol className="mt-6 flex flex-wrap gap-2 text-sm" aria-label="Setup steps">
         {(
           [
-            { id: "cli" as const, n: 1, label: "Connect AI CLI" },
-            { id: "cv" as const, n: 2, label: "Add your CV" },
-            { id: "verify" as const, n: 3, label: "Verify setup" },
+            { id: "cv" as const, n: 1, label: "Add your CV · required" },
+            { id: "verify" as const, n: 2, label: "Confirm setup · required" },
+            { id: "cli" as const, n: 3, label: "AI engine · optional" },
           ] as const
         ).map((s) => (
           <li key={s.id}>
@@ -131,16 +142,18 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
 
       {wizardStep === "cli" ? (
         <section className="mt-7" data-co-tour="cli">
-          <h2 className="text-lg font-medium text-[var(--md-sys-color-on-surface)]">Which AI CLI do you use?</h2>
+          <h2 className="text-lg font-medium text-[var(--md-sys-color-on-surface)]">Choose an AI engine</h2>
           <p className="mt-1 max-w-[640px] text-sm text-[var(--md-sys-color-on-surface-variant)]">
-            Used for job scoring, CV formatting, portal scans, and application drafts. Install one if none are detected — paste
-            and <code className="font-mono text-[12px]">.md</code> files still work without it.
+            This step is optional. We select an installed engine automatically. Choose one here only if you want to change it.
           </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-1 lg:grid-cols-3">
-            {clis.map((c) => (
-              <ConfigCliTile key={c.id} cli={c} selected={cliId === c.id} onSelect={() => selectCli(c.id)} />
-            ))}
-          </div>
+          <details className="mt-4 rounded-xl border border-[var(--md-sys-color-outline-variant)] px-4 py-3">
+            <summary className="cursor-pointer text-sm font-medium text-[var(--md-sys-color-on-surface)]">Choose a different engine</summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-1 lg:grid-cols-3">
+              {clis.map((c) => (
+                <ConfigCliTile key={c.id} cli={c} selected={cliId === c.id} onSelect={() => selectCli(c.id)} />
+              ))}
+            </div>
+          </details>
           {activeCli ? (
             <p className="mt-3 flex items-center gap-1.5 text-sm text-[var(--md-sys-color-on-surface-variant)]">
               <MaterialSymbol name="check_circle" size={16} className="text-[var(--md-sys-color-primary)]" />
@@ -153,8 +166,8 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
             </p>
           ) : null}
           <div className="mt-6 flex flex-wrap gap-3">
-            <Md3ActionButton variant="filled" icon="arrow_forward" onClick={() => setWizardStep("cv")}>
-              {activeCli ? "Continue to CV" : "Continue without CLI"}
+            <Md3ActionButton variant="filled" icon="arrow_forward" onClick={() => setWizardStep("verify")}>
+              {activeCli ? "Continue to setup" : "Continue without AI engine"}
             </Md3ActionButton>
             <Link href="/config" className="md3-btn-text min-h-11 px-4 text-sm">
               Advanced config
@@ -202,8 +215,8 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
               </li>
             </ul>
           </details>
-          <button type="button" className="md3-btn-text mt-4 text-sm" onClick={() => setWizardStep("cli")}>
-            ← Back to CLI setup
+          <button type="button" className="md3-btn-text mt-4 text-sm" onClick={() => setWizardStep("verify")}>
+            Continue to setup checks →
           </button>
         </section>
       ) : (
@@ -220,7 +233,7 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
                   <MaterialSymbol name={check.ok ? "check_circle" : "error"} size={17} className={check.ok ? "text-[var(--md-sys-color-primary)]" : "text-[var(--md-sys-color-error)]"} />
                   {check.label}
                 </p>
-                {!check.ok && <p className="mt-1 pl-6 text-[var(--md-sys-color-on-surface-variant)]">{check.cause} {check.recovery}</p>}
+                {!check.ok && <p className="mt-1 pl-6 text-[var(--md-sys-color-on-surface-variant)]">{check.cause} {check.recovery} {check.id === "portals.yml" ? <Link className="text-[var(--md-sys-color-primary)] underline" href="/portals">Open Portals</Link> : ["config/profile.yml", "modes/_profile.md"].includes(check.id) ? <Link className="text-[var(--md-sys-color-primary)] underline" href="/config">Open Config</Link> : null}</p>}
               </div>
             ))}
           </div>

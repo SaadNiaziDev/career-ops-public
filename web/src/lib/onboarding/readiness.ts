@@ -4,7 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import yaml from "js-yaml";
 import { careerOpsRoot } from "@/lib/career-ops";
-import { resolveCli } from "@/lib/clis";
+import { resolveCli, resolveDefaultCli } from "@/lib/clis";
 import { atomicWrite } from "@/lib/core/safe-write";
 import { authArgs, cliProbePassed } from "@/lib/onboarding/readiness-policy";
 import { onboardingVerificationPending as readPending } from "@/lib/onboarding/readiness-state";
@@ -63,10 +63,12 @@ function writableCheck(root: string, rel: string): ReadinessCheck {
 }
 
 async function cliCheck(cliId: string): Promise<ReadinessCheck> {
-  const resolved = resolveCli(cliId);
-  const args = authArgs(cliId);
+  const selectedCli = cliId || resolveDefaultCli()?.cliId || "";
+  if (!selectedCli) return { id: "cli", label: "No AI engine detected (optional)", ok: false, cause: "Discovery and tracker setup remain available.", recovery: "Install and sign in to Claude Code, Codex, or Cursor when you want AI evaluation." };
+  const resolved = resolveCli(selectedCli);
+  const args = authArgs(selectedCli);
   if (!resolved || !args) {
-    return { id: "cli", label: "AI CLI is unavailable", ok: false, cause: "No supported CLI was selected or found.", recovery: "Install Claude Code, Codex, or Cursor Agent; sign in; then retry." };
+    return { id: "cli", label: "AI engine is unavailable (optional)", ok: false, cause: "The selected engine is not installed.", recovery: "Install Claude Code, Codex, or Cursor Agent when you want AI evaluation." };
   }
   const result = await new Promise<{ code: number | null; output: string }>((resolve) => {
     execFile(resolved.binPath, args, { cwd: careerOpsRoot(), timeout: 10_000 }, (error, stdout, stderr) => {
@@ -77,7 +79,7 @@ async function cliCheck(cliId: string): Promise<ReadinessCheck> {
   const ok = cliProbePassed(result.code, result.output);
   return ok
     ? { id: "cli", label: `${resolved.spec.name} is signed in`, ok: true }
-    : { id: "cli", label: `${resolved.spec.name} needs attention`, ok: false, cause: "The authentication probe failed.", recovery: `Sign in with ${resolved.spec.name} in a terminal, then retry.` };
+    : { id: "cli", label: `${resolved.spec.name} needs attention (optional)`, ok: false, cause: "The authentication probe failed.", recovery: `Sign in with ${resolved.spec.name} when you want AI evaluation.` };
 }
 
 async function browserCheck(): Promise<ReadinessCheck> {
@@ -104,7 +106,7 @@ export async function runReadiness(cliId: string): Promise<ReadinessResult> {
     ...["data", "output", "reports"].map((dir) => writableCheck(root, dir)),
     await browserCheck(),
   ];
-  return { ready: checks.every((check) => check.ok), checks };
+  return { ready: checks.every((check) => check.ok || check.id === "cli"), checks };
 }
 
 export function writeOnboardingStatus(result: ReadinessResult | { ready: false; checks: [] }): void {
