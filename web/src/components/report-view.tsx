@@ -4,7 +4,7 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Application } from "@/lib/career-ops";
-import { scoreTone, scoreNum, legitimacyTone, parseMachineSummary, stripMachineSummary } from "@/lib/format";
+import { scoreTone, scoreNum, legitimacyTone, parseMachineSummary, stripMachineSummary, statusDot } from "@/lib/format";
 import { VerdictCard } from "@/components/report/verdict-card";
 import { DimensionChart } from "@/components/report/dimension-chart";
 import { StatusSelect } from "@/components/status-select";
@@ -151,12 +151,19 @@ function ReportBody({
   const proseBody = stripMachineSummary(body);
   const intro = parsedIntro;
   const sections = parsedSections.filter((section) => !isMachine(section.heading));
+  const formatNotice = warnings.length > 0 ? (
+    <div role="status" className="md3-alert md3-alert--warning">
+      <div><strong>Report format notice</strong><ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>
+    </div>
+  ) : null;
 
   if (sections.length === 0) {
     return (
-      <article className="report-prose-compact">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
-      </article>
+      <div className="dossier-inset-stack">
+        {formatNotice}
+        {machineSummary && <VerdictCard summary={machineSummary} score={score} legitimacy={legitimacy} />}
+        <article className="report-prose-compact"><ReactMarkdown remarkPlugins={[remarkGfm]}>{proseBody || body}</ReactMarkdown></article>
+      </div>
     );
   }
 
@@ -182,11 +189,7 @@ function ReportBody({
 
   return (
     <div className="dossier-inset-stack">
-      {warnings.length > 0 && (
-        <div role="status" className="md3-alert md3-alert--warning">
-          <div><strong>Report format notice</strong><ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>
-        </div>
-      )}
+      {formatNotice}
       {machineSummary && <VerdictCard summary={machineSummary} score={score} legitimacy={legitimacy} />}
       <DimensionChart scores={machineSummary?.scores} globalScore={score} />
 
@@ -211,7 +214,6 @@ function ReportBody({
       {evidence.length > 0 && (
         <Md3Collapse
           className="report-toplevel-collapse"
-          defaultOpen
           title={
             <div className="flex items-center gap-2.5">
               <span className="report-section-icon">
@@ -323,6 +325,12 @@ export function ReportView({
           </Link>
           <span>/</span>
           <span className="font-mono md-body-small">#{id}</span>
+          {app?.status && (
+            <span className="inline-flex items-center gap-2 rounded-full border border-[var(--md-sys-color-outline-variant)] px-3 py-1 md-body-small">
+              <span aria-hidden="true" className={cn("h-2 w-2 rounded-full", statusDot(app.status))} />
+              {app.status}
+            </span>
+          )}
           {originJob ? (
             <>
               <span>/</span>
