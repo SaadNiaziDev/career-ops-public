@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";
@@ -39,6 +39,10 @@ type Props = { compact?: boolean; origin?: string; className?: string };
 export function JobLinkHub({ compact = false, origin = "/add", className }: Props) {
   const router = useRouter();
   const { startJob } = useJobs();
+  const inspectionAbort = useRef<AbortController | null>(null);
+  const [postingText, setPostingText] = useState("");
+  const [confirmedOpen, setConfirmedOpen] = useState(false);
+  const [showPaste, setShowPaste] = useState(false);
   const [raw, setRaw] = useState("");
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [busy, setBusy] = useState(false);
@@ -49,25 +53,31 @@ export function JobLinkHub({ compact = false, origin = "/add", className }: Prop
 
   const inspect = useCallback(async () => {
     if (!url) { flash("error", "Enter a full public job URL beginning with https://."); return; }
+    inspectionAbort.current?.abort();
+    const controller = new AbortController();
+    inspectionAbort.current = controller;
+    setConfirmedOpen(false);
     setBusy(true); setNotice(null); setInspection(null);
     try {
       const response = await fetch("/api/job-intake/inspect", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }), signal: controller.signal,
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not check this link.");
-      setInspection(data as Inspection);
+      if (!controller.signal.aborted) setInspection(data as Inspection);
     } catch (error) {
-      flash("error", error instanceof Error ? error.message : "Could not check this link.");
-    } finally { setBusy(false); }
+      if (!controller.signal.aborted) flash("error", error instanceof Error ? error.message : "Could not check this link.");
+    } finally { if (!controller.signal.aborted) setBusy(false); }
   }, [url]);
 
   const evaluate = (allowUnverified = false) => {
     if (!inspection || !inspection.hasCv) return;
     if (inspection.liveness?.result === "expired") return;
     if (inspection.liveness?.result !== "active" && !allowUnverified) { flash("info", "The posting could not be verified. Confirm it is open before spending tokens."); return; }
-    startJob({ title: "Evaluate · pasted URL", subtitle: guessFromUrl(inspection.url).title, kind: "evaluate", input: inspection.url, page: origin });
-    flash("info", "Evaluation started. Follow progress in Activity.");
+    if (showPaste && postingText.trim().length < 300) { flash("error", "Paste at least 300 characters from the job description."); return; }
+    const jobId = startJob({ title: "Evaluate · pasted URL", subtitle: guessFromUrl(inspection.url).title, kind: "evaluate", input: inspection.url, page: origin, context: showPaste ? {postingText: postingText.trim()} : undefined });
+    if (jobId) router.push(`/jobs/${jobId}`);
+    else flash("error", "Evaluation could not start. Check your AI engine in Config.");
   };
 
   const addInbox = async () => {
@@ -107,12 +117,12 @@ export function JobLinkHub({ compact = false, origin = "/add", className }: Prop
       {notice && <p role="status" className={cn("md3-alert mb-3", `md3-alert--${notice.tone}`)}>{notice.text}</p>}
       <div data-co-tour="add-job-hub"><Md3Input
         icon="link" type="url" placeholder="https://company.com/careers/…" value={raw}
-        onChange={(event) => { setRaw(event.target.value); setInspection(null); }}
+        onChange={(event) => { inspectionAbort.current?.abort(); setBusy(false); setRaw(event.target.value); setInspection(null); setConfirmedOpen(false); setPostingText(""); setShowPaste(false); }}
         onKeyDown={(event) => event.key === "Enter" && void inspect()}
         aria-label="Job posting URL"
       /></div>
       <div className={cn("md3-actions-row mt-4", compact && "mt-3")} data-co-tour="add-job-actions">
-        <Md3ActionButton variant="filled" icon="travel_explore" disabled={!url} loading={busy} onClick={() => void inspect()}>
+        <Md3ActionButton variant="filled" icon="travel_explore" disabled={!url || busy} loading={busy} onClick={() => void inspect()}>
           Check link
         </Md3ActionButton>
       </div>
@@ -122,7 +132,7 @@ export function JobLinkHub({ compact = false, origin = "/add", className }: Prop
           <p className="mb-3 md-body-small text-[var(--md-sys-color-on-surface-variant)]">
             {inspection.existing ? "Already in your pipeline." : `Posting check: ${inspection.liveness?.result}. ${inspection.liveness?.reason}`}
           </p>
-          {!inspection.existing && inspection.recommendation === "evaluate" && !inspection.hasCv && (
+          {!inspection.existing && !inspection.hasCv && (
             <p className="md3-alert md3-alert--warning mb-3">Add a CV before evaluating. <Link className="underline" href="/cv">Set up your CV</Link>.</p>
           )}
           {inspection.existing ? <Link className="md3-button md3-button--filled" href={inspection.existing.href}>{recommendation}</Link> :
@@ -132,8 +142,19 @@ export function JobLinkHub({ compact = false, origin = "/add", className }: Prop
               {recommendation}
             </Md3ActionButton>}
           {inspection.liveness?.result === "uncertain" && !inspection.existing && inspection.hasCv && (
-            <button className="ml-3 text-sm underline" onClick={() => evaluate(true)}>Evaluate after my check</button>
+            <div className="mt-3 space-y-3">
+              <p className="text-sm">Automatic verification was inconclusive. Open the posting to confirm it is available, or retry Check link.</p>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={confirmedOpen} onChange={event => setConfirmedOpen(event.target.checked)} />I opened this posting and confirmed it is accepting applications.</label>
+              <Md3ActionButton variant="filled" cost="spend" disabled={!confirmedOpen} onClick={() => evaluate(true)}>Evaluate confirmed posting</Md3ActionButton>
+            </div>
           )}
+          {!inspection.existing && inspection.liveness?.result !== "expired" && <div className="mt-3">
+            <button className="text-sm underline" onClick={() => setShowPaste(value => !value)}>{showPaste ? "Use website content" : "Paste job description"}</button>
+            {showPaste && <label className="mt-2 block text-sm">Job description from this posting (300–40,000 characters)
+              <textarea aria-label="Job description" className="md3-field__input mt-2 min-h-48 w-full" maxLength={40000} value={postingText} onChange={event => setPostingText(event.target.value)} />
+              <span>This text is used for evaluation when the site cannot be read. The report records verification as unconfirmed.</span>
+            </label>}
+          </div>}
           <button className="ml-3 text-sm underline" onClick={() => setShowAlternatives((value) => !value)}>
             {showAlternatives ? "Hide other options" : "Other options"}
           </button>

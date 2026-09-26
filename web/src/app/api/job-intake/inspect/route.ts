@@ -34,6 +34,6 @@ export async function POST(req: Request) {
     liveness,
     existing,
     hasCv: doctorState().hasCv,
-    recommendation: existing ? "open-existing" : liveness?.result === "expired" ? "open-posting" : "evaluate",
+    recommendation: existing ? "open-existing" : liveness?.result === "active" ? "evaluate" : "open-posting",
   });
 }
