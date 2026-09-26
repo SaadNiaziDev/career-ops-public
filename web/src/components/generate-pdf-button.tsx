@@ -47,7 +47,7 @@ export function GeneratePdfButton({
     return (
       <div className={cn("md3-actions-row", rail && "w-full")}>
         <a
-          href={`/api/cv-pdf?company=${encodeURIComponent(company)}`}
+          href={`/cv?report=${encodeURIComponent(n)}`}
           target="_blank"
           rel="noreferrer"
           className={cn("md3-action-btn md3-action-btn--filled flex-1", rail && "w-full")}
