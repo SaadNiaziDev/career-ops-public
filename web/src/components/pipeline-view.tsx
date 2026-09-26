@@ -15,14 +15,9 @@ import { Md3Input } from "@/components/ui/md3-input";
 import { Md3Select } from "@/components/ui/md3-select";
 import { cn } from "@/lib/cn";
 import { applicationOrderFromParams, defaultApplicationOrder, sortApplications } from "@/lib/list-sort-policy";
+import { countPipelineStages, pipelinePostingSource, pipelineRoleFamily, PIPELINE_STAGES } from "@/lib/pipeline-stages";
 
-const STAGES = [
-  { key: "EVALUATED", label: "Evaluated", stage: "evaluated" as const },
-  { key: "APPLIED", label: "Applied", stage: "applied" as const },
-  { key: "RESPONDED", label: "Responded", stage: "responded" as const },
-  { key: "INTERVIEW", label: "Interview", stage: "interview" as const },
-  { key: "OFFER", label: "Offer", stage: "offer" as const },
-] as const;
+const STAGES = PIPELINE_STAGES;
 type StageKey = (typeof STAGES)[number]["key"];
 
 const CLOSED = ["REJECTED", "DISCARDED", "SKIP"] as const;
@@ -31,7 +26,7 @@ const TABS = ["INBOX", "ALL", ...STAGES.map((s) => s.key), ...CLOSED] as const;
 type Tab = (typeof TABS)[number];
 
 const BOARD_CAP = 10;
-const DATE_WINDOWS = [7, 30, 90] as const;
+const DATE_WINDOWS = [7, 30, 90, 365] as const;
 
 const STAGE_TAB_ITEMS = [
   { key: "INBOX" as const, label: "Inbox" },
@@ -62,6 +57,9 @@ export function PipelineView({
   const pDays = parseInt(params.get("days") ?? "", 10);
   const daysFilter: number | null = (DATE_WINDOWS as readonly number[]).includes(pDays) ? pDays : null;
   const locationFilter = params.get("location") ?? "";
+  const sourceFilter = params.get("source") ?? "";
+  const scoreBandFilter = params.get("scoreBand") ?? "";
+  const roleFamilyFilter = params.get("roleFamily") ?? "";
   const applicationOrder = applicationOrderFromParams(params);
 
   const [q, setQ] = useState(params.get("q") ?? "");
@@ -110,15 +108,16 @@ export function PipelineView({
   const byStage = useMemo(() => {
     const buckets = new Map<StageKey, Application[]>(STAGES.map((s) => [s.key, []]));
     const closed: Application[] = [];
+    const currentCounts = countPipelineStages(applications, (row) => canonStatus(row.status));
     for (const r of applications) {
       const c = canonStatus(r.status);
-      const stage = STAGES.find((s) => c.includes(s.key));
+      const stage = STAGES.find((s) => s.key === c);
       if (stage) buckets.get(stage.key)!.push(r);
       else closed.push(r);
     }
     for (const [stage, rows] of buckets) buckets.set(stage, sortApplications(rows, stage));
     closed.splice(0, closed.length, ...sortApplications(closed, "ALL"));
-    return { buckets, closed };
+    return { buckets, closed, currentCounts };
   }, [applications]);
 
   const stats = useMemo(() => {
@@ -145,16 +144,21 @@ export function PipelineView({
       });
     }
     if (daysFilter != null) rows = rows.filter((r) => isWithinDays(r.date, daysFilter));
+    if (scoreBandFilter === "high") rows = rows.filter((r) => Number.isFinite(scoreNum(r.score)) && scoreNum(r.score) >= 4);
+    if (scoreBandFilter === "low") rows = rows.filter((r) => Number.isFinite(scoreNum(r.score)) && scoreNum(r.score) < 4);
+    if (scoreBandFilter === "unscored") rows = rows.filter((r) => !Number.isFinite(scoreNum(r.score)));
     if (locationFilter.trim()) {
       const locationNeedle = locationFilter.trim().toLowerCase();
       rows = rows.filter((r) => applicationLocationText(r).includes(locationNeedle));
     }
+    if (sourceFilter.trim()) rows = rows.filter((r) => applicationSource(r).includes(sourceFilter.trim().toLowerCase()));
+    if (roleFamilyFilter) rows = rows.filter((r) => pipelineRoleFamily(r.role) === roleFamilyFilter);
     if (q.trim()) {
       const needle = q.toLowerCase();
       rows = rows.filter((r) => `${r.company} ${r.role} ${r.location ?? ""}`.toLowerCase().includes(needle));
     }
     return sortApplications(rows, tab, applicationOrder);
-  }, [applications, mode, tab, q, applicationOrder, minFilter, daysFilter, locationFilter]);
+  }, [applications, mode, tab, q, applicationOrder, minFilter, daysFilter, locationFilter, sourceFilter, scoreBandFilter, roleFamilyFilter]);
 
   const goInbox = () => setParams({ tab: null, view: null, min: null });
   const goBoard = () => setParams({ tab: "ALL", view: null, min: null });
@@ -162,16 +166,16 @@ export function PipelineView({
 
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = { INBOX: pendingInbox.length };
-    for (const s of STAGES) counts[s.key] = (byStage.buckets.get(s.key) ?? []).length;
+    for (const s of STAGES) counts[s.key] = byStage.currentCounts[s.key];
     return counts;
   }, [pendingInbox.length, byStage]);
 
   const activeTabKey = mode === "inbox" ? "INBOX" : mode === "board" ? "ALL" : tab;
-  const hasTableFilters = minFilter != null || daysFilter != null || locationFilter.trim() !== "" || q.trim() !== "";
+  const hasTableFilters = minFilter != null || daysFilter != null || locationFilter.trim() !== "" || sourceFilter.trim() !== "" || scoreBandFilter !== "" || roleFamilyFilter !== "" || q.trim() !== "";
 
   const clearTableFilters = () => {
     setQ("");
-    setParams({ q: null, min: null, days: null, location: null });
+    setParams({ q: null, min: null, days: null, location: null, source: null, scoreBand: null, roleFamily: null });
   };
 
   return (
@@ -361,6 +365,7 @@ export function PipelineView({
                     { value: "7", label: "Last 7 days" },
                     { value: "30", label: "Last 30 days" },
                     { value: "90", label: "Last 90 days" },
+                    { value: "365", label: "Last 365 days" },
                   ]}
                   aria-label="Date evaluated"
                 />
@@ -380,6 +385,20 @@ export function PipelineView({
                 />
               </div>
               <div className="pipeline-filter-field">
+                <span>Score band</span>
+                <Md3Select
+                  value={scoreBandFilter || "any"}
+                  onChange={(value) => setParams({ scoreBand: value === "any" ? null : value })}
+                  options={[
+                    { value: "any", label: "Any score" },
+                    { value: "high", label: "4.0+" },
+                    { value: "low", label: "Below 4.0" },
+                    { value: "unscored", label: "No score" },
+                  ]}
+                  aria-label="Filter by score band"
+                />
+              </div>
+              <div className="pipeline-filter-field">
                 <span>Location</span>
                 <Md3Input
                   icon="location_on"
@@ -387,6 +406,28 @@ export function PipelineView({
                   aria-label="Filter tracked roles by location"
                   value={locationFilter}
                   onChange={(e) => setParams({ location: e.target.value || null })}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="pipeline-filter-field">
+                <span>Posting source</span>
+                <Md3Input
+                  icon="language"
+                  placeholder="greenhouse.io"
+                  aria-label="Filter by posting source"
+                  value={sourceFilter}
+                  onChange={(e) => setParams({ source: e.target.value || null })}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="pipeline-filter-field">
+                <span>Role family</span>
+                <Md3Input
+                  icon="work"
+                  placeholder="Software engineering"
+                  aria-label="Filter by role family"
+                  value={roleFamilyFilter}
+                  onChange={(e) => setParams({ roleFamily: e.target.value || null })}
                   className="min-h-10"
                 />
               </div>
@@ -679,6 +720,10 @@ function PipelineListRow({
 
 function applicationLocationText(row: Application): string {
   return `${row.location ?? ""} ${row.notes} ${row.role}`.toLowerCase();
+}
+
+function applicationSource(row: Application): string {
+  return pipelinePostingSource(row.url, row.via);
 }
 
 function applicationLocationLabel(row: Application): string {

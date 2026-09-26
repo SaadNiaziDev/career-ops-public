@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { atomicWrite } from "@/lib/core/safe-write";
 
 const require = createRequire(path.join(process.cwd(), "package.json"));
 
@@ -39,6 +40,7 @@ export async function POST(req: Request) {
     if (canonical === "Applied" && Number.isFinite(score) && score < 4 && !overrideReason) {
       return NextResponse.json({ error: "This role scored below 4.0; provide an override reason to mark it Applied." }, { status: 409 });
     }
+    const previous = resolveCanonicalState(matches[0].status, loadCanonicalStates(path.join(root, "templates/states.yml")));
     const result = await setTrackerStatus({
       trackerPath,
       statesPath: path.join(root, "templates/states.yml"),
@@ -46,7 +48,19 @@ export async function POST(req: Request) {
       status,
       note: canonical === "Applied" && Number.isFinite(score) && score < 4 && overrideReason ? `Below-4.0 apply override: ${overrideReason}` : undefined,
     });
-    return NextResponse.json({ ok: true, status: result.status });
+    let historyRecorded = true;
+    if (previous && previous !== canonical) {
+      try {
+        const historyFile = path.join(root, "data/application-stage-history.json");
+        const current = fs.existsSync(historyFile) ? JSON.parse(fs.readFileSync(historyFile, "utf8")) : [];
+        const events = Array.isArray(current) ? current : [];
+        events.push({ n: String(n), from: previous, to: canonical, at: new Date().toISOString() });
+        atomicWrite(historyFile, `${JSON.stringify(events, null, 2)}\n`);
+      } catch {
+        historyRecorded = false;
+      }
+    }
+    return NextResponse.json({ ok: true, status: result.status, historyRecorded });
   } catch (error) {
     const failure = error as Error & { code?: string };
     const code = failure.code === "no-tracker" ? 404

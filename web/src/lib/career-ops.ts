@@ -207,6 +207,26 @@ export type Application = {
   offerDeadline?: string;
 };
 
+export type ApplicationStageEvent = { n: string; from: string; to: string; at: string };
+
+/** Status history is written by the local web status endpoint from this release onward. */
+export function readApplicationStageHistory(): ApplicationStageEvent[] {
+  const raw = read("data/application-stage-history.json");
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((row): row is ApplicationStageEvent =>
+      !!row && typeof row === "object" &&
+      typeof row.n === "string" && /^\d+$/.test(row.n) &&
+      typeof row.from === "string" && typeof row.to === "string" &&
+      typeof row.at === "string" && !Number.isNaN(Date.parse(row.at)),
+    );
+  } catch {
+    return [];
+  }
+}
+
 function reportsWithVerifiedPdf(): Set<string> {
   const ready = new Set<string>();
   const manifest = read("data/pdf-index.tsv");
