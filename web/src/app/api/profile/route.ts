@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { PROFILE_PATHS, validateProfilePatch, type ProfileFields } from "@/lib/profile-fields";
+import { readBoundedJson } from "@/lib/core/request-bounds";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
 
 export const runtime = "nodejs";
@@ -13,16 +15,7 @@ export const dynamic = "force-dynamic";
 // proposed keys, write atomically (temp + rename), and only ever via the confirm-
 // gated setProfile action. The web orchestrates the real file — no parallel store.
 
-type ProfilePatch = {
-  name?: string;
-  email?: string;
-  location?: string;
-  roles?: string[];
-  compMin?: number;
-  compMax?: number;
-  currency?: string;
-  remote?: string;
-};
+type ProfilePatch = ProfileFields;
 
 function isObj(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
@@ -39,19 +32,19 @@ function deepMerge(dst: unknown, src: Record<string, unknown>): Record<string, u
 
 function patchToProfile(p: ProfilePatch): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  const candidate: Record<string, unknown> = {};
-  if (p.name) candidate.full_name = p.name;
-  if (p.email) candidate.email = p.email;
-  if (p.location) candidate.location = p.location;
-  if (Object.keys(candidate).length) out.candidate = candidate;
-  if (p.roles?.length) out.target_roles = { primary: p.roles.slice(0, 6) };
-  const comp: Record<string, unknown> = {};
-  if (p.compMin && p.compMax) comp.target_range = `${p.compMin}-${p.compMax}`;
-  if (p.currency) comp.currency = p.currency;
-  if (p.remote) comp.location_flexibility = p.remote;
-  if (Object.keys(comp).length) out.compensation = comp;
-  // seniority intentionally not written (no canonical home in profile.yml);
-  // archetypes/narrative live in modes/_profile.md — this writer never touches them.
+  for (const [key, value] of Object.entries(p)) {
+    const parts = PROFILE_PATHS[key as keyof ProfilePatch];
+    if (!parts?.length) continue;
+    let target = out;
+    for (const part of parts.slice(0, -1)) {
+      if (!isObj(target[part])) target[part] = {};
+      target = target[part] as Record<string, unknown>;
+    }
+    target[parts.at(-1)!] = value;
+  }
+  if (p.compMin !== undefined && p.compMax !== undefined) {
+    out.compensation = {...(out.compensation as object ?? {}), target_range: `${p.compMin}-${p.compMax}`};
+  }
   return out;
 }
 
@@ -66,36 +59,37 @@ export async function GET() {
     const parsed = yaml.load(fs.readFileSync(file, "utf8"));
     doc = isObj(parsed) ? parsed : {};
     exists = true;
-  } catch {
-    return Response.json({ exists: false, profile: {} satisfies ProfilePatch });
+  } catch (error) {
+    if (!fs.existsSync(file)) return Response.json({ exists: false, profile: {} satisfies ProfilePatch });
+    return Response.json({error: error instanceof Error ? error.message : "config/profile.yml could not be read."}, {status: 409});
   }
 
-  const candidate = isObj(doc.candidate) ? doc.candidate : {};
-  const targets = isObj(doc.target_roles) ? doc.target_roles : {};
-  const comp = isObj(doc.compensation) ? doc.compensation : {};
-  const range = typeof comp.target_range === "string" ? comp.target_range.match(/(\d+)\s*-\s*(\d+)/) : null;
+  if (!isObj(yaml.load(fs.readFileSync(file, "utf8")))) return Response.json({error: "config/profile.yml must contain a YAML mapping."}, {status:409});
+  const profile: ProfilePatch = {};
+  const customFields: string[] = [];
+  for (const [key, parts] of Object.entries(PROFILE_PATHS)) {
+    if (!parts.length) continue;
+    let value: unknown = doc;
+    for (const part of parts) value = isObj(value) ? value[part] : undefined;
+    if (value === undefined) continue;
+    if (typeof value === "string" || typeof value === "number" || (Array.isArray(value) && value.every(v => typeof v === "string"))) {
+      Object.assign(profile, {[key]: value});
+    } else customFields.push(key);
+  }
 
-  const profile: ProfilePatch = {
-    name: typeof candidate.full_name === "string" ? candidate.full_name : undefined,
-    email: typeof candidate.email === "string" ? candidate.email : undefined,
-    location: typeof candidate.location === "string" ? candidate.location : undefined,
-    roles: Array.isArray(targets.primary) ? targets.primary.map(String) : undefined,
-    compMin: range ? Number(range[1]) : undefined,
-    compMax: range ? Number(range[2]) : undefined,
-    currency: typeof comp.currency === "string" ? comp.currency : undefined,
-    remote: typeof comp.location_flexibility === "string" ? comp.location_flexibility : undefined,
-  };
-
-  return Response.json({ exists, profile });
+  return Response.json({ exists, profile, customFields });
 }
 
 export async function POST(req: Request) {
   let patch: ProfilePatch;
   try {
-    patch = (await req.json()) as ProfilePatch;
+    patch = await readBoundedJson(req, 50_000) as ProfilePatch;
   } catch {
     return Response.json({ error: "bad json" }, { status: 400 });
   }
+  if (!isObj(patch)) return Response.json({error: "Expected profile fields"}, {status: 400});
+  const invalid = validateProfilePatch(patch);
+  if (invalid) return Response.json({error: invalid}, {status: 400});
   const proposed = patchToProfile(patch);
   if (Object.keys(proposed).length === 0) return Response.json({ error: "nothing to write" }, { status: 400 });
 
@@ -120,7 +114,8 @@ export async function POST(req: Request) {
     } catch {
       return Response.json({ error: "config/profile.yml exists but is not valid YAML — refusing to overwrite it." }, { status: 409 });
     }
-    base = isObj(parsed) ? (parsed as Record<string, unknown>) : {};
+    if (!isObj(parsed)) return Response.json({error: "Profile must be a YAML mapping; refusing to overwrite it."}, {status: 409});
+    base = parsed;
   }
 
   const merged = deepMerge(base, proposed);
