@@ -1,27 +1,22 @@
+import { parsePipeline } from "./pipeline-entry.mjs";
+
 export type RemoveInboxResult = {
   content: string;
   removed: number;
 };
 
-/** Remove every unchecked pipeline row for one exact URL.
- * Checked Processed rows are history and must remain untouched. */
+/** Remove unchecked pending rows for one exact URL and retain completed history. */
 export function removePendingInboxUrl(markdown: string, rawUrl: string): RemoveInboxResult {
   const url = rawUrl.trim();
   if (!url) return { content: markdown, removed: 0 };
-
-  const newline = markdown.includes("\r\n") ? "\r\n" : "\n";
-  const hadTrailingNewline = markdown.endsWith("\n");
-  const lines = markdown.split(/\r?\n/);
-  if (hadTrailingNewline) lines.pop();
-
-  let removed = 0;
-  const kept = lines.filter((line) => {
-    const match = line.match(/^\s*-\s*\[\s\]\s*([^|]+?)(?:\s*\||\s*$)/);
-    if (!match || match[1].trim() !== url) return true;
-    removed += 1;
-    return false;
-  });
-
-  const content = kept.join(newline) + (hadTrailingNewline ? newline : "");
-  return { content, removed };
+  const parsed = parsePipeline(markdown);
+  const remove = new Set(parsed.entries
+    .filter((entry) => entry.url === url && !entry.done && entry.section !== "processed")
+    .map((entry) => entry.lineIndex));
+  const lines = parsed.lines.filter((_, index) => !remove.has(index));
+  const trailing = markdown.match(/\r?\n$/)?.[0] ?? "";
+  return {
+    content: lines.join(markdown.includes("\r\n") ? "\r\n" : "\n") + trailing,
+    removed: remove.size,
+  };
 }

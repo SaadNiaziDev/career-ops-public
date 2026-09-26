@@ -46,6 +46,7 @@ import { fingerprintText, findCrossListings } from './fingerprint-core.mjs';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 import { normalizeCompany } from './tracker-utils.mjs';
 import { normalizeVacancyUrl } from './vacancy-identity.mjs';
+import { formatPipelineEntry, parsePipeline } from './web/src/lib/core/pipeline-entry.mjs';
 
 // ── Config ──────────────────────────────────────────────────────────
 
@@ -756,9 +757,7 @@ export function loadSeenUrls(policy = {}, paths = {}, fileSystem = fs) {
   // pipeline.md — extract URLs from checkbox lines
   if (fileSystem.existsSync(pipelinePath)) {
     const text = fileSystem.readFileSync(pipelinePath, 'utf-8');
-    for (const match of text.matchAll(/- \[[ x]\] (https?:\/\/\S+)/g)) {
-      seen.add(normalizeVacancyUrl(match[1]) ?? match[1]);
-    }
+    for (const entry of parsePipeline(text).entries) seen.add(normalizeVacancyUrl(entry.url) ?? entry.url);
   }
 
   // applications.md — extract URLs from report links and any inline URLs
@@ -1112,7 +1111,7 @@ export function formatCompensation(salary) {
   const range = lo && hi && lo !== hi ? `${lo}-${hi}` : (lo || hi || '');
   if (!range) return '';
   const currency = typeof salary.currency === 'string' ? salary.currency.trim() : '';
-  return sanitizeMarkdownField(currency ? `${range} ${currency}` : range);
+  return normalizeScanScalar(currency ? `${range} ${currency}` : range).replace(/\|/g, '/');
 }
 
 // Trust/legitimacy signal (#1743): the scanner sets offer.trustScore (0-100) +
@@ -1141,9 +1140,9 @@ export function formatTrustSegment(offer) {
 }
 
 export function formatPipelineOffer(offer) {
-  const url = sanitizePipelineUrl(offer.url);
-  const company = sanitizeMarkdownField(offer.company);
-  const title = sanitizeMarkdownField(offer.title);
+  const url = normalizeScanUrl(offer.url).replace(/\|/g, '%7C');
+  const company = normalizeScanScalar(offer.company).replace(/\|/g, '/');
+  const title = normalizeScanScalar(offer.title).replace(/\|/g, '/');
   // Optional trailing columns, each sanitized like every other field:
   //   4th = location, 5th = compensation.
   // Gate location on an actual string so malformed provider data (a number or
@@ -1151,32 +1150,33 @@ export function formatPipelineOffer(offer) {
   // spurious column. The columns are positional, so a present compensation
   // forces the (possibly empty) location cell to keep comp in column 5.
   // loadSeenUrls dedups on the URL and ignores trailing columns (backward-compatible).
-  const location = typeof offer.location === 'string' ? sanitizeMarkdownField(offer.location) : '';
+  const location = typeof offer.location === 'string' ? normalizeScanScalar(offer.location).replace(/\|/g, '/') : '';
   const compensation = formatCompensation(offer.salary);
-  const base = `- [ ] ${url} | ${company} | ${title}`;
-  let line = base;
-  if (compensation) line = `${base} | ${location} | ${compensation}`;
-  else if (location) line = `${base} | ${location}`;
+  const annotations = [];
   // Optional labeled posting-date segment (like note:) — keeps the positional
   // 1/3/4/5-column contract in modes/pipeline.md intact.
   const posted = postedAtIsoDate(offer.postedAt);
-  if (posted) line = `${line} | posted: ${posted}`;
+  if (posted) annotations.push(`posted: ${posted}`);
   // Labeled trust/legitimacy segment (#1743) — rides like posted:/note:, emitted
   // only when the scanner flagged the posting (score < 100). Ordered after
   // posted:, before note:, for a stable serialization.
-  const trust = formatTrustSegment(offer);
-  if (trust) line = `${line} | ${trust}`;
+  const trustFlags = trustFlagList(offer).map((flag) => normalizeScanScalar(flag).replace(/\|/g, '/'));
+  const trust = trustIsFlagged(offer)
+    ? `trust: ${trustFlags.length ? `${offer.trustScore} ${trustFlags.join(',')}` : offer.trustScore}`
+    : '';
+  if (trust) annotations.push(trust);
   // Optional free-text ranking signal (e.g. a curated-list flag an importer
   // attaches). Labeled — not positional like location/compensation — so it can
   // ride on any row shape (bare URL, 3-, 4-, or 5-column) without a reader
   // confusing it for a positional cell, and it stays generic: nothing here is
   // source-specific, and an offer without `note` produces byte-identical output.
-  const note = typeof offer.note === 'string' ? sanitizeMarkdownField(offer.note) : '';
-  if (note) line = `${line} | note: ${note}`;
+  const note = typeof offer.note === 'string' ? normalizeScanScalar(offer.note).replace(/\|/g, '/') : '';
+  if (note) annotations.push(`note: ${note}`);
   const fit = typeof offer.fitScore === 'number' && Number.isFinite(offer.fitScore)
-    ? sanitizeMarkdownField(`fit: ${Math.round(offer.fitScore)}`)
+    ? `fit: ${Math.round(offer.fitScore)}`
     : '';
-  return fit ? `${line} | ${fit}` : line;
+  if (fit) annotations.push(fit);
+  return formatPipelineEntry({ url, company, role: title, location, compensation, annotations });
 }
 
 // postedAt arrives as epoch ms (or absent). Convert to 'YYYY-MM-DD', or '' when missing.
@@ -1264,9 +1264,7 @@ export function appendToPipeline(offers, { pipelinePath = PIPELINE_PATH } = {}, 
   // Skip URLs already in the file — Explore "Add" / whats-new can re-surface
   // the same posting a prior scan already wrote.
   const existing = new Set();
-  for (const match of text.matchAll(/- \[[ xX]\] (https?:\/\/\S+)/g)) {
-    existing.add(normalizeVacancyUrl(match[1]) ?? match[1]);
-  }
+  for (const entry of parsePipeline(text).entries) existing.add(normalizeVacancyUrl(entry.url) ?? entry.url);
   const seenBatch = new Set();
   const fresh = [];
   for (const offer of offers) {

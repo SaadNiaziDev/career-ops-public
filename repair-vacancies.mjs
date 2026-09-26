@@ -5,6 +5,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { normalizeVacancyUrl } from './vacancy-identity.mjs';
 import { writeFileAtomic } from './tracker-utils.mjs';
+import { parsePipeline } from './web/src/lib/core/pipeline-entry.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PIPELINE_FILE = join(ROOT, 'data/pipeline.md');
@@ -38,11 +39,6 @@ function evaluatedVacancies() {
   return out;
 }
 
-function pendingUrl(line) {
-  const m = line.match(/^\s*-\s*\[ \]\s*(https?:\/\/[^\s|)]+)/i);
-  return m?.[1] ?? null;
-}
-
 if (!existsSync(PIPELINE_FILE)) {
   console.log('No data/pipeline.md found.');
   process.exit(0);
@@ -50,13 +46,15 @@ if (!existsSync(PIPELINE_FILE)) {
 
 const evaluated = evaluatedVacancies();
 const lines = readFileSync(PIPELINE_FILE, 'utf8').split(/\r?\n/);
+const pipeline = parsePipeline(lines.join('\n'));
 const seenPending = new Set();
 const remove = new Set();
 const findings = [];
 
-for (let i = 0; i < lines.length; i++) {
-  const url = pendingUrl(lines[i]);
-  if (!url) continue;
+for (const entry of pipeline.entries) {
+  if (entry.done || entry.section === 'processed' || entry.reportLinked) continue;
+  const i = entry.lineIndex;
+  const url = entry.url;
   const key = normalizeVacancyUrl(url) ?? url;
   const n = evaluated.get(key);
   if (n) {

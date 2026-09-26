@@ -21,6 +21,7 @@ import { writeFile, readFile } from 'fs/promises';
 import { existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { parsePipeline } from './web/src/lib/core/pipeline-entry.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const JDS_DIR = join(ROOT, 'jds');
@@ -181,23 +182,9 @@ async function extractPipelineEntries() {
   }
 
   const content = await readFile(PIPELINE_PATH, 'utf-8');
-  const entries = [];
-
-  for (const line of content.split('\n')) {
-    if (!line.startsWith('- [ ]')) continue;
-
-    const urlMatch = line.match(/https?:\/\/[^\s|)]+/);
-    if (!urlMatch) continue;
-
-    const url = urlMatch[0];
-    const parts = line.split('|').map(s => s.trim());
-    const company = parts[1] || null;
-    const role = parts[2] || null;
-
-    entries.push({ url, company, role });
-  }
-
-  return entries;
+  return parsePipeline(content).entries
+    .filter((entry) => !entry.done && entry.section !== 'processed' && !entry.reportLinked)
+    .map((entry) => ({ url: entry.url, company: entry.company || null, role: entry.role || null }));
 }
 
 // ── Core archive function ────────────────────────────────────────────────────

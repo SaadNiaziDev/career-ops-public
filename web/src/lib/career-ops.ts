@@ -7,6 +7,7 @@ import { parseMachineSummary } from "@/lib/format";
 import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
 import { offerDeadlineFromNotes, scheduledInterviewDates } from "@/lib/list-sort-policy";
 import { onboardingVerificationPending } from "@/lib/onboarding/readiness-state";
+import { parsePipeline } from "@/lib/core/pipeline-entry.mjs";
 
 /**
  * Resolve the career-ops "home" — the directory holding the user's sibling
@@ -74,27 +75,17 @@ export function readInbox(): InboxJob[] {
   // scanners + "Add to pipeline" can both write the same posting.
   const byUrl = new Map<string, number>();
   const richness = (j: InboxJob) => (j.fitScore != null ? 2 : 0) + (j.location ? 1 : 0);
-  for (const line of md.split("\n")) {
-    const m = line.match(/^\s*-\s*\[([ xX])\]\s*(.+)$/);
-    if (!m) continue;
-    const parts = m[2].split("|").map((s) => s.trim());
-    if (parts.length < 3 || !parts[0]) continue; // need at least url | company | role
-    // Trailing columns are positional (location, then compensation) EXCEPT the
-    // scanner's tagged annotations — `posted: 2026-08-08`, `fit: 62` — which it
-    // writes in whatever slot is next when a posting has no location. Without
-    // this, a location-less scan row renders "fit: 55" as its location.
-    const tail = parts.slice(3).filter(Boolean);
-    const extras = tail.filter((p) => !/^(fit|posted|score|via)\s*:/i.test(p));
-    const fit = tail.find((p) => /^fit\s*:/i.test(p));
-    const fitScore = fit ? Number(fit.split(":")[1]?.trim()) : NaN;
+  for (const entry of parsePipeline(md).entries) {
+    if (entry.reportLinked || !entry.url || !entry.company || !entry.role) continue;
     const job: InboxJob = {
-      done: m[1].toLowerCase() === "x",
-      url: parts[0],
-      company: parts[1],
-      role: parts[2],
-      location: extras[0] || undefined, // optional 4th column (#1015)
-      compensation: extras[1] || undefined, // optional 5th column (#1017); 6th+ ignored
-      fitScore: Number.isFinite(fitScore) ? fitScore : undefined,
+      done: entry.done,
+      url: entry.url,
+      company: entry.company,
+      role: entry.role,
+      location: entry.location || undefined,
+      compensation: entry.compensation || undefined,
+      postedAt: entry.postedAt,
+      fitScore: entry.fitScore,
     };
     const key = normalizeVacancyUrl(job.url) ?? job.url;
     const prevIdx = byUrl.get(key);

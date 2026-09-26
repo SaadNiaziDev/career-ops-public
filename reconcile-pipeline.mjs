@@ -26,6 +26,7 @@ import { join, dirname, resolve, relative, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
 import { normalizeReportLink } from './tracker-links.mjs';
 import { normalizeVacancyUrl } from './vacancy-identity.mjs';
+import { formatPipelineEntry, parsePipeline } from './web/src/lib/core/pipeline-entry.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -150,48 +151,23 @@ function resolvePdf(reportFile) {
 
 // ---- parse pipeline.md ----
 const lines = readFileSync(PIPELINE_FILE, 'utf-8').split(/\r?\n/);
+const pipeline = parsePipeline(lines.join('\n'));
 
-const PENDING_RE = /^##\s+(Pendientes|Pending)\s*$/i;
-const PROCESSED_RE = /^##\s+(Procesadas|Processed)\s*$/i;
-const SECTION_RE = /^##\s+/;
-const PENDING_ITEM_RE = /^- \[ \]\s+/;
-
-function lineUrl(body) {
-  // "{url} | company | role"  ->  "{url}"
-  const i = body.indexOf(' |');
-  return (i >= 0 ? body.slice(0, i) : body).trim();
-}
-
-let pendStart = -1, procStart = -1;
-for (let i = 0; i < lines.length; i++) {
-  if (pendStart < 0 && PENDING_RE.test(lines[i])) pendStart = i;
-  else if (procStart < 0 && PROCESSED_RE.test(lines[i])) procStart = i;
-}
+const pendingSection = pipeline.sections.find((section) => section.type === 'pending');
+const processedSection = pipeline.sections.find((section) => section.type === 'processed');
+const pendStart = pendingSection?.lineIndex ?? -1;
+const pendEnd = pendingSection?.endIndex ?? lines.length;
+const procStart = processedSection?.lineIndex ?? -1;
 
 if (pendStart < 0) {
   console.log('No "Pendientes" section in pipeline.md — nothing to reconcile.');
   process.exit(0);
 }
 
-function sectionEnd(start) {
-  for (let i = start + 1; i < lines.length; i++) {
-    if (SECTION_RE.test(lines[i])) return i;
-  }
-  return lines.length;
-}
-const pendEnd = sectionEnd(pendStart);
-const procEnd = procStart >= 0 ? sectionEnd(procStart) : -1;
-
 // URLs already in Procesadas — guards against a double copy on re-runs.
 const procUrls = new Set();
-if (procStart >= 0) {
-  for (let i = procStart + 1; i < procEnd; i++) {
-    const m = lines[i].match(/^- \[x\]\s+(.+)$/i);
-    if (!m) continue;
-    // "[num](path) | url | company | role | score | PDF x" — url is field 2
-    const parts = m[1].split('|').map(s => s.trim());
-    if (parts[1]) procUrls.add(normalizeVacancyUrl(parts[1]) ?? parts[1]);
-  }
+for (const entry of pipeline.entries) {
+  if (entry.section === 'processed' && entry.done && entry.url) procUrls.add(normalizeVacancyUrl(entry.url) ?? entry.url);
 }
 
 // ---- walk Pendientes, decide keep vs. move ----
@@ -200,10 +176,10 @@ const movedProcLines = [];
 const moved = [];
 const skippedNoReport = [];
 
-for (let i = pendStart + 1; i < pendEnd; i++) {
-  if (!PENDING_ITEM_RE.test(lines[i])) continue; // blank lines, "- [!]" errors → keep
-  const body = lines[i].replace(PENDING_ITEM_RE, '');
-  const url = lineUrl(body);
+for (const entry of pipeline.entries) {
+  if (entry.section !== 'pending' || entry.done || entry.lineIndex <= pendStart || entry.lineIndex >= pendEnd || entry.reportLinked) continue;
+  const i = entry.lineIndex;
+  const url = entry.url;
   const urlKey = normalizeVacancyUrl(url) ?? url;
   const done = DONE.get(urlKey);
   if (!done) continue; // not processed → keep in Pendientes
@@ -222,15 +198,14 @@ for (let i = pendStart + 1; i < pendEnd; i++) {
     continue;
   }
 
-  const parts = body.split('|').map(s => s.trim());
-  const company = parts[1] || '';
-  const role = parts[2] || '';
+  const company = entry.company;
+  const role = entry.role;
   const score = resolveScore(done.score, reportFile);
   const pdf = resolvePdf(reportFile);
   const num = parseInt(done.reportNum, 10);
 
   const reportLink = normalizeReportLink(`[${num}](reports/${reportFile})`, dirname(PIPELINE_FILE), CAREER_OPS);
-  movedProcLines.push(`- [x] ${reportLink} | ${url} | ${company} | ${role} | ${score} | PDF ${pdf}`);
+  movedProcLines.push(formatPipelineEntry({ done: true, report: reportLink, url, company, role, annotations: [score, `PDF ${pdf}`] }));
   moved.push({ url, company, role, num, score });
   procUrls.add(urlKey);
   removeIdx.add(i);
@@ -273,13 +248,7 @@ if (procStart < 0 && movedProcLines.length > 0) {
 const newContent = out.join('\n');
 
 const newCount = (() => {
-  let n = 0, inPend = false;
-  for (const l of out) {
-    if (PENDING_RE.test(l)) { inPend = true; continue; }
-    if (SECTION_RE.test(l)) { inPend = false; continue; }
-    if (inPend && PENDING_ITEM_RE.test(l)) n++;
-  }
-  return n;
+  return parsePipeline(out.join('\n')).entries.filter((entry) => entry.section === 'pending' && !entry.done).length;
 })();
 
 const realMoves = moved.filter(m => !m.dup);
