@@ -33,6 +33,8 @@ The prompt also includes an **ALREADY KNOWN** block (companies/roles/URL count f
 - When seniority or company stage can't be confirmed from shallow signals, **include** the candidate and flag uncertainty in `why` — don't silently discard.
 - Location is the one filter you enforce hard (see Search strategy step 6) — `portals.yml` `location_filter` exists because generic global postings rarely sponsor PK candidates, and silently including them defeats the point of this mode.
 - Never invent URLs. Every `url` must be a real `https://` link you found via search or fetch.
+- Use ordinary web search for public job listings and public hiring announcements. Never scrape LinkedIn, log in, or automate authenticated browsing. A public post without a direct job detail page is a `hiring-signal`, not a vacancy.
+- Classify each result with `kind: "vacancy" | "hiring-signal"`, identify its public source in `discoveredFrom`, and include `postedAt` only when a precise date is visible.
 - Prefer **direct ATS posting URLs** (Greenhouse, Lever, Ashby, Workday board links) over aggregator mirrors — the web UI can confirm those are still open via the ATS API.
 - Prefer fresher search hits when snippets show ages; do not emit a URL you already saw 404 / "no longer available" on via WebFetch.
 - Never score fit (no X/5). Emit `verification: unconfirmed` always — the web UI upgrades to `live` or drops expired after its own check.
@@ -60,17 +62,20 @@ The career-ops **web UI** parses your stream. Follow exactly:
 Emit each candidate as **one line**, never inside a markdown code fence:
 
 ```
-<<offer:{"url":"https://…","title":"…","company":"…","location":"…","source":"ai-search","why":"…","postedHint":"…","ats":"greenhouse|lever|ashby|workday|other","verification":"unconfirmed","confidence":"low|medium|high"}>>
+<<offer:{"url":"https://…","title":"…","company":"…","location":"…","source":"ai-search","discoveredFrom":"public source name","kind":"vacancy|hiring-signal","why":"…","postedAt":"YYYY-MM-DD when known","postedHint":"…","ats":"greenhouse|lever|ashby|workday|other","verification":"unconfirmed","confidence":"low|medium|high"}>>
 ```
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `url` | yes | Direct posting URL (`https://` only) |
+| `url` | yes | Public permalink (`https://` only); direct job page for vacancies |
+| `kind` | yes | `vacancy` for a job detail; `hiring-signal` for a public announcement without a verified job detail |
+| `discoveredFrom` | yes | Public source label, such as a company careers page or public post |
 | `title` | yes | As posted |
 | `company` | yes | Employer name |
 | `location` | yes | Use `"Remote"`, `"Unknown"`, or visible location string |
 | `source` | yes | Always `"ai-search"` |
 | `why` | yes | One line: why this matches intent + CV; note uncertainty if any |
+| `postedAt` | no | Exact `YYYY-MM-DD` only when the source gives a date |
 | `postedHint` | no | Human freshness (`"~3d ago"`, `"unknown"`) — never fabricate ISO dates |
 | `ats` | no | `greenhouse`, `lever`, `ashby`, `workday`, or `other` |
 | `verification` | yes | Always `"unconfirmed"` in the envelope — the web UI rewrites to `live` or drops expired |
@@ -89,7 +94,7 @@ Between envelopes, write **brief plain-text** lines explaining what you're searc
 Skip proposing when:
 
 - Company is in the ALREADY KNOWN list
-- URL is clearly not a job posting (blog, login wall with no role, generic careers homepage with no role)
+- URL is clearly not a job posting or hiring signal (login wall with no public role context, generic homepage with no role)
 - Title is obviously spam or unrelated to intent AND CV
 - WebFetch (or the search snippet) clearly shows the posting is closed / 404 / "no longer available"
 

@@ -68,7 +68,7 @@ export function ExplorerView({
   rootExists: boolean;
   scans: { finds: ScanFind[]; latestDate: string | null; totalPending: number };
 }) {
-  const { filters, setFilters, initFilters, phase, running, offers, discover, status, error, mode, setMode, resultsMode, aiIntent, setAiIntent, discoverAI, aiCost, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
+  const { filters, setFilters, initFilters, phase, running, offers, discover, status, error, mode, setMode, resultsMode, aiIntent, settledAiIntent, setAiIntent, discoverAI, aiCost, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
   const scanNote =
     companiesScanned > 0
       ? `Scanned ${companiesScanned.toLocaleString()}${companiesAvailable > companiesScanned ? ` of ${companiesAvailable.toLocaleString()}` : ""} compan${companiesScanned === 1 ? "y" : "ies"}${partial ? " · some sources were unreachable" : ""}.`
@@ -78,6 +78,18 @@ export function ExplorerView({
   const { cliName, cliConfigured } = useCliConfig();
   const [firstRun, setFirstRun] = useState(false);
   const [scanQuery, setScanQuery] = useState(seed.filters.positive.join(", "));
+  const promptTouched = useRef(false);
+
+  useEffect(() => {
+    if (paramsToAi(new URLSearchParams(window.location.search)) !== null) return;
+    let alive = true;
+    fetch("/api/profile").then(r=>r.ok?r.json():null).then((data:{profile?:{roles?:string[];location?:string;remote?:string}}|null)=>{
+      if (!alive || promptTouched.current || !data?.profile) return;
+      const p=data.profile;const clauses=[p.roles?.length?`Find open ${p.roles.slice(0,3).join(", ")} roles`:"",p.location?`near ${p.location}`:"",p.remote?`with work policy ${p.remote}`:""].filter(Boolean);
+      if (clauses.length) setAiIntent(`${clauses.join(" ")}. Prefer direct employer postings; include public hiring leads separately.`);
+    }).catch(()=>undefined);
+    return()=>{alive=false;};
+  }, [setAiIntent]);
 
   // AI URL hydration + auto-hunt lives in ExploreProvider (URL beats sessionStorage).
   // Here we only seed Scan filters / optional ?run=1 — never touch AI intent, or we'd
@@ -189,11 +201,14 @@ export function ExplorerView({
             <div className="space-y-6">
               <AiSearchBox
                 intent={aiIntent}
-                onIntent={setAiIntent}
-                onSubmit={() => void discoverAI(aiIntent)}
+                onIntent={(value) => { promptTouched.current=true;setAiIntent(value); }}
+                onSubmit={(query) => void discoverAI(query ?? aiIntent)}
                 cliConfigured={cliConfigured}
                 cliName={cliName}
                 onRunScan={() => setMode("scan")}
+                results={offers}
+                resultsSettled={ownsResults && ["results", "empty-loose", "failed", "degraded"].includes(phase)}
+                settledIntent={settledAiIntent}
               />
               {/* The hunt's own ledger unmounts with the progress view — this
                   keeps the estimate/actual pair visible on the results it paid
