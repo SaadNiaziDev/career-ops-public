@@ -4,7 +4,7 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Application } from "@/lib/career-ops";
-import { scoreTone, scoreNum, legitimacyTone, parseReport, parseMachineSummary, stripMachineSummary } from "@/lib/format";
+import { scoreTone, scoreNum, legitimacyTone, parseMachineSummary, stripMachineSummary } from "@/lib/format";
 import { VerdictCard } from "@/components/report/verdict-card";
 import { DimensionChart } from "@/components/report/dimension-chart";
 import { StatusSelect } from "@/components/status-select";
@@ -22,6 +22,7 @@ import { useJobs } from "@/components/jobs/job-store";
 import { findJobForReport } from "@/components/jobs/job-utils";
 import { TONE_BAR, TONE_TEXT as TONE_TEXT_ROLES } from "@/lib/tone";
 import { cn } from "@/lib/cn";
+import { parseReportDocument } from "@/lib/core/report-document.mjs";
 
 type Section = { heading: string; letter: string | null; content: string };
 
@@ -53,12 +54,6 @@ function isDraftExtra(heading: string): boolean {
   return /cover letter draft|extracted keywords/i.test(heading);
 }
 
-function extractMachineDecision(content: string): { decision: string | null; nextAction: string | null } {
-  const decision = content.match(/final_decision:\s*"?([^"\n]+)"?/i)?.[1]?.trim() ?? null;
-  const nextAction = content.match(/next_action:\s*"?([^"\n]+)"?/i)?.[1]?.trim() ?? null;
-  return { decision, nextAction };
-}
-
 function extractTldr(content: string): string | null {
   const row = content.match(/\|\s*TL;DR\s*\|\s*([^|]+)\|/i);
   return row?.[1]?.trim() ?? null;
@@ -68,10 +63,12 @@ function buildFallbackRecommendation(
   sections: Section[],
   score: string | undefined,
   applies: boolean | null,
+  machineSummary: ReturnType<typeof parseMachineSummary>,
 ): string {
   const machine = sections.find((s) => isMachine(s.heading));
-  if (machine) {
-    const { decision, nextAction } = extractMachineDecision(machine.content);
+  if (machine || machineSummary) {
+    const decision = machineSummary?.final_decision ?? null;
+    const nextAction = machineSummary?.next_action ?? null;
     if (decision && nextAction) {
       return `**${decision}** — ${nextAction}`;
     }
@@ -100,27 +97,6 @@ function preview(md: string, max = 72): string {
     .trim();
   const sentence = text.split(/(?<=[.!?])\s/)[0] ?? text;
   return sentence.length > max ? sentence.slice(0, max).trimEnd() + "…" : sentence;
-}
-
-function splitSections(body: string): { intro: string; sections: Section[] } {
-  const intro: string[] = [];
-  const sections: Section[] = [];
-  let cur: { heading: string; letter: string | null; lines: string[] } | null = null;
-  for (const line of body.split("\n")) {
-    const h = line.match(/^##\s+(.*)$/);
-    if (h) {
-      if (cur) sections.push({ heading: cur.heading, letter: cur.letter, content: cur.lines.join("\n").trim() });
-      const heading = h[1].trim();
-      const letter = heading.match(/^(?:Block\s+)?([A-G])[).:\s]/i)?.[1]?.toUpperCase() ?? null;
-      cur = { heading, letter, lines: [] };
-    } else if (cur) {
-      cur.lines.push(line);
-    } else {
-      intro.push(line);
-    }
-  }
-  if (cur) sections.push({ heading: cur.heading, letter: cur.letter, content: cur.lines.join("\n").trim() });
-  return { intro: intro.join("\n").trim(), sections };
 }
 
 function SectionCollapse({ section, compact = false }: { section: Section; compact?: boolean }) {
@@ -158,6 +134,9 @@ function ReportBody({
   notes,
   machineSummary,
   legitimacy,
+  parsedIntro,
+  parsedSections,
+  warnings,
 }: {
   body: string;
   score?: string;
@@ -165,9 +144,13 @@ function ReportBody({
   notes?: string;
   machineSummary?: ReturnType<typeof parseMachineSummary>;
   legitimacy?: string | null;
+  parsedIntro: string;
+  parsedSections: Section[];
+  warnings: string[];
 }) {
   const proseBody = stripMachineSummary(body);
-  const { intro, sections } = splitSections(proseBody);
+  const intro = parsedIntro;
+  const sections = parsedSections.filter((section) => !isMachine(section.heading));
 
   if (sections.length === 0) {
     return (
@@ -185,7 +168,7 @@ function ReportBody({
 
   const recommendationMd =
     verdict?.content ??
-    (notes?.trim() ? notes.trim() : buildFallbackRecommendation(sections, score, applies));
+    (notes?.trim() ? notes.trim() : buildFallbackRecommendation(sections, score, applies, machineSummary ?? null));
 
   const alertTone: AlertTone = (() => {
     if (applies === true) return "success";
@@ -199,6 +182,11 @@ function ReportBody({
 
   return (
     <div className="dossier-inset-stack">
+      {warnings.length > 0 && (
+        <div role="status" className="md3-alert md3-alert--warning">
+          <div><strong>Report format notice</strong><ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>
+        </div>
+      )}
       {machineSummary && <VerdictCard summary={machineSummary} score={score} legitimacy={legitimacy} />}
       <DimensionChart scores={machineSummary?.scores} globalScore={score} />
 
@@ -304,8 +292,14 @@ export function ReportView({
   file?: string | null;
   canDelete?: boolean;
 }) {
-  const meta = report ? parseReport(report) : null;
-  const machineSummary = report ? parseMachineSummary(report) : null;
+  const parsedDocument = report ? parseReportDocument(report) : null;
+  const meta = parsedDocument ? {
+    title: parsedDocument.title,
+    fields: parsedDocument.fields,
+    legitimacy: parsedDocument.legitimacy,
+    body: parsedDocument.body,
+  } : null;
+  const machineSummary = parsedDocument?.machineSummary as ReturnType<typeof parseMachineSummary>;
   const field = (label: string) => meta?.fields.find((f) => f.label === label)?.value;
   const score = app?.score || field("Score");
   const date = app?.date || field("Date");
@@ -367,6 +361,9 @@ export function ReportView({
                 notes={app?.notes}
                 machineSummary={machineSummary}
                 legitimacy={meta?.legitimacy}
+                parsedIntro={parsedDocument?.intro ?? ""}
+                parsedSections={parsedDocument?.sections ?? []}
+                warnings={parsedDocument?.warnings ?? []}
               />
             ) : (
               <Md3Empty
