@@ -40,7 +40,7 @@ export function WorkerTray({ className }: { className?: string }) {
   if (jobs.length === 0) {
     return (
       <div className={cn("px-1 py-3 md-body-small text-[var(--md-sys-color-on-surface-variant)]", className)}>
-        No workers yet. Start an evaluation to see progress here.
+        No activity yet. Start an evaluation to see progress here.
       </div>
     );
   }
@@ -51,7 +51,7 @@ export function WorkerTray({ className }: { className?: string }) {
     <div className={className}>
       <div className="mb-2 flex items-center gap-2 px-1">
         <span className="md-label-small font-semibold uppercase tracking-[0.14em] text-[var(--md-sys-color-outline)]">
-          Workers
+          Activity
         </span>
         {running > 0 && (
           <span className="md-label-small tabular-nums text-[var(--md-sys-color-primary)]">{running} running</span>
@@ -60,7 +60,7 @@ export function WorkerTray({ className }: { className?: string }) {
           href="/jobs"
           className="ml-auto text-[var(--md-sys-color-outline)] transition-colors hover:text-[var(--md-sys-color-on-surface)]"
           title="History"
-          aria-label="Worker history"
+          aria-label="Activity history"
         >
           <MaterialSymbol name="history" size={16} />
         </Link>
@@ -147,7 +147,7 @@ export function WorkerSheet() {
         role={open ? "dialog" : undefined}
         aria-modal={open ? "true" : undefined}
         className={cn("md3-worker-sheet", open && "open")}
-        aria-label="Workers"
+        aria-label="Activity"
         aria-hidden={!open}
         inert={!open}
       >
@@ -162,7 +162,7 @@ export function WorkerSheet() {
               )}
             />
             <div className="min-w-0 flex-1">
-              <div className="md-title-small text-[var(--md-sys-color-on-surface)]">Workers</div>
+              <div className="md-title-small text-[var(--md-sys-color-on-surface)]">Activity</div>
               <div className="md-body-small text-[var(--md-sys-color-on-surface-variant)]">
                 {running > 0 ? `${running} running` : jobs.length > 0 ? `${jobs.length} recent` : "Idle"}
               </div>
@@ -170,7 +170,7 @@ export function WorkerSheet() {
             <button
               type="button"
               onClick={() => setOpen(false)}
-              aria-label="Close workers"
+              aria-label="Close activity"
               className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-[var(--md-sys-shape-corner-full)] text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-high)]"
             >
               <MaterialSymbol name="close" size={22} />
@@ -207,8 +207,8 @@ export function AmbientWorkerBar() {
       type="button"
       onClick={() => setOpen(true)}
       className="md3-worker-ambient"
-      aria-label={`${running} worker${running === 1 ? "" : "s"} running — open Workers`}
-      title={`${running} running — open Workers`}
+      aria-label={`${running} task${running === 1 ? "" : "s"} running — open Activity`}
+      title={`${running} running — open Activity`}
     >
       <span className="job-indeterminate block h-full w-full" />
     </button>

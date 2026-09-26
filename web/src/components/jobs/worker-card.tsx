@@ -3,7 +3,7 @@
 import type { Job } from "@/components/jobs/job-store";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { cn } from "@/lib/cn";
-import { fmtElapsed, fmtTokens, humanizeJobKind, humanizeStep, isAuthError, useElapsed } from "@/components/jobs/job-utils";
+import { fmtElapsed, humanizeJobKind, humanizeStep, isAuthError, useElapsed } from "@/components/jobs/job-utils";
 import { isActiveState, isStuck } from "@/lib/jobs/run-policy";
 
 export const TONE = {
@@ -52,11 +52,13 @@ export function WorkerCard({
   const stuck = isStuck(job.state, job.lastActivityAt, job.lastActivityAt + inactiveFor);
   const rawLast = job.steps[job.steps.length - 1]?.label;
   const last = rawLast ? humanizeStep(rawLast) : undefined;
-  const bottom = job.state === "needs-attention" || job.state === "interrupted" || job.state === "cancelled" ? job.error || last : job.state === "completed" && job.result?.summary ? job.result.summary : last;
+  const authError = isAuthError(job);
+  const bottom = job.state === "needs-attention" || job.state === "interrupted"
+    ? authError ? "Sign in to your CLI, then retry." : "Stopped before completion · open for recovery"
+    : job.state === "cancelled" ? "Cancelled safely"
+    : job.state === "completed" && job.result?.summary ? job.result.summary : last;
   const inline = variant === "inline";
   const hasScore = job.result?.score != null;
-  const authError = isAuthError(job);
-  const tokens = job.state === "completed" ? job.cost?.tokens ?? 0 : 0;
 
   return (
     <div className={cn(inline && "rounded-xl border border-border bg-surface/60 p-2.5")}>
@@ -102,11 +104,6 @@ export function WorkerCard({
       {authError && (
         <div className={cn("mt-1 text-[var(--md-sys-color-primary)]", inline ? "text-xs" : "text-[10px]")}>
           Sign your CLI in from Config, then re-run.
-        </div>
-      )}
-      {tokens > 0 && (
-        <div className={cn("mt-1 text-faint tabular-nums", inline ? "text-xs" : "text-[10px]")}>
-          Technical usage: {fmtTokens(tokens)} model tokens{job.cost?.usd != null ? ` · estimated $${job.cost.usd.toFixed(2)}` : ""}
         </div>
       )}
     </div>

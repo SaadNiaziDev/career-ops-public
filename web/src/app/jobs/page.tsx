@@ -24,15 +24,22 @@ function StatusIcon({ state }: { state: RunState }) {
 export default function JobsHistory() {
   const { jobs, clearFinished } = useJobs();
   const { applications } = usePipeline();
+  const grouped = Array.from(
+    jobs.reduce((groups, job) => {
+      const key = job.intentKey || job.id;
+      groups.set(key, [...(groups.get(key) ?? []), job]);
+      return groups;
+    }, new Map<string, typeof jobs>()).values(),
+  );
 
   return (
     <PageShell width="default">
       <DossierStack>
         <DossierPageHeader
-          title="Workers"
+          title="Activity"
           description={
             <>
-              Every evaluation you ran — a persistent log. <span className="tabular-nums">{jobs.length}</span> total.
+              Task outcomes and recovery. <span className="tabular-nums">{grouped.length}</span> tasks.
             </>
           }
           extra={
@@ -47,48 +54,61 @@ export default function JobsHistory() {
 
         {jobs.length === 0 ? (
           <div className="rounded-[var(--md-sys-shape-corner-extra-large)] bg-[var(--md-sys-color-surface-container)] px-6 py-16 text-center md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
-            No workers yet. Hit <strong className="text-[var(--md-sys-color-on-surface)]">Evaluate</strong> on an inbox posting to spin one up.
+            No activity yet. Evaluate a posting to see its progress and result here.
           </div>
         ) : (
           <div className="overflow-hidden rounded-[var(--md-sys-shape-corner-extra-large)] bg-[var(--md-sys-color-surface-container)]">
-            {jobs.map((j) => {
+            {grouped.map((attempts) => {
+              const j = attempts[0];
               const reportN = resolveReportNum(j, applications);
               const dest = jobDestinationHref(j, applications);
+              const stateLabel =
+                j.state === "needs-attention" || j.state === "interrupted" ? "Needs attention"
+                  : j.state === "running" ? "Working"
+                    : j.state === "queued" ? "Queued"
+                      : j.state === "completed" ? "Completed" : "Cancelled";
               return (
                 <div
-                  key={j.id}
-                  className="flex min-h-[76px] items-center gap-4 border-b border-[var(--md-sys-color-outline-variant)] px-4 py-3 last:border-b-0"
+                  key={j.intentKey || j.id}
+                  className="border-b border-[var(--md-sys-color-outline-variant)] px-4 py-3 last:border-b-0"
                 >
-                  <StatusIcon state={j.state} />
-                  <div className="min-w-0 flex-1">
-                    <Link href={dest} className="block truncate md-title-small text-[var(--md-sys-color-on-surface)] hover:text-[var(--md-sys-color-primary)]">
-                      {j.title}
-                    </Link>
-                    <p className="truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
-                      {j.result?.summary || j.subtitle || humanizeJobKind(j.kind)}
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-[var(--md-sys-color-outline)]">
-                      {humanizeJobKind(j.kind)} · {j.steps.length} updates
-                      {j.error ? ` · ${j.error}` : ""}
-                    </p>
+                  <div className="flex min-h-[56px] items-center gap-4">
+                    <StatusIcon state={j.state} />
+                    <div className="min-w-0 flex-1">
+                      <Link href={dest} className="block truncate md-title-small text-[var(--md-sys-color-on-surface)] hover:text-[var(--md-sys-color-primary)]">
+                        {j.title}
+                      </Link>
+                      <p className="truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
+                        {j.result?.summary || (j.state === "needs-attention" || j.state === "interrupted" ? "Open task for recovery options." : j.subtitle || humanizeJobKind(j.kind))}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-[var(--md-sys-color-outline)]">
+                        {stateLabel} · {humanizeJobKind(j.kind)} · {j.steps.length} updates
+                      </p>
+                    </div>
+                    {j.result?.score != null && (
+                      <span className="md3-score-badge">{j.result.score}/5</span>
+                    )}
+                    {j.state === "completed" && reportN ? (
+                      <Link
+                        href={`/pipeline/${reportN}`}
+                        className="hidden shrink-0 md-label-small text-[var(--md-sys-color-primary)] hover:underline sm:inline"
+                      >
+                        Report
+                      </Link>
+                    ) : null}
                   </div>
-                  {j.result?.score != null && (
-                    <span className="md3-score-badge">{j.result.score}/5</span>
-                  )}
-                  {j.state === "completed" && reportN ? (
-                    <Link
-                      href={`/pipeline/${reportN}`}
-                      className="hidden shrink-0 md-label-small text-[var(--md-sys-color-primary)] hover:underline sm:inline"
-                    >
-                      Report
-                    </Link>
-                  ) : (
-                    <span className="hidden capitalize md-body-small text-[var(--md-sys-color-outline)] sm:inline">{j.state.replace("-", " ")}</span>
-                  )}
-                  {j.state === "completed" && dest !== `/jobs/${j.id}` ? (
-                    <Link href={`/jobs/${j.id}`} className="hidden shrink-0 md-label-small text-[var(--md-sys-color-outline)] hover:underline sm:inline">
-                      Log
-                    </Link>
+                  {attempts.length > 1 ? (
+                    <details className="ml-10 mt-2 text-xs text-[var(--md-sys-color-on-surface-variant)]">
+                      <summary className="cursor-pointer">{attempts.length - 1} previous {attempts.length === 2 ? "attempt" : "attempts"}</summary>
+                      <ul className="mt-2 space-y-1">
+                        {attempts.slice(1).map((attempt) => (
+                          <li key={attempt.id} className="flex items-center justify-between gap-3">
+                            <span>{attempt.state === "completed" ? "Completed" : attempt.state === "cancelled" ? "Cancelled" : "Needs attention"}</span>
+                            <Link href={`/jobs/${attempt.id}`} className="text-[var(--md-sys-color-primary)] hover:underline">View attempt</Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
                   ) : null}
                 </div>
               );

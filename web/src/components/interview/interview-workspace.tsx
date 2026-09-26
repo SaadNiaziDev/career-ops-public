@@ -208,7 +208,7 @@ export function InterviewWorkspace({ id, initial }: { id: string; initial: Inter
       page: `/pipeline/${id}/interview`,
       context,
     });
-    if (jobId) flash(`Started ${title.toLowerCase()} — check Workers.`);
+    if (jobId) flash(`Started ${title.toLowerCase()} — check Activity.`);
   };
 
   const saveRound = async () => {

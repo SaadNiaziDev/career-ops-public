@@ -52,7 +52,7 @@ export function NavigationRail() {
           data-co-tour="workers"
           data-active={open ? "true" : "false"}
           aria-pressed={open}
-          aria-label={running > 0 ? `Workers, ${running} running` : "Workers"}
+          aria-label={running > 0 ? `Activity, ${running} running` : "Activity"}
           onClick={toggle}
         >
           <span className="md3-rail-pill relative">
@@ -74,7 +74,7 @@ export function NavigationRail() {
               </span>
             )}
           </span>
-          <span className="md3-rail-label">Workers</span>
+          <span className="md3-rail-label">Activity</span>
         </button>
       </div>
     </nav>

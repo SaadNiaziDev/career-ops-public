@@ -111,7 +111,7 @@ export function PipelineActions({
       input: n,
       page: `/pipeline/${n}`,
     });
-    if (id) flash("info", `Started ${KIND_LABEL[kind].toLowerCase()} — check Workers for progress.`);
+    if (id) flash("info", `Started ${KIND_LABEL[kind].toLowerCase()} — check Activity for progress.`);
   };
 
   const openDraft = async (kind: DraftKind) => {

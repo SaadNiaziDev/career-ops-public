@@ -93,7 +93,7 @@ export function TitlesBroadening({ compact = false }: Props) {
       input: "broaden",
       page: "/portals",
     });
-    if (id) flash("info", "Analyzing your CV for adjacent titles — check Workers for progress.");
+    if (id) flash("info", "Analyzing your CV for adjacent titles — check Activity for progress.");
   };
 
   const toggle = (keyword: string, checked: boolean) => {

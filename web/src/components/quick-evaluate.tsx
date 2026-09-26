@@ -22,7 +22,7 @@ export function QuickEvaluate() {
     }
     startJob({ title: "Evaluate · pasted URL", subtitle: u, kind: "evaluate", input: u, page: "/" });
     setUrl("");
-    setHint("Evaluating — watch it in the Workers tray.");
+    setHint("Evaluating — watch progress in Activity.");
   }
 
   return (

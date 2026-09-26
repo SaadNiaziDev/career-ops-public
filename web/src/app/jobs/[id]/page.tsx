@@ -88,7 +88,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
           <Md3Empty icon="memory" description="This worker is no longer in memory — it finished earlier or the page was reloaded.">
             <div className="mt-4 flex flex-wrap justify-center gap-3">
               <Link href="/jobs">
-                <Button variant="outline">Worker history</Button>
+              <Button variant="outline">Activity history</Button>
               </Link>
               <Link href="/pipeline">
                 <Button variant="primary">Pipeline</Button>
@@ -101,7 +101,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
   }
 
   const backHref = jobBackHref(job);
-  const backLabel = backHref === "/pipeline" ? "Pipeline" : backHref === "/jobs" ? "Workers" : "Back";
+  const backLabel = backHref === "/pipeline" ? "Pipeline" : backHref === "/jobs" ? "Activity" : "Back";
   const duration = running ? elapsed : jobDuration(job);
   const stuck = isStuck(job.state, job.lastActivityAt, job.lastActivityAt + inactiveFor);
   const authError = isAuthError(job);
@@ -141,7 +141,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
             </>
           ) : null}
           <span>/</span>
-          <span>Worker</span>
+          <span>Task</span>
         </nav>
 
         <Md3Card className="relative overflow-hidden !p-0">
@@ -194,10 +194,10 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
               <p className="mb-0 text-[var(--md-sys-color-on-surface-variant)]">{job.result.summary}</p>
             )}
 
-            {(job.state === "needs-attention" || job.state === "interrupted" || job.state === "cancelled") && job.error && (
+            {(job.state === "needs-attention" || job.state === "interrupted" || job.state === "cancelled") && (
               <div className="md3-alert md3-alert--warning">
                 <MaterialSymbol name="warning" size={18} className="shrink-0" />
-                <span>{job.error}</span>
+                <span>{job.state === "cancelled" ? "This task was cancelled safely." : authError ? "Your CLI needs to be signed in before this task can continue." : "This task stopped before it finished. Review the activity below, then retry or return to the pipeline."}</span>
               </div>
             )}
 
@@ -261,6 +261,12 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
                 Retry
               </Button>
             )}
+            {!canRetry && job.state !== "completed" && (
+              <Link href={jobBackHref(job)} className="md3-btn-outlined w-fit">
+                <MaterialSymbol name="arrow_back" size={18} />
+              Return to {backHref === "/pipeline" ? "pipeline" : backHref === "/jobs" ? "activity" : "previous page"}
+              </Link>
+            )}
           </DossierInsetStack>
         </Md3Card>
 
@@ -310,7 +316,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
               aria-expanded={outputExpanded}
               onClick={() => setOutputOpen(!outputExpanded)}
             >
-              <span className="min-w-0 flex-1 text-left">{running ? "Output (live)" : "Output"}</span>
+              <span className="min-w-0 flex-1 text-left">{running ? "Technical output (live)" : "Technical output"}</span>
               <MaterialSymbol
                 name="expand_more"
                 size={22}
@@ -330,10 +336,11 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
           </section>
         ) : null}
 
-        {tokens > 0 && (
+        {(tokens > 0 || job.error) && (
           <details className="rounded-xl border border-[var(--md-sys-color-outline-variant)] px-4 py-3 text-xs text-[var(--md-sys-color-on-surface-variant)]">
-            <summary className="cursor-pointer font-medium text-[var(--md-sys-color-on-surface)]">Technical usage</summary>
-            <p className="mt-2 mb-0">{fmtTokens(tokens)} model tokens processed{job.cost?.usd != null ? ` · estimated provider cost $${job.cost.usd.toFixed(2)}` : ""}.</p>
+            <summary className="cursor-pointer font-medium text-[var(--md-sys-color-on-surface)]">Technical details</summary>
+            {tokens > 0 && <p className="mt-2 mb-0">{fmtTokens(tokens)} model tokens processed{job.cost?.usd != null ? ` · estimated provider cost $${job.cost.usd.toFixed(2)}` : ""}.</p>}
+            {job.error && <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words">{job.error}</pre>}
           </details>
         )}
       </DossierStack>

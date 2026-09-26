@@ -80,7 +80,7 @@ export function PipelineRowActions({
 
   const run = (kind: string, title: string) => {
     const id = startJob({ title, subtitle: role, kind, input: n, page: `/pipeline/${n}` });
-    if (id) setToast(`Started ${title.toLowerCase()} — see Workers.`);
+    if (id) setToast(`Started ${title.toLowerCase()} — see Activity.`);
     setOpen(false);
   };
 
