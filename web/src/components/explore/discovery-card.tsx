@@ -8,6 +8,7 @@ import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { useExplore } from "./explore-provider";
 import { jobDestinationHref, resolveReportNum } from "@/components/jobs/job-utils";
 import { usePipeline } from "@/components/pipeline/pipeline-provider";
+import Link from "next/link";
 
 function freshness(postedAt: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(postedAt)) return "";
@@ -123,6 +124,10 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
             <MaterialSymbol name="progress_activity" size={18} className="animate-spin" />
             {statusLabel}
           </div>
+        ) : isAdded ? (
+          <Link href="/pipeline?tab=INBOX" className="md3-btn-filled w-full min-h-11">
+            <MaterialSymbol name="arrow_forward" size={18} /> Open in pipeline
+          </Link>
         ) : (
           <>
             <Md3ActionButton

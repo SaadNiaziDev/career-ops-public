@@ -24,6 +24,7 @@ export function DecisionCard({ app }: { app: Application }) {
       overrideReason = window.prompt("This role scored below 4.0. Why do you want to apply anyway?")?.trim();
       if (!overrideReason) return;
     }
+    if (status === "Applied" && !window.confirm("Have you submitted the application? This only records an application you have sent.")) return;
     setBusy(status);
     setError(null);
     try {
@@ -58,7 +59,7 @@ export function DecisionCard({ app }: { app: Application }) {
       <div className="md3-actions-row">
         {score >= 4 ? (
           <Md3ActionButton variant="filled" icon="check" loading={busy === "Applied"} disabled={!!busy} onClick={() => void setStatus("Applied")}>
-            Mark applied
+            Confirm submitted
           </Md3ActionButton>
         ) : (
           <Link href={`/pipeline/${app.n}`} className="md3-action-btn md3-action-btn--text">Review role</Link>
@@ -66,7 +67,7 @@ export function DecisionCard({ app }: { app: Application }) {
         <Md3ActionButton variant={score >= 4 ? "outlined" : "filled"} icon="close" loading={busy === "Discarded"} disabled={!!busy} onClick={() => void setStatus("Discarded")}>
           Skip
         </Md3ActionButton>
-        {score < 4 && <Md3ActionButton variant="outlined" icon="check" loading={busy === "Applied"} disabled={!!busy} onClick={() => void setStatus("Applied")}>Apply anyway</Md3ActionButton>}
+        {score < 4 && <Md3ActionButton variant="outlined" icon="check" loading={busy === "Applied"} disabled={!!busy} onClick={() => void setStatus("Applied")}>Confirm submitted anyway</Md3ActionButton>}
         <Link href={`/pipeline/${app.n}`} className="md3-action-btn md3-action-btn--text" aria-label="Open report">
           <span className="material-symbols-outlined text-[18px] leading-none">description</span>
         </Link>

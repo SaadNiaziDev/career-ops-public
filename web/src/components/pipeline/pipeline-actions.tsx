@@ -162,7 +162,7 @@ export function PipelineActions({
       {actionBtn("cover")}
       {actionBtn("email")}
       {actionBtn("contacto")}
-      <ApplyButton n={n} url={url?.startsWith("http") ? url : undefined} company={company} pdfReady={pdfReady} rail={rail} />
+      <ApplyButton n={n} url={url?.startsWith("http") ? url : undefined} company={company} pdfReady={pdfReady} status={status} rail={rail} />
       {available.length > 0 && (
         <Button variant="text" size="sm" className={cn(rail && "w-full")} onClick={() => void openDraft(available[0])}>
           <MaterialSymbol name="visibility" size={18} />
