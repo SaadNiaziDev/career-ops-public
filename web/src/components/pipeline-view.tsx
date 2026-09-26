@@ -313,6 +313,13 @@ export function PipelineView({
 
       {mode === "table" && (
         <div className="md3-pipeline-list-panel mt-6">
+          {STAGES.some((stage) => stage.key === tab) && (
+            <PipelineStageFocus
+              stage={tab as StageKey}
+              count={filtered.length}
+              first={filtered[0]}
+            />
+          )}
           <div className="border-b border-[var(--md-sys-color-outline-variant)] p-4">
             <div className="flex flex-wrap items-center gap-2">
               {(["ALL", ...CLOSED] as const).map((t) => (
@@ -435,6 +442,44 @@ export function PipelineView({
   );
 }
 
+function pipelineNextStep(row: Application): { reason: string; label: string; href: string } | null {
+  const status = canonStatus(row.status);
+  if (status.includes("OFFER")) return { reason: row.offerDeadline ? `Decision due ${row.offerDeadline}` : "Decision deadline not set", label: "Review offer", href: `/pipeline/${row.n}` };
+  if (status.includes("INTERVIEW")) return { reason: row.nextInterviewAt ? `Interview ${row.nextInterviewAt}` : "Interview date not set", label: "Prepare", href: `/pipeline/${row.n}/interview` };
+  if (status.includes("RESPONDED")) return { reason: "Company replied", label: "Plan next touch", href: "/" };
+  if (status.includes("APPLIED")) return { reason: "Application sent", label: "Check follow-ups", href: "/" };
+  if (status.includes("EVALUATED")) return { reason: "Awaiting your decision", label: "Review fit", href: `/pipeline/${row.n}` };
+  return null;
+}
+
+function PipelineStageFocus({ stage, count, first }: { stage: StageKey; count: number; first?: Application }) {
+  const copy: Record<StageKey, { title: string; description: string }> = {
+    EVALUATED: { title: "Decide what to pursue", description: "Compare fit scores, then prepare the strongest match or close the roles you have ruled out." },
+    APPLIED: { title: "Track each application", description: "Check due follow-ups, record replies, and keep the next touch on schedule." },
+    RESPONDED: { title: "Choose the next step", description: "Review the reply, capture what changed, and prepare for an interview or follow-up." },
+    INTERVIEW: { title: "Prepare for the next round", description: "Open the interview workspace for the next event, prep sheet, or debrief." },
+    OFFER: { title: "Review the offer", description: "Compare the terms and keep any decision deadline visible before you respond." },
+  };
+  const item = copy[stage];
+  const action = first ? pipelineNextStep(first) : null;
+  return (
+    <section className="flex flex-wrap items-center gap-4 border-b border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] px-4 py-4" data-co-tour="pipeline-stage-focus">
+      <div className="min-w-0 flex-1">
+        <h2 className="mb-1 md-title-medium text-[var(--md-sys-color-on-surface)]">{item.title}</h2>
+        <p className="mb-0 max-w-2xl md-body-small text-[var(--md-sys-color-on-surface-variant)]">
+          {count > 0 ? `${count} ${count === 1 ? "role" : "roles"} in ${stage.toLowerCase()}. ` : `No roles in ${stage.toLowerCase()} yet. `}{item.description}
+        </p>
+      </div>
+      {action && (
+        <Link href={action.href} className="md3-btn-outlined min-h-10 shrink-0">
+          <MaterialSymbol name={stage === "INTERVIEW" ? "psychology" : stage === "OFFER" ? "handshake" : "arrow_forward"} size={18} />
+          {action.label}
+        </Link>
+      )}
+    </section>
+  );
+}
+
 function BoardColumn({
   label,
   stage,
@@ -492,6 +537,7 @@ function BoardCard({
 }) {
   const hasScore = !!row.score && row.score.trim() !== "" && row.score.trim() !== "—";
   const href = `/pipeline/${row.n}`;
+  const nextStep = pipelineNextStep(row);
   return (
     <div className="md3-pipeline-card group relative">
       <Link
@@ -549,6 +595,14 @@ function BoardCard({
             <PipelineRowActions n={row.n} company={row.company} role={row.role} />
           </span>
         </div>
+        {nextStep && (
+          <div className="pointer-events-auto mt-1.5 flex items-center justify-between gap-2 text-xs">
+            <span className="min-w-0 truncate text-[var(--md-sys-color-on-surface-variant)]">{nextStep.reason}</span>
+            <Link href={nextStep.href} onClick={(event) => event.stopPropagation()} className="shrink-0 font-medium text-[var(--md-sys-color-primary)] hover:underline">
+              {nextStep.label}
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -563,6 +617,7 @@ function PipelineListRow({
 }) {
   const location = applicationLocationLabel(row);
   const href = `/pipeline/${row.n}`;
+  const nextStep = pipelineNextStep(row);
   return (
     <div className="md3-pipeline-list-row group relative">
       <Link
@@ -590,6 +645,11 @@ function PipelineListRow({
             </Link>
           ) : null}
         </p>
+        {nextStep && (
+          <Link href={nextStep.href} onClick={(event) => event.stopPropagation()} className="pointer-events-auto relative z-[1] mt-0.5 inline-block truncate text-xs font-medium text-[var(--md-sys-color-primary)] hover:underline">
+            {nextStep.reason} · {nextStep.label}
+          </Link>
+        )}
       </div>
       <span className="pointer-events-none relative z-[1] hidden truncate md-body-medium text-[var(--md-sys-color-on-surface-variant)] lg:block">{location}</span>
       <span className="pointer-events-none relative z-[1] hidden items-center gap-1.5 md-body-small text-[var(--md-sys-color-on-surface-variant)] xl:flex">

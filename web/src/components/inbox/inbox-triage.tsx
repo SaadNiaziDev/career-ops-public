@@ -19,6 +19,7 @@ import { readSortPreference, sortInbox, writeSortPreference } from "@/lib/list-s
 
 const SHORTLIST_KEY = "career-ops:shortlist";
 const HIDDEN_KEY = "career-ops:hidden";
+const FILTERS_KEY = "career-ops:inbox-filters";
 const CONFIG_KEY = "career-ops:config";
 const BATCH = 20;
 
@@ -64,11 +65,28 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
       if (h) setHidden(JSON.parse(h));
       const c = localStorage.getItem(CONFIG_KEY);
       setHasCli(!!(c && JSON.parse(c).cliId));
+      const rawFilters = localStorage.getItem(FILTERS_KEY);
+      const saved = rawFilters ? JSON.parse(rawFilters) as Record<string, unknown> : null;
+      if (saved) {
+        if (typeof saved.within === "number" && [7, 30, 90].includes(saved.within)) setWithin(saved.within);
+        if (typeof saved.minFit === "number" && Number.isFinite(saved.minFit)) setMinFit(saved.minFit);
+        if (Array.isArray(saved.sources)) setSources(new Set(saved.sources.filter((value): value is AtsSource => typeof value === "string" && ATS_SOURCES.includes(value as AtsSource))));
+        if (Array.isArray(saved.seniorities)) setSeniorities(new Set(saved.seniorities.filter((value): value is Seniority => typeof value === "string" && SENIORITY_ORDER.includes(value as Seniority))));
+        if (typeof saved.locQ === "string") setLocQ(saved.locQ);
+        if (typeof saved.kw === "string") setKw(saved.kw);
+        if (saved.showAll === true) setShowAll(true);
+      }
     } catch {
       /* ignore */
     }
     setLoaded(true);
   }, []);
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(FILTERS_KEY, JSON.stringify({ within, minFit, sources: [...sources], seniorities: [...seniorities], locQ, kw, showAll }));
+    } catch { /* storage unavailable */ }
+  }, [within, minFit, sources, seniorities, locQ, kw, showAll, loaded]);
   useEffect(() => {
     if (loaded) try { localStorage.setItem(SHORTLIST_KEY, JSON.stringify(shortlist)); } catch { /* quota */ }
   }, [shortlist, loaded]);
@@ -212,6 +230,17 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
     if (add.length) setShortlist((s) => [...s, ...add]);
     setSelected(new Set());
   };
+  const skipSelected = () => {
+    const urls = filtered.filter((item) => selected.has(item.job.url)).map((item) => item.job.url);
+    if (!urls.length) return;
+    setHidden((current) => [...new Set([...current, ...urls])]);
+    setSelected(new Set());
+    toast({
+      message: `Skipped ${urls.length} ${urls.length === 1 ? "role" : "roles"}`,
+      tone: "neutral",
+      action: { label: "Undo", onClick: () => setHidden((current) => current.filter((url) => !urls.includes(url))) },
+    });
+  };
 
   const estimate = useMemo(() => {
     const samples = jobs.filter((j) => j.kind === "evaluate" && j.status === "done" && j.cost?.tokens).map((j) => j.cost!);
@@ -283,6 +312,9 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <button type="button" onClick={saveSelected} className="md3-btn-filled min-h-10 px-4 text-sm">
               Save to shortlist
+            </button>
+            <button type="button" onClick={skipSelected} className="md3-btn-outlined min-h-10 px-4 text-sm">
+              Skip selected
             </button>
           </div>
         </header>
