@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { Button } from "@/components/ui/button";
 import { Md3Segmented } from "@/components/ui/md3-segmented";
@@ -8,19 +8,17 @@ import type { DiscoveredOffer } from "@/lib/explore";
 import { CostBadge } from "@/components/cost/cost-badge";
 import { DiscoveryCard } from "./discovery-card";
 import { useExplore } from "./explore-provider";
-import { readSortPreference, sortOffers, writeSortPreference, type OfferOrder } from "@/lib/list-sort-policy";
+import { sortOffers, type OfferOrder } from "@/lib/list-sort-policy";
 
 export type EnrichedOffer = DiscoveredOffer & { inPipeline: boolean; evaluatedN?: string };
 
 export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
   const { companiesScanned, partial, addToPipeline, added, mode } = useExplore();
   const isAi = mode === "ai";
-  const [sort, setSort] = useState<OfferOrder>("fit");
-  useEffect(() => setSort(readSortPreference<OfferOrder>("career-ops:explore-order", ["fit", "fresh", "company"], "fit")), []);
+  const [sort, setSort] = useState<OfferOrder>("fresh");
   const changeSort = (value: string) => {
     const next = value as OfferOrder;
     setSort(next);
-    writeSortPreference("career-ops:explore-order", next);
   };
   const [q, setQ] = useState("");
 

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Md3Card } from "@/components/ui/md3-card";
+import { cn } from "@/lib/cn";
 
 export function DossierSection({
   icon,
@@ -20,7 +21,7 @@ export function DossierSection({
 }) {
   return (
     <Md3Card
-      className={className}
+      className={cn("dossier-section", className)}
       title={
         <span className="inline-flex items-center gap-2.5 md-title-medium text-[var(--md-sys-color-on-surface)]">
           {icon}

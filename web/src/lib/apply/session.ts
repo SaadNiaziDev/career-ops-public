@@ -31,11 +31,15 @@ function cssAttr(v: string): string {
  *  whole apply. Up to 3 attempts with backoff; returns the navigation Response
  *  (status/headers feed the cheap status-block check). */
 async function gotoResilient(page: Page, url: string): Promise<Response | null> {
+  const fullStackJobPage = new URL(url).hostname === "talent.fullstack.com" && /^\/jobs\/[0-9a-f-]{36}\/?$/i.test(new URL(url).pathname);
   let lastErr: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < (fullStackJobPage ? 1 : 3); attempt++) {
     try {
-      const resp = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-      await page.waitForLoadState("load", { timeout: 8_000 }).catch(() => {});
+      const resp = await page.goto(url, {
+        waitUntil: fullStackJobPage ? "commit" : "domcontentloaded",
+        timeout: fullStackJobPage ? 12_000 : 30_000,
+      });
+      if (!fullStackJobPage) await page.waitForLoadState("load", { timeout: 8_000 }).catch(() => {});
       return resp;
     } catch (e) {
       lastErr = e;
@@ -255,7 +259,8 @@ export async function openSession(url: string, cliId?: string, forceAgent?: bool
   };
   // 1) Navigate (resilient) → cheapest hard-block check on the Response status.
   const resp = await gotoResilient(page, url);
-  await snap(); // first paint
+  const fullStackJobPage = new URL(url).hostname === "talent.fullstack.com" && /^\/jobs\/[0-9a-f-]{36}\/?$/i.test(new URL(url).pathname);
+  if (!fullStackJobPage) await snap(); // first paint
   const sBlock = statusBlock(resp?.status(), resp ? resp.headers() : {});
   if (sBlock) return abort(sBlock.message);
 
@@ -265,10 +270,11 @@ export async function openSession(url: string, cliId?: string, forceAgent?: bool
   // 3) Wait for real form controls to render (SPA hydrate) in ANY frame (embedded
   //    forms), then settle. More reliable than a fixed sleep.
   const formSel = 'form input, form textarea, input[type=file], [role=combobox], [class*="application-form" i], #application_form';
-  await Promise.race(page.frames().map((f) => f.waitForSelector(formSel, { timeout: 12_000 }).catch(() => null))).catch(() => {});
-  await page.waitForTimeout(1200);
+  const formWaitMs = fullStackJobPage ? 4_000 : 12_000;
+  await Promise.race(page.frames().map((f) => f.waitForSelector(formSel, { timeout: formWaitMs }).catch(() => null))).catch(() => {});
+  if (!fullStackJobPage) await page.waitForTimeout(1200);
   await dropNewTabs(page); // make any "Apply" link/popup navigate in OUR tab
-  await snap(); // settled
+  if (!fullStackJobPage) await snap(); // settled
 
   // 4) Extract from the richest frame; if nothing yet, try (a) a scroll pass to
   //    trigger lazy/virtualized fields, then (b) clicking an "Apply" button (SPA;
@@ -282,11 +288,11 @@ export async function openSession(url: string, cliId?: string, forceAgent?: bool
     ({ frame, form } = await pickFormFrame(page));
   }
   if (!noApplyBtn && !looksLikeApplicationForm(form) && (await tryApplyTrigger(page))) {
-    await Promise.race(page.frames().map((f) => f.waitForSelector(formSel, { timeout: 6_000 }).catch(() => null))).catch(() => {});
-    await page.waitForTimeout(800);
+    await Promise.race(page.frames().map((f) => f.waitForSelector(formSel, { timeout: fullStackJobPage ? 3_000 : 6_000 }).catch(() => null))).catch(() => {});
+    if (!fullStackJobPage) await page.waitForTimeout(800);
     await dropNewTabs(page);
     ({ frame, form } = await pickFormFrame(page));
-    await snap();
+    if (!fullStackJobPage) await snap();
   }
   await enrichFromAts(url, form.fields); // clean labels + real options for known ATS (Greenhouse)
   await snap();
@@ -311,6 +317,9 @@ export async function openSession(url: string, cliId?: string, forceAgent?: bool
   //    A challenge/login/listing/expired/Workday page has no form to interpret,
   //    so we abort directly with the right message (no wasted AI run).
   if (!aiInterpreted && !looksLikeApplicationForm(form)) {
+    if (fullStackJobPage) {
+      return abort("FullStack's application form did not load. Open the posting in your browser, click Apply, then paste the application form URL here.");
+    }
     const why = await classifyEmpty(page, url);
     // Driveable (controls present, not a hard block) + we have an agent → KEEP the
     // session open and hand off to the STREAMED drive route, so the user watches

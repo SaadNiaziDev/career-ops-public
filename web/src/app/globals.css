@@ -671,6 +671,53 @@ aside .ant-menu-item-selected a {
 .dossier-page .ant-btn {
   padding-inline: 16px;
 }
+.today-dashboard {
+  --page-px: clamp(16px, 2vw, 28px);
+  --page-py: 20px;
+  --page-pb: 24px;
+  --card-pad-x: 16px;
+  --card-pad-y: 14px;
+  --inset-gap: 8px;
+}
+.today-dashboard-hero {
+  margin-bottom: 12px !important;
+  padding: 16px 20px !important;
+}
+.today-dashboard-hero > .md-eyebrow {
+  margin-bottom: 0;
+}
+.today-dashboard-hero > h1 {
+  margin-top: 8px;
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  line-height: 1.08;
+}
+.today-dashboard-hero > p:not(.md-eyebrow) {
+  margin-top: 8px;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+.today-dashboard-hero > div:last-child {
+  margin-top: 12px;
+  gap: 8px;
+}
+.today-dashboard .dossier-stat {
+  border-radius: var(--md-sys-shape-corner-large);
+}
+.today-dashboard .dossier-section > header {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.today-dashboard .dossier-section > div:last-child {
+  padding-bottom: 12px;
+}
+.today-dashboard-tools summary {
+  list-style-position: inside;
+}
+@media (max-width: 767px) {
+  .today-dashboard { --page-py: 14px; --page-pb: 18px; }
+  .today-dashboard-hero { padding: 14px 16px !important; }
+  .today-dashboard-hero > h1 { font-size: 1.75rem; }
+}
 .dossier-page .ant-segmented {
   padding: 3px;
 }

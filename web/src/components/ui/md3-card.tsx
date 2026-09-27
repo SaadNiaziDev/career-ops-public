@@ -25,7 +25,13 @@ export function Md3Card({
           {extra != null && <div className="shrink-0">{extra}</div>}
         </header>
       )}
-      <div className={cn(title != null || extra != null ? "px-[var(--card-pad-x)] pb-[var(--card-pad-y)]" : "p-[var(--card-pad-y)] px-[var(--card-pad-x)]")}>
+      <div
+        className={cn(
+          title != null || extra != null
+            ? "px-[var(--card-pad-x)] pb-[var(--card-pad-y)] mb-3"
+            : "p-[var(--card-pad-y)] px-[var(--card-pad-x)]",
+        )}
+      >
         {children}
       </div>
     </section>

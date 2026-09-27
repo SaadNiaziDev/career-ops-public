@@ -2,14 +2,14 @@
 export const DEFAULT_SORT_POLICY = {
   pipelineInbox: "newest discovered",
   pipelineAll: "newest tracked",
-  pipelineEvaluated: "highest score",
+  pipelineEvaluated: "newest tracked",
   pipelineApplied: "newest tracked",
   pipelineResponded: "newest tracked",
-  pipelineInterview: "next scheduled event",
-  pipelineOffer: "decision deadline",
+  pipelineInterview: "newest tracked",
+  pipelineOffer: "newest tracked",
   pipelineClosed: "newest tracked",
   contacts: "newest added",
-  exploreResults: "match quality then freshness",
+  exploreResults: "newest posting first",
   todayFollowups: "urgency then due date",
   todayDecisions: "highest score",
   todayInterviewsAndOffers: "next event or deadline",
@@ -106,21 +106,15 @@ export function applicationOrderFromParams(params: URLSearchParams): Application
   return `${key}-${params.get("dir") === "1" ? "asc" : "desc"}` as ApplicationOrder;
 }
 
-export function defaultApplicationOrder(stage: string): string {
-  if (stage === "EVALUATED") return "Highest score";
-  if (stage === "INTERVIEW") return "Next interview";
-  if (stage === "OFFER") return "Decision deadline";
+export function defaultApplicationOrder(_stage: string): string {
   return "Newest first";
 }
 
-export function sortApplications<T extends SortableApplication>(rows: T[], stage: string, order: ApplicationOrder = "default"): T[] {
+export function sortApplications<T extends SortableApplication>(rows: T[], _stage: string, order: ApplicationOrder = "default"): T[] {
   return [...rows].sort((a, b) => {
     let compared = 0;
     if (order === "default") {
-      if (stage === "EVALUATED") compared = compareScore(a.score, b.score);
-      else if (stage === "INTERVIEW") compared = soonestFirst(a.nextInterviewAt, b.nextInterviewAt);
-      else if (stage === "OFFER") compared = soonestFirst(a.offerDeadline, b.offerDeadline);
-      else compared = newestFirst(a.date, b.date);
+      compared = newestFirst(a.date, b.date);
     } else if (order === "date-desc") compared = newestFirst(a.date, b.date);
     else if (order === "date-asc") compared = soonestFirst(a.date, b.date);
     else if (order === "score-desc") compared = compareScore(a.score, b.score);
@@ -147,7 +141,7 @@ export function sortContacts<T extends SortableContact>(rows: T[], order: Contac
 
 export type SortableOffer = { url: string; company: string; title: string; postedAt?: string; fitScore?: number };
 export type OfferOrder = "fit" | "fresh" | "company";
-export function sortOffers<T extends SortableOffer>(rows: T[], order: OfferOrder = "fit"): T[] {
+export function sortOffers<T extends SortableOffer>(rows: T[], order: OfferOrder = "fresh"): T[] {
   return [...rows].sort((a, b) => {
     const compared = order === "company" ? text(a.company, b.company)
       : order === "fresh" ? newestFirst(a.postedAt, b.postedAt)
