@@ -16,7 +16,7 @@ System-layer template files used by career-ops scripts and modes. These files ar
 
 The HTML template rendered by Playwright into PDF. Uses placeholder tokens (`{{NAME}}`, `{{HEADLINE}}`, `{{SUMMARY_TEXT}}`, `{{EXPERIENCE}}`, etc.) that the PDF pipeline fills at generation time.
 
-**Design:** Space Grotesk headings + DM Sans body, single-column ATS-safe layout, self-hosted fonts from `fonts/`.
+**Design:** LaTeX-style, single column, built to fill two dense A4 pages: Charter serif (system font, falls back to Cambria/Georgia), centered header with contact icons, blue small-caps section headings with a rule, role | dates and company | location rows, compact bullets. It is the only built-in CV template; retired names (`academic`, `compact`, `modern`, `dense`) resolve to it. Sections: Summary, Experience, Skills, Projects (bulleted), Open Source, Awards, Certifications, Education — empty optional sections are dropped. Template features are declared in its `<!-- career-ops-template -->` header (`features: project-bullets, drop-empty-sections`).
 
 **Customization:** Edit this file to change colors, spacing, or section order. The placeholder tokens are documented in `batch/batch-prompt.md` under "Template placeholders."
 

@@ -165,3 +165,22 @@ test('CLI dry-run keeps the established text summary shape', () => {
     rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test('buildPostingAgeFilter applies posted_since as an absolute floor', async () => {
+  const { buildPostingAgeFilter } = await import('../scan-engine.mjs');
+  const now = Date.parse('2026-10-15T12:00:00Z');
+  const sinceOnly = buildPostingAgeFilter(undefined, now, '2026-10-01');
+  assert.equal(sinceOnly(Date.parse('2026-10-01T00:00:00Z')), true);
+  assert.equal(sinceOnly(Date.parse('2026-09-30T23:59:59Z')), false);
+  assert.equal(sinceOnly(undefined), true, 'undated offers always pass');
+
+  // js-yaml turns an unquoted date into a Date object
+  const fromYamlDate = buildPostingAgeFilter(30, now, new Date('2026-10-01T00:00:00Z'));
+  assert.equal(fromYamlDate(Date.parse('2026-09-20T00:00:00Z')), false, 'stricter posted_since wins over 30-day window');
+
+  // when the rolling window is stricter, it wins
+  const rollingStricter = buildPostingAgeFilter(3, now, '2026-10-01');
+  assert.equal(rollingStricter(Date.parse('2026-10-05T00:00:00Z')), false);
+
+  assert.equal(buildPostingAgeFilter(undefined, now, 'not-a-date')(0), true, 'invalid posted_since is ignored');
+});

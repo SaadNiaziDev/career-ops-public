@@ -1,6 +1,5 @@
 import fs from "node:fs";
-import path from "node:path";
-import { careerOpsRoot } from "@/lib/career-ops";
+import { artifactFiles, artifactPath } from "@/lib/cv/artifacts";
 
 /**
  * Locate the tailored CV PDF the real `pdf` mode wrote to output/ for a given
@@ -12,13 +11,7 @@ import { careerOpsRoot } from "@/lib/career-ops";
 export function resolveTailoredCv(company?: string): string | null {
   const c = (company ?? "").trim();
   if (!c) return null;
-  const dir = path.join(careerOpsRoot(), "output");
-  let files: string[];
-  try {
-    files = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith(".pdf"));
-  } catch {
-    return null;
-  }
+  const files = artifactFiles().filter((f) => f.toLowerCase().endsWith(".pdf"));
   // Token-extract instead of replace-then-trim: same slug, and no `-+$`-style
   // pattern that backtracks polynomially on adversarial input (CodeQL).
   const slug = (c.toLowerCase().match(/[a-z0-9]+/g) ?? []).join("-");
@@ -27,9 +20,10 @@ export function resolveTailoredCv(company?: string): string | null {
     const l = f.toLowerCase();
     return l.includes(slug) || (first.length > 2 && l.includes(first));
   });
-  if (!matches.length) return null;
-  matches.sort((a, b) => fs.statSync(path.join(dir, b)).mtimeMs - fs.statSync(path.join(dir, a)).mtimeMs);
-  return path.join(dir, matches[0]);
+  const paths = matches.map((f) => artifactPath(f, "pdf")).filter((f): f is string => Boolean(f));
+  if (!paths.length) return null;
+  paths.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  return paths[0];
 }
 
 /**

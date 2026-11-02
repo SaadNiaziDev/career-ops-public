@@ -137,6 +137,13 @@ function normalizeLocation(value) {
   return String(value).trim();
 }
 
+function normalizePostedAt(value) {
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? value : undefined;
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function normalizeParserJob(job, entry) {
   if (!job || typeof job !== 'object') return null;
 
@@ -152,6 +159,7 @@ function normalizeParserJob(job, entry) {
     url,
     company: String(job.company || entry.name || '').trim(),
     location: normalizeLocation(job.location || job.locations),
+    postedAt: normalizePostedAt(job.postedAt || job.posted_at),
   };
 }
 

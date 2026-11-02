@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Application, InboxJob } from "@/lib/career-ops";
 import { CompanyLogo } from "@/components/company-logo";
 import { MaterialSymbol } from "@/components/material-symbol";
-import { canonStatus, scoreNum, scoreTone, statusDot } from "@/lib/format";
+import { CANONICAL_STATES, canonStatus, scoreNum, scoreTone, statusDot } from "@/lib/format";
 import { InboxTriage } from "@/components/inbox/inbox-triage";
 import { PipelineRowActions } from "@/components/pipeline/pipeline-row-actions";
 import { PageShell } from "@/components/dossier/page-shell";
@@ -63,6 +63,23 @@ export function PipelineView({
   const applicationOrder = applicationOrderFromParams(params);
 
   const [q, setQ] = useState(params.get("q") ?? "");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
+  const listRef = useRef<HTMLDivElement>(null);
+  const [selectionBox, setSelectionBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const suppressRowClick = useRef(false);
+  const dragSelection = useRef<{ start: string; checked: boolean } | null>(null);
+  useEffect(() => {
+    const stopDragging = () => { dragSelection.current = null; };
+    window.addEventListener("mouseup", stopDragging);
+    window.addEventListener("blur", stopDragging);
+    return () => {
+      window.removeEventListener("mouseup", stopDragging);
+      window.removeEventListener("blur", stopDragging);
+    };
+  }, []);
   const lastUrlQ = useRef(params.get("q") ?? "");
   useEffect(() => {
     const urlQ = params.get("q") ?? "";
@@ -74,6 +91,7 @@ export function PipelineView({
 
   const setParams = useCallback(
     (updates: Record<string, string | number | null>) => {
+      setSelected(new Set());
       const sp = new URLSearchParams(params.toString());
       for (const [k, v] of Object.entries(updates)) {
         if (v == null || v === "") sp.delete(k);
@@ -172,6 +190,123 @@ export function PipelineView({
 
   const activeTabKey = mode === "inbox" ? "INBOX" : mode === "board" ? "ALL" : tab;
   const hasTableFilters = minFilter != null || daysFilter != null || locationFilter.trim() !== "" || sourceFilter.trim() !== "" || scoreBandFilter !== "" || roleFamilyFilter !== "" || q.trim() !== "";
+  const selectedRows = (mode === "board" ? applications : filtered).filter((row) => selected.has(row.n));
+
+  function toggleRow(n: string) {
+    setSelected((previous) => {
+      const next = new Set(previous);
+      if (next.has(n)) next.delete(n);
+      else next.add(n);
+      return next;
+    });
+  }
+
+  function selectRow(n: string, checked: boolean) {
+    setSelected((previous) => {
+      const next = new Set(previous);
+      if (checked) next.add(n);
+      else next.delete(n);
+      return next;
+    });
+  }
+
+  function startMarquee(event: React.MouseEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement;
+    if (event.button !== 0 || bulkBusy || !target.closest("[data-selection-surface]")) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const initial = new Set(selected);
+    let moved = false;
+    const move = (moveEvent: MouseEvent) => {
+      if (!moved && Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 6) return;
+      moved = true;
+      const left = Math.min(startX, moveEvent.clientX);
+      const top = Math.min(startY, moveEvent.clientY);
+      const right = Math.max(startX, moveEvent.clientX);
+      const bottom = Math.max(startY, moveEvent.clientY);
+      setSelectionBox({ left, top, width: right - left, height: bottom - top });
+      const next = new Set(initial);
+      listRef.current?.querySelectorAll<HTMLElement>("[data-selection-row]").forEach((element) => {
+        const rect = element.getBoundingClientRect();
+        if (rect.left <= right && rect.right >= left && rect.top <= bottom && rect.bottom >= top && element.dataset.selectionRow) next.add(element.dataset.selectionRow);
+      });
+      setSelected(next);
+    };
+    const end = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", end);
+      setSelectionBox(null);
+      if (moved) {
+        suppressRowClick.current = true;
+        window.setTimeout(() => { suppressRowClick.current = false; }, 0);
+      }
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", end);
+  }
+
+  async function updateSelected() {
+    if (!bulkStatus || selectedRows.length === 0 || bulkBusy) return;
+    let overrideReason: string | undefined;
+    if (bulkStatus === "Applied") {
+      if (!window.confirm(`Have you submitted all ${selectedRows.length} selected applications?`)) return;
+      if (selectedRows.some((row) => Number.isFinite(scoreNum(row.score)) && scoreNum(row.score) < 4)) {
+        overrideReason = window.prompt("Some roles scored below 4.0. Why did you apply anyway?")?.trim();
+        if (!overrideReason) return;
+      }
+    }
+    setBulkBusy(true);
+    setBulkMessage("");
+    const failed: string[] = [];
+    const succeeded: string[] = [];
+    for (const row of selectedRows) {
+      try {
+        const response = await fetch("/api/status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ n: row.n, status: bulkStatus, confirmedSubmission: bulkStatus === "Applied", overrideReason }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Update failed");
+        succeeded.push(row.n);
+      } catch (error) {
+        failed.push(`#${row.n}: ${error instanceof Error ? error.message : "Update failed"}`);
+      }
+    }
+    setSelected(new Set(failed.length ? selectedRows.filter((row) => !succeeded.includes(row.n)).map((row) => row.n) : []));
+    setBulkMessage(`${succeeded.length} updated.${failed.length ? ` Failed: ${failed.join("; ")}` : ""}`);
+    setBulkBusy(false);
+    router.refresh();
+  }
+
+  async function deleteSelected() {
+    if (!selectedRows.length || bulkBusy) return;
+    const ambiguous = selectedRows.filter((row) => applications.filter((item) => item.n === row.n).length !== 1);
+    if (ambiguous.length) {
+      setBulkMessage(`Cannot delete ambiguous tracker numbers: ${[...new Set(ambiguous.map((row) => `#${row.n}`))].join(", ")}.`);
+      return;
+    }
+    if (!window.confirm(`Permanently remove ${selectedRows.length} selected ${selectedRows.length === 1 ? "application" : "applications"} from the tracker? This cannot be undone. Report files remain on disk.`)) return;
+    setBulkBusy(true);
+    setBulkMessage("");
+    const failed: string[] = [];
+    const succeeded = new Set<string>();
+    for (const row of selectedRows) {
+      try {
+        const response = await fetch("/api/tracker/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ n: row.n }) });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Delete failed");
+        succeeded.add(row.n);
+      } catch (error) {
+        failed.push(`#${row.n}: ${error instanceof Error ? error.message : "Delete failed"}`);
+      }
+    }
+    setSelected(new Set(selectedRows.filter((row) => !succeeded.has(row.n)).map((row) => row.n)));
+    setBulkMessage(`${succeeded.size} removed.${failed.length ? ` Failed: ${failed.join("; ")}` : ""}`);
+    setBulkBusy(false);
+    router.refresh();
+  }
 
   const clearTableFilters = () => {
     setQ("");
@@ -301,6 +436,9 @@ export function PipelineView({
                 stage={s.stage}
                 rows={byStage.buckets.get(s.key) ?? []}
                 interviewProgress={interviewProgress}
+                selected={selected}
+                onToggle={toggleRow}
+                disabled={bulkBusy}
                 onSeeAll={() => goTable(s.key)}
               />
             ))}
@@ -310,6 +448,9 @@ export function PipelineView({
               rows={byStage.closed}
               showStatus
               interviewProgress={interviewProgress}
+              selected={selected}
+              onToggle={toggleRow}
+              disabled={bulkBusy}
               onSeeAll={() => goTable("ALL")}
             />
           </div>
@@ -351,7 +492,7 @@ export function PipelineView({
                   placeholder="Company or role"
                   aria-label="Search tracked roles"
                   value={q}
-                  onChange={(e) => setQ(e.target.value)}
+                  onChange={(e) => { setSelected(new Set()); setQ(e.target.value); }}
                   className="min-h-10"
                 />
               </div>
@@ -466,10 +607,20 @@ export function PipelineView({
               )}
             </div>
           </div>
+          {filtered.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 border-b border-[var(--md-sys-color-outline-variant)] px-4 py-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" aria-label="Select all visible roles" checked={selectedRows.length === filtered.length} disabled={bulkBusy} onChange={(event) => setSelected(new Set(event.target.checked ? filtered.map((row) => row.n) : []))} />
+                Select all visible
+              </label>
+              <span className="text-sm" aria-live="polite">{selectedRows.length} selected</span>
+              {bulkMessage && <span role="status" className="text-sm">{bulkMessage}</span>}
+            </div>
+          )}
           {filtered.length > 0 ? (
-            <div>
+            <div ref={listRef} onMouseDown={startMarquee} onClickCapture={(event) => { if (suppressRowClick.current) { event.preventDefault(); event.stopPropagation(); suppressRowClick.current = false; } }}>
               {filtered.map((row) => (
-                <PipelineListRow key={row.n} row={row} interviewProgress={interviewProgress[row.n]} />
+                <PipelineListRow key={row.n} row={row} interviewProgress={interviewProgress[row.n]} selected={selected.has(row.n)} disabled={bulkBusy} onToggle={() => toggleRow(row.n)} onDragStart={() => { dragSelection.current = { start: row.n, checked: !selected.has(row.n) }; }} onDragOver={() => { const drag = dragSelection.current; if (drag && drag.start !== row.n && !bulkBusy) { selectRow(drag.start, drag.checked); selectRow(row.n, drag.checked); } }} />
               ))}
             </div>
           ) : (
@@ -477,8 +628,19 @@ export function PipelineView({
               No matches. Adjust the filters or clear them to see all roles.
             </div>
           )}
+          {selectionBox && <div aria-hidden className="pointer-events-none fixed z-50 border border-[var(--md-sys-color-primary)] bg-[color-mix(in_srgb,var(--md-sys-color-primary)_18%,transparent)]" style={selectionBox} />}
         </div>
       )}
+      {mode !== "inbox" && selectedRows.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 z-50 flex w-[min(96vw,760px)] -translate-x-1/2 flex-wrap items-center justify-center gap-3 rounded-2xl border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-high)] p-3 shadow-lg" aria-label="Selected roles actions">
+          <span className="font-medium" aria-live="polite">{selectedRows.length} selected</span>
+          <Md3Select aria-label="Bulk status" placement="top" value={bulkStatus} onChange={setBulkStatus} disabled={bulkBusy} options={[{ value: "", label: "Choose status" }, ...CANONICAL_STATES.map((status) => ({ value: status, label: status }))]} />
+          <button type="button" className="md3-btn-filled" disabled={!bulkStatus || bulkBusy} onClick={() => void updateSelected()}>{bulkBusy ? "Working…" : "Update status"}</button>
+          <button type="button" className="md3-btn-outlined" disabled={bulkBusy} onClick={() => void deleteSelected()}>Delete</button>
+          <button type="button" className="md3-btn-text" disabled={bulkBusy} onClick={() => setSelected(new Set())}>Clear selection</button>
+        </div>
+      )}
+      {mode === "board" && bulkMessage && <p role="status" className="mt-3 text-sm">{bulkMessage}</p>}
     </PageShell>
   );
 }
@@ -527,6 +689,9 @@ function BoardColumn({
   rows,
   showStatus = false,
   interviewProgress = {},
+  selected,
+  onToggle,
+  disabled,
   onSeeAll,
 }: {
   label: string;
@@ -534,6 +699,9 @@ function BoardColumn({
   rows: Application[];
   showStatus?: boolean;
   interviewProgress?: Record<string, { done: number; total: number }>;
+  selected: Set<string>;
+  onToggle: (n: string) => void;
+  disabled: boolean;
   onSeeAll: () => void;
 }) {
   const visible = rows.slice(0, BOARD_CAP);
@@ -548,7 +716,7 @@ function BoardColumn({
       </p>
       <div className="flex flex-col gap-2">
         {visible.map((row) => (
-          <BoardCard key={row.n} row={row} showStatus={showStatus} stage={stage} interviewProgress={interviewProgress[row.n]} />
+          <BoardCard key={row.n} row={row} showStatus={showStatus} stage={stage} interviewProgress={interviewProgress[row.n]} selected={selected.has(row.n)} onToggle={() => onToggle(row.n)} disabled={disabled} />
         ))}
         {rows.length === 0 && (
           <div className="rounded-[var(--md-sys-shape-corner-large-increased)] border border-dashed border-[var(--md-sys-color-outline-variant)] px-3 py-6 text-center md-body-small text-[var(--md-sys-color-outline)]">
@@ -570,11 +738,17 @@ function BoardCard({
   showStatus,
   stage,
   interviewProgress,
+  selected,
+  onToggle,
+  disabled,
 }: {
   row: Application;
   showStatus: boolean;
   stage: string;
   interviewProgress?: { done: number; total: number };
+  selected: boolean;
+  onToggle: () => void;
+  disabled: boolean;
 }) {
   const hasScore = !!row.score && row.score.trim() !== "" && row.score.trim() !== "—";
   const href = `/pipeline/${row.n}`;
@@ -590,6 +764,7 @@ function BoardCard({
       </Link>
       <div className="relative z-[1] pointer-events-none">
         <div className="flex items-start gap-2.5">
+          <input type="checkbox" className="pointer-events-auto mt-1 size-4 accent-[var(--md-sys-color-primary)]" aria-label={`Select ${row.company} ${row.role}`} checked={selected} disabled={disabled} onChange={onToggle} />
           <CompanyLogo name={row.company} size={24} className="mt-px shrink-0" />
           <div className="min-w-0 flex-1">
             <span className="block truncate md-title-small text-inherit">{row.company}</span>
@@ -652,23 +827,34 @@ function BoardCard({
 function PipelineListRow({
   row,
   interviewProgress,
+  selected,
+  disabled,
+  onToggle,
+  onDragStart,
+  onDragOver,
 }: {
   row: Application;
   interviewProgress?: { done: number; total: number };
+  selected: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+  onDragStart: () => void;
+  onDragOver: () => void;
 }) {
   const location = applicationLocationLabel(row);
   const href = `/pipeline/${row.n}`;
   const nextStep = pipelineNextStep(row);
   return (
-    <div className="md3-pipeline-list-row group relative">
+    <div className="md3-pipeline-list-row group relative" data-selection-row={row.n} onMouseEnter={onDragOver}>
       <Link
         href={href}
         className="absolute inset-0 z-0 rounded-[inherit]"
         aria-label={`Open report for ${row.company}`}
+        data-selection-surface
       >
         <span className="sr-only">Open report for {row.company}</span>
       </Link>
-      <span aria-hidden className="pointer-events-none relative z-[1] size-[22px] rounded-[var(--md-sys-shape-corner-extra-small)] border border-[var(--md-sys-color-outline-variant)]" />
+      <input type="checkbox" className="relative z-[1] size-[22px] cursor-pointer accent-[var(--md-sys-color-primary)]" aria-label={`Select ${row.company} ${row.role}`} checked={selected} disabled={disabled} onMouseDown={(event) => { if (event.button === 0) { event.preventDefault(); onDragStart(); } }} onChange={onToggle} />
       <CompanyLogo name={row.company} size={40} className="pointer-events-none relative z-[1]" />
       <div className="pointer-events-none relative z-[1] min-w-0">
         <span className="block truncate md-title-small text-[var(--md-sys-color-on-surface)] group-hover:text-[var(--md-sys-color-primary)]">

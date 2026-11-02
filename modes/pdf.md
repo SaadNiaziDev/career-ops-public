@@ -22,8 +22,8 @@
 13. Inject keywords naturally into existing achievements (NEVER invent)
 14. Apply the six-second clarity gate from `modes/heuristics/recruiter-side.md`: top third must make target role, strongest fit, and proof obvious
 15. Read `name` from `config/profile.yml` → normalize to kebab-case lowercase (e.g. "John Doe" → "john-doe") → `{candidate}`
-16. Build the render payload (see the **Tailored-CV Content Contract** below) from the tailored content — emit compact structured JSON, **not** full HTML markup — and write it to `output/cv-{candidate}-{company}.json`. Keep the payload inside `output/` so sandboxed workers and the local renderer use the same file.
-17. Execute exactly one rendering command: `node render-cv.mjs output/cv-{candidate}-{company}.json output/cv-{candidate}-{company}.html output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4} --report={report number}`. Use the NNN from the report filename/link (for example `008`), not the tracker row number. Omit `--report` only for a one-off CV with no report.
+16. Build the render payload (see the **Tailored-CV Content Contract** below) from the tailored content — emit compact structured JSON, **not** full HTML markup — and write it to `output/.cv/cv-{candidate}-{company}.json`. Keep the payload inside `output/` so sandboxed workers and the local renderer use the same file.
+17. Execute exactly one rendering command: `node render-cv.mjs output/.cv/cv-{candidate}-{company}.json output/.cv/cv-{candidate}-{company}.html output/.cv/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4} --report={report number}`. Use the NNN from the report filename/link (for example `008`), not the tracker row number. Omit `--report` only for a one-off CV with no report.
 18. `render-cv.mjs` is the only layout owner. It resolves the selected template and profile style, builds HTML, runs the fact gate, renders the PDF, verifies the PDF and expected sections, then records template/style/source-report metadata. If it fails, stop and surface the error. Never write or patch HTML/CSS yourself and never call `build-cv-html.mjs` or `generate-pdf.mjs` directly.
 19. Report: PDF path, number of pages, keyword coverage %, and any skill gaps from Step 4 still unaddressed
 
@@ -102,6 +102,7 @@ The machine-readable schema is `templates/tailored-cv.schema.json`. Write JSON w
     "email": "jane@example.com",
     "linkedin": { "url": "https://linkedin.com/in/janesmith", "display": "linkedin.com/in/janesmith" },
     "portfolio": { "url": "https://janesmith.dev", "display": "janesmith.dev" },
+    "github": { "url": "https://github.com/janesmith", "display": "github.com/janesmith" },
     "location": "San Francisco, CA",
     "photo": ""
   },
@@ -119,14 +120,23 @@ The machine-readable schema is `templates/tailored-cv.schema.json`. Write JSON w
   "experience": [
     {
       "company": "Company Name",
+      "company_url": "https://company.com",
       "role": "Job Title",
+      "promotion": "promoted from Associate",
       "location": "Remote",
       "dates": "June 2022 - Present",
       "bullets": ["Achievement bullet with JD keywords injected", "Another quantified-impact bullet"]
     }
   ],
   "projects": [
-    { "name": "Project Name", "badge": "Open Source", "tech": "Python, FastAPI", "description": "What it does." }
+    { "name": "Project Name", "badge": "Open Source", "tech": "Python, FastAPI", "description": "What it does." },
+    { "name": "Other Project", "tech": "React, Supabase", "link": { "url": "https://project.dev", "display": "project.dev" }, "dates": "2025", "bullets": ["Built **key feature** for X.", "Second point."] }
+  ],
+  "open_source": [
+    { "project": "repo-name — what it is", "url": "https://github.com/org/repo", "role": "Contributor", "dates": "2025", "detail": "8 merged PRs", "bullets": ["What the PRs added."] }
+  ],
+  "awards": [
+    { "title": "Employee of the Month", "year": "2024", "detail": "short context" }
   ],
   "education": [
     { "title": "B.S. Computer Science", "org": "University Name", "year": "2022", "description": "Optional line." }
@@ -153,16 +163,23 @@ The machine-readable schema is `templates/tailored-cv.schema.json`. Write JSON w
 | `candidate.email` | string | From `profile.yml`. |
 | `candidate.linkedin` | `{url, display}` | Optional — omit to drop the item and its separator. |
 | `candidate.portfolio` | `{url, display}` | Optional — omit to drop the item and its separator. |
+| `candidate.github` | `{url, display}` | Optional — omit to drop the item. |
 | `candidate.location` | string | From `profile.yml`. |
 | `candidate.photo` | string | Opt-in profile photo (#264): a local path or `data:` URL. Empty/absent emits **no `<img>`**, rendering pixel-for-pixel identical to the photoless layout (US/UK/many-market ATS penalize photos; opt in for DACH/European markets). |
 | `sections` | object | Optional localized section titles; any omitted key falls back to the English default shown above. |
 | `summary` | string | Personalized summary with keywords. |
 | `competencies` | string[] | 6-8 keyword phrases → competency tags. |
-| `experience[]` | object | `company`, `role`, `location` (optional), `dates`, `bullets` (reordered, keyword-injected). |
-| `projects[]` | object | `name`, `badge` (optional), `tech` (optional), `description` (a `bullets` array is also accepted and joined into the description line). |
+| `experience[]` | object | `company`, `company_url` (optional, makes the company name a link), `role`, `promotion` (optional, e.g. "promoted Intern → Associate → Developer", shown after the role), `location` (optional), `dates`, `bullets` (reordered, keyword-injected). |
+| `projects[]` | object | `name`, `badge` (optional), `tech` (optional), `description` and/or `bullets`, `link` (optional `{url, display}`), `dates` (optional). Templates with the `project-bullets` feature (the built-in one) render `bullets` as a list; others join them into the description line. |
+| `open_source[]` | object | Optional. `project`, `url`, `role` (default "Contributor"), `dates`, `detail` (e.g. "8 merged PRs"), `bullets`. Section is dropped when empty. |
+| `awards[]` | object | Optional. `title`, `year`, `detail`. Section is dropped when empty. Only awards stated in cv.md or by the user. |
 | `education[]` | object | `title` (degree), `org` (institution), `year`, `description` (optional). |
 | `certifications[]` | object | `title`, `org`, `year`. |
 | `skills[]` | object | `category` + `items` (comma-separated string or string array). |
+
+Bullet text (experience, projects, open source) may wrap 1–3 key terms in `**…**`; the renderer escapes the text and turns those into bold. Never bold whole sentences.
+
+**Default template (LaTeX style) — content budget.** The built-in `templates/cv-template.html` is built to fill two A4 pages, so give it a full career instead of a minimal selection: up to 9 bullets for the current role and 5–7 for earlier roles, 6–11 projects (each with `tech`, a `link` or `dates`, and 1–2 bullets), every skill category relevant to the JD, plus `open_source`, `awards` and `certifications` when cv.md has them. It ignores `competencies`. Put promotions in `promotion` and company sites in `company_url`. Still reorder by JD relevance and drop items that don't support the target role.
 
 `render-cv.mjs` rejects unknown top-level fields, invalid content shapes, unresolved placeholders, fact-gate failures, unreadable PDFs, missing sections, or template mismatches.
 
@@ -240,12 +257,12 @@ f. `commit-editing-transaction` to save (ONLY after user approval)
 a. `export-design` the duplicate as PDF (format: a4 or letter based on JD location)
 b. **IMMEDIATELY** download the PDF using Bash:
    ```bash
-   curl -sL -o "output/cv-{candidate}-{company}-canva-{YYYY-MM-DD}.pdf" "{download_url}"
+   curl -sL -o "output/.cv/cv-{candidate}-{company}-canva-{YYYY-MM-DD}.pdf" "{download_url}"
    ```
    The export URL is a pre-signed S3 link that expires in ~2 hours. Download it right away.
 c. Verify the download:
    ```bash
-   file output/cv-{candidate}-{company}-canva-{YYYY-MM-DD}.pdf
+   file output/.cv/cv-{candidate}-{company}-canva-{YYYY-MM-DD}.pdf
    ```
    Must show "PDF document". If it shows XML or HTML, the URL expired — re-export and retry.
 d. Report: PDF path, file size, Canva design URL (for manual tweaking)

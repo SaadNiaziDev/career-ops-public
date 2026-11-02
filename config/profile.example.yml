@@ -106,12 +106,11 @@ cv:
   # Find it in your Canva design URL: https://www.canva.com/design/DAxxxxxxx/...
   # The ID starts with "D" and is 11 characters long.
   # canva_resume_design_id: "DAxxxxxxxxx"
-  # Which CV template to use by default. Value is the kebab-case name of a file
-  # in templates/ named cv-template.<name>.html (e.g. "modern" ->
-  # templates/cv-template.modern.html). Leave unset/commented to use the built-in
-  # templates/cv-template.html. You can also pick per-generation just by asking
-  # (e.g. "use the modern template").
-  # template: modern
+  # Which CV template to use by default. The built-in one is
+  # templates/cv-template.html (LaTeX-style, two dense pages). Add your own as
+  # templates/cv-template.<name>.html and set its kebab-case name here, e.g.
+  # "mine" -> templates/cv-template.mine.html. Leave unset to use the built-in.
+  # template: mine
   # source: cv.md   # or data/cv-sources/my-backup.md — which markdown file PDF mode reads
   # style:
   #   accent_color: "#2563eb"

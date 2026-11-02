@@ -160,6 +160,11 @@
 # Absent, 0, or non-positive → disabled (all ages pass).
 #
 # max_posting_age_days: 45
+#
+# posted_since: YYYY-MM-DD adds an absolute floor (e.g. "only roles posted since
+# I started this search"). When both keys are set, the stricter cutoff wins.
+#
+# posted_since: 2026-10-01
 
 # -- Trust filter (optional) --
 # Enriches each scanned job with a trust score (0-100) and flags.

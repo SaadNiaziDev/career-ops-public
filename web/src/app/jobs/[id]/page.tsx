@@ -163,16 +163,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
                   <MaterialSymbol name="stop_circle" size={16} />
                   Cancel safely
                 </Button>
-              ) : canRetry && (
-                <Button variant="outline" size="sm" disabled={retrying} onClick={retry}>
-                  {retrying ? (
-                    <MaterialSymbol name="progress_activity" size={16} className="animate-spin" />
-                  ) : (
-                    <MaterialSymbol name="refresh" size={16} />
-                  )}
-                  Retry
-                </Button>
-              )}
+              ) : null}
             </div>
 
             <div>
@@ -197,7 +188,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
             {(job.state === "needs-attention" || job.state === "interrupted" || job.state === "cancelled") && (
               <div className="md3-alert md3-alert--warning">
                 <MaterialSymbol name="warning" size={18} className="shrink-0" />
-                <span>{job.state === "cancelled" ? "This task was cancelled safely." : authError ? "Your CLI needs to be signed in before this task can continue." : "This task stopped before it finished. Review the activity below, then retry or return to the pipeline."}</span>
+                <span>{job.state === "cancelled" ? "This task was cancelled safely." : reportN ? "A saved report is available below. Open it to review the result." : authError ? "Your CLI needs to be signed in before this task can continue." : "This task stopped before it finished. Review the activity below, then retry if you want to run it again."}</span>
               </div>
             )}
 
@@ -238,7 +229,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
                     Open Config
                   </Button>
                 </Link>
-                {canRetry && (
+                {canRetry && !reportN && (
                   <Button variant="outline" disabled={retrying} onClick={retry}>
                     {retrying ? (
                       <MaterialSymbol name="progress_activity" size={16} className="animate-spin" />
@@ -251,7 +242,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
               </div>
             )}
 
-            {canRetry && !authError && (
+            {canRetry && !authError && !reportN && (
               <Button variant="primary" disabled={retrying} onClick={retry}>
                 {retrying ? (
                   <MaterialSymbol name="progress_activity" size={18} className="animate-spin" />

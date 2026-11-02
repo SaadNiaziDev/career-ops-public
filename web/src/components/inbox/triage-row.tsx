@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import Link from "next/link";
 import type { InboxJob } from "@/lib/career-ops";
 import type { AtsSource } from "@/lib/explore";
@@ -33,6 +34,8 @@ export function TriageRow({
   onSkip,
   onRemove,
   removing,
+  onSelectMouseDown,
+  onRowMouseEnter,
 }: {
   job: InboxJob;
   source: AtsSource | null;
@@ -45,22 +48,26 @@ export function TriageRow({
   onSkip: () => void;
   onRemove: () => void;
   removing: boolean;
+  onSelectMouseDown?: (event: React.MouseEvent) => void;
+  onRowMouseEnter?: () => void;
 }) {
   const ago = agoLabel(age);
   const evaluated = !!scored && (scored.running || scored.score != null);
 
   return (
-    <div className="md3-pipeline-list-row md3-triage-row group relative">
+    <div className="md3-pipeline-list-row md3-triage-row group relative" data-selection-row={job.url} onMouseEnter={onRowMouseEnter}>
       <a
         href={job.url}
         target="_blank"
         rel="noreferrer"
         className="absolute inset-0 z-0 rounded-[inherit]"
         aria-label={`Open ${job.company} ${job.role} on the job portal`}
+        data-selection-surface
       />
       <button
         type="button"
         onClick={onToggleSelect}
+        onMouseDown={onSelectMouseDown}
         aria-label={`Select ${job.company} ${job.role}`}
         aria-pressed={selected}
         className="relative z-[1] inline-flex size-[22px] shrink-0 items-center justify-center text-[var(--md-sys-color-outline)]"

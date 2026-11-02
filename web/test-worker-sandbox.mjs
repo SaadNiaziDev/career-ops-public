@@ -39,14 +39,19 @@ test("worker environments contain only safe base values and provider credentials
     },
   });
 
+  const scratch = launch.env.CLAUDE_CODE_TMPDIR;
   assert.deepEqual(launch.env, {
     PATH: "/usr/bin",
     HOME: testHome,
     LANG: "en_US.UTF-8",
     ANTHROPIC_API_KEY: "provider-key",
+    CLAUDE_CODE_TMPDIR: scratch,
   });
   assert.equal("DATABASE_URL" in launch.env, false);
   assert.equal("GH_TOKEN" in launch.env, false);
+  assert.equal(fs.statSync(scratch).mode & 0o777, 0o700);
+  launch.cleanup();
+  assert.equal(fs.existsSync(scratch), false);
   } finally {
     if (previousApiKey === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = previousApiKey;
@@ -69,6 +74,20 @@ test("task and CLI capability profiles reject unsupported combinations", () => {
   assert.throws(() => workerCapabilities("evaluate", "cursor"), /not supported/i);
   assert.throws(() => workerCapabilities("unknown", "claude"), /not supported/i);
   assert.throws(() => workerCapabilities("contacto", "claude"), /separate phases/i);
+  assert.throws(() => workerCapabilities("contacto", "codex"), /separate phases/i);
+  assert.deepEqual(workerCapabilities("contacto-research", "claude"), {
+    phase: "fetch",
+    readOnly: true,
+    externalFetch: true,
+    shell: false,
+  });
+  assert.deepEqual(workerCapabilities("contacto-write", "codex"), {
+    phase: "write",
+    readOnly: false,
+    externalFetch: false,
+    shell: true,
+  });
+  assert.throws(() => workerCapabilities("contacto-research", "cursor"), /not supported/i);
   assert.throws(() => workerCapabilities("interview-questions", "codex"), /separate phases/i);
 });
 
@@ -108,8 +127,12 @@ test("untrusted content cannot forge its closing marker", () => {
 
 test("purpose-specific roots exclude unrelated user data and writes", () => {
   const roots = workerRoots("contacto", "/checkout", "52");
+  const researchRoots = workerRoots("contacto-research", "/checkout", "52");
+  const writeRoots = workerRoots("contacto-write", "/checkout", "52");
   assert.ok(roots.readRoots.includes("/checkout/cv.md"));
   assert.ok(roots.writeRoots.includes("/checkout/data/drafts"));
+  assert.deepEqual(researchRoots.writeRoots, []);
+  assert.deepEqual(writeRoots.writeRoots, roots.writeRoots);
   assert.ok(!roots.writeRoots.includes("/checkout/data/applications.md"));
   assert.ok(!roots.readRoots.includes("/checkout/data"));
   assert.throws(() => workerRoots("fix-portal", "/checkout"), /user-layer/i);
@@ -150,6 +173,7 @@ test("OS sandbox permits scoped writes and denies private reads, outside writes,
       encoding: "utf8",
       timeout: 10_000,
     });
+    launch.cleanup();
 
     assert.equal(result.error, undefined, result.error?.message);
     assert.equal(result.status, 0, JSON.stringify({ error: result.error?.message, signal: result.signal, stderr: result.stderr }));

@@ -15,6 +15,7 @@ import { FacetChips, type InboxSort } from "./facet-chips";
 import { TriageRow, type RowScore } from "./triage-row";
 import { ShortlistTray, type ShortItem } from "./shortlist-tray";
 import { cn } from "@/lib/cn";
+import { useDragSelect } from "@/components/selection/use-drag-select";
 import { readSortPreference, sortInbox, writeSortPreference } from "@/lib/list-sort-policy";
 
 const SHORTLIST_KEY = "career-ops:shortlist";
@@ -52,6 +53,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   const [shortlist, setShortlist] = useState<ShortItem[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const dragSelect = useDragSelect({ selected, setSelected });
   const [hasCli, setHasCli] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [removed, setRemoved] = useState<string[]>([]);
@@ -168,6 +170,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   const anyFacet = within != null || minFit != null || sources.size > 0 || seniorities.size > 0 || locQ.trim() !== "" || kw.trim() !== "";
   const capped = !showAll && !anyFacet;
   const visible = capped ? ordered.slice(0, BATCH) : ordered;
+  const visibleSelected = visible.filter((item) => selected.has(item.job.url));
   const hiddenCount = hidden.length;
 
   const isShortlisted = (url: string) => shortlist.some((s) => s.url === url);
@@ -224,14 +227,14 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
       return n;
     });
   const saveSelected = () => {
-    const add = enriched
-      .filter((e) => selected.has(e.job.url) && !isShortlisted(e.job.url))
+    const add = visibleSelected
+      .filter((e) => !isShortlisted(e.job.url))
       .map((e) => ({ url: e.job.url, company: e.job.company, role: e.job.role }));
     if (add.length) setShortlist((s) => [...s, ...add]);
     setSelected(new Set());
   };
   const skipSelected = () => {
-    const urls = filtered.filter((item) => selected.has(item.job.url)).map((item) => item.job.url);
+    const urls = visibleSelected.map((item) => item.job.url);
     if (!urls.length) return;
     setHidden((current) => [...new Set([...current, ...urls])]);
     setSelected(new Set());
@@ -240,6 +243,31 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
       tone: "neutral",
       action: { label: "Undo", onClick: () => setHidden((current) => current.filter((url) => !urls.includes(url))) },
     });
+  };
+  const removeSelected = async () => {
+    const urls = visibleSelected.map((item) => item.job.url);
+    if (!urls.length || !window.confirm(`Permanently remove ${urls.length} selected ${urls.length === 1 ? "role" : "roles"} from the inbox?`)) return;
+    setRemoving(urls);
+    const removedUrls: string[] = [];
+    const failures: string[] = [];
+    for (const url of urls) {
+      try {
+        const response = await fetch("/api/pipeline", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Could not remove role");
+        removedUrls.push(url);
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : "Could not remove role");
+      }
+    }
+    setRemoved((current) => [...current, ...removedUrls]);
+    setShortlist((items) => items.filter((item) => !removedUrls.includes(item.url)));
+    setHidden((current) => current.filter((url) => !removedUrls.includes(url)));
+    setSelected(new Set(urls.filter((url) => !removedUrls.includes(url))));
+    setRemoving([]);
+    toast({ message: `${removedUrls.length} removed${failures.length ? `; ${failures.length} failed: ${failures[0]}` : ""}`, tone: failures.length ? "error" : "neutral" });
+    refetch();
+    router.refresh();
   };
 
   const estimate = useMemo(() => {
@@ -303,12 +331,18 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
           onClear={() => { setWithin(null); setMinFit(null); setSources(new Set()); setSeniorities(new Set()); setLocQ(""); setKw(""); }}
         />
 
-      {selected.size > 0 && (
+      {visible.length > 0 && (
+        <label className="mt-4 flex items-center gap-2 text-sm">
+          <input type="checkbox" aria-label="Select all visible inbox roles" checked={visibleSelected.length === visible.length} onChange={(event) => setSelected(new Set(event.target.checked ? visible.map((item) => item.job.url) : []))} />
+          Select all visible
+        </label>
+      )}
+      {visibleSelected.length > 0 && (
         <header className="mt-4 flex min-h-[72px] flex-wrap items-center gap-3 rounded-[var(--md-sys-shape-corner-extra-large)] bg-[var(--md-sys-color-secondary-container)] px-5">
           <button type="button" onClick={() => setSelected(new Set())} aria-label="Clear selection" className="text-[var(--md-sys-color-on-secondary-container)]">
             <MaterialSymbol name="close" size={24} />
           </button>
-          <h2 className="text-xl font-medium tabular-nums text-[var(--md-sys-color-on-secondary-container)]">{selected.size} selected</h2>
+          <h2 className="text-xl font-medium tabular-nums text-[var(--md-sys-color-on-secondary-container)]">{visibleSelected.length} selected</h2>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <button type="button" onClick={saveSelected} className="md3-btn-filled min-h-10 px-4 text-sm">
               Save to shortlist
@@ -316,11 +350,14 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
             <button type="button" onClick={skipSelected} className="md3-btn-outlined min-h-10 px-4 text-sm">
               Skip selected
             </button>
+            <button type="button" onClick={() => void removeSelected()} disabled={removing.length > 0} className="md3-btn-outlined min-h-10 px-4 text-sm">
+              {removing.length ? "Removing…" : "Delete selected"}
+            </button>
           </div>
         </header>
       )}
 
-      <div className="md3-pipeline-list-panel mt-4">
+      <div className="md3-pipeline-list-panel mt-4" {...dragSelect.listProps}>
         {visible.length > 0 ? (
           visible.map((e) => (
             <TriageRow
@@ -332,6 +369,8 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
               selected={selected.has(e.job.url)}
               shortlisted={isShortlisted(e.job.url)}
               onToggleSelect={() => toggleSelect(e.job.url)}
+              onSelectMouseDown={(event) => dragSelect.checkboxMouseDown(e.job.url, event)}
+              onRowMouseEnter={() => dragSelect.rowMouseEnter(e.job.url)}
               onSave={() => save(e.job)}
               onSkip={() => skip(e.job)}
               onRemove={() => void remove(e.job)}
@@ -399,6 +438,8 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
           See all {ordered.length} in inbox
         </button>
       )}
+
+      {dragSelect.selectionBox && <div aria-hidden className="pointer-events-none fixed z-50 border border-[var(--md-sys-color-primary)] bg-[color-mix(in_srgb,var(--md-sys-color-primary)_18%,transparent)]" style={dragSelect.selectionBox} />}
 
       <ShortlistTray
         items={shortlist}

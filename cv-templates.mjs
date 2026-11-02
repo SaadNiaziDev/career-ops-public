@@ -123,6 +123,11 @@ export function loadProfileDefault(kind, { profilePath = DEFAULT_PROFILE_PATH } 
   return typeof node === 'string' && node.trim() ? node.trim() : null;
 }
 
+// CV templates removed when the LaTeX-style layout became the only built-in
+// one. Profiles or requests still naming them resolve to the base template
+// instead of failing.
+const RETIRED_CV_TEMPLATES = new Set(['academic', 'compact', 'modern', 'dense']);
+
 export function resolveTemplate(kind, name, opts = {}) {
   const cfg = KINDS[kind];
   if (!cfg) throw new Error(`Unknown template kind: ${kind}`);
@@ -139,6 +144,10 @@ export function resolveTemplate(kind, name, opts = {}) {
   const fileFor = (n) => (n === 'standard' ? `${cfg.prefix}.${format}` : `${cfg.prefix}.${n}.${format}`);
 
   let path = resolve(dir, fileFor(chosen));
+  if (!existsSync(path) && kind === 'cv' && RETIRED_CV_TEMPLATES.has(chosen)) {
+    chosen = 'standard';
+    path = resolve(dir, fileFor(chosen));
+  }
   if (!existsSync(path)) {
     if (fallback && chosen !== 'standard') {
       chosen = 'standard';

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import yaml from 'js-yaml';
 import { kebab, parseMeta, resolveTemplate } from './cv-templates.mjs';
 
@@ -37,8 +37,10 @@ export function resolveCvRenderConfig({
 } = {}) {
   const profile = readProfile(profilePath);
   const cv = profile.cv && typeof profile.cv === 'object' && !Array.isArray(profile.cv) ? profile.cv : {};
-  const templateName = kebab(String(template || cv.template || 'standard')) || 'standard';
-  const templatePath = resolveTemplate('cv', templateName, { profilePath });
+  const requested = kebab(String(template || cv.template || 'standard')) || 'standard';
+  const templatePath = resolveTemplate('cv', requested, { profilePath });
+  // Report the template actually used (a retired name resolves to the base).
+  const templateName = basename(templatePath).match(/^cv-template\.(.+)\.html$/)?.[1] || 'standard';
   const format = pageFormat === 'a4' || pageFormat === 'letter'
     ? pageFormat
     : cv.page_format === 'a4' ? 'a4' : 'letter';

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useJobs } from "@/components/jobs/job-store";
@@ -10,7 +10,6 @@ import { cn } from "@/lib/cn";
 import { usePipeline } from "@/components/pipeline/pipeline-provider";
 import { jobDestinationHref, resolveReportNum } from "@/components/jobs/job-utils";
 import { isActiveState } from "@/lib/jobs/run-policy";
-import { useDialogFocus } from "@/lib/use-dialog-focus";
 
 type WorkersUiCtx = {
   open: boolean;
@@ -121,8 +120,6 @@ export function WorkerTray({ className }: { className?: string }) {
 /** 400px MD3 side sheet — docked beside main on desktop. */
 export function WorkerSheet() {
   const { open, setOpen } = useWorkersUi();
-  const panelRef = useRef<HTMLElement>(null);
-  useDialogFocus(open, panelRef);
   const { jobs } = useJobs();
   const running = jobs.filter((j) => isActiveState(j.state)).length;
 
@@ -137,15 +134,7 @@ export function WorkerSheet() {
 
   return (
     <>
-      <div
-        className={cn("md3-worker-scrim xl:hidden", open && "open")}
-        onClick={() => setOpen(false)}
-        aria-hidden
-      />
       <aside
-        ref={panelRef}
-        role={open ? "dialog" : undefined}
-        aria-modal={open ? "true" : undefined}
         className={cn("md3-worker-sheet", open && "open")}
         aria-label="Activity"
         aria-hidden={!open}

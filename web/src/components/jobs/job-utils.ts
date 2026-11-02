@@ -176,8 +176,6 @@ export function resolveReportNum(job: Job, applications: Application[] = []): st
 }
 
 export function resolveArtifacts(job: Job, applications: Application[] = []): JobArtifact[] {
-  if (job.state !== "completed") return [];
-
   const artifacts: JobArtifact[] = [];
   const reportN = resolveReportNum(job, applications);
   if (reportN) {
@@ -187,6 +185,10 @@ export function resolveArtifacts(job: Job, applications: Application[] = []): Jo
       primary: true,
     });
   }
+
+  // A report is durable even when a worker later exits with an error. Keep its
+  // link available so users can inspect the saved result instead of retrying.
+  if (job.state !== "completed") return artifacts;
 
   const hay = `${job.result?.summary ?? ""}\n${job.text}`;
   const pdfPath = extractPdfPath(hay);

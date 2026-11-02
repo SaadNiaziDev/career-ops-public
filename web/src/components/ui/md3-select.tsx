@@ -15,6 +15,7 @@ export function Md3Select({
   onChange,
   options,
   disabled = false,
+  placement = "bottom",
   className,
   "aria-label": ariaLabel,
 }: {
@@ -22,11 +23,12 @@ export function Md3Select({
   onChange: (value: string) => void;
   options: Md3SelectOption[];
   disabled?: boolean;
+  placement?: "top" | "bottom";
   className?: string;
   "aria-label"?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [menuStyle, setMenuStyle] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const listId = useId();
@@ -39,9 +41,10 @@ export function Md3Select({
       if (!el) return;
       const rect = el.getBoundingClientRect();
       setMenuStyle({
-        top: rect.bottom + 4,
+        top: placement === "top" ? rect.top - 4 : rect.bottom + 4,
         left: rect.left,
         width: Math.max(rect.width, 160),
+        ...(placement === "top" ? { transform: "translateY(-100%)", maxHeight: Math.max(0, Math.min(280, window.innerHeight / 2, rect.top - 8)) } : {}),
       });
     };
     update();
@@ -51,7 +54,7 @@ export function Md3Select({
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
     };
-  }, [open]);
+  }, [open, placement]);
 
   useEffect(() => {
     if (!open) return;
@@ -79,7 +82,7 @@ export function Md3Select({
             id={listId}
             role="listbox"
             className="md3-select-menu"
-            style={{ top: menuStyle.top, left: menuStyle.left, width: menuStyle.width }}
+            style={menuStyle}
           >
             {options.map((opt) => {
               const active = opt.value === value;

@@ -364,14 +364,23 @@ export function buildLocationFilter(locationFilter) {
 
 // ── Posting-age filter ──────────────────────────────────────────────
 // Optional opt-in. If `max_posting_age_days` is absent (or not a positive
-// integer) in portals.yml, every offer passes. An offer is skipped only when
+// integer) in portals.yml, every offer passes. Optional `posted_since:
+// YYYY-MM-DD` sets an absolute floor; when both are set the stricter applies. An offer is skipped only when
 // the provider supplied a postedAt (epoch ms) AND it is older than N days.
 // Offers with no date always pass — same "don't penalize missing data"
 // convention as the location filter. `now` is injectable for deterministic tests.
-export function buildPostingAgeFilter(maxAgeDays, now = Date.now()) {
+export function buildPostingAgeFilter(maxAgeDays, now = Date.now(), postedSince = null) {
   const max = Number(maxAgeDays);
-  if (!Number.isInteger(max) || max <= 0) return () => true;
-  const cutoff = now - max * 24 * 60 * 60 * 1000; // N days in ms, subtracted from now
+  const cutoffs = [];
+  if (Number.isInteger(max) && max > 0) cutoffs.push(now - max * 24 * 60 * 60 * 1000); // N days in ms, subtracted from now
+  // `posted_since: YYYY-MM-DD` adds an absolute floor (UTC midnight); the
+  // stricter of the two cutoffs wins.
+  const since = typeof postedSince === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(postedSince.trim())
+    ? Date.parse(`${postedSince.trim()}T00:00:00Z`)
+    : (postedSince instanceof Date ? postedSince.getTime() : NaN);
+  if (Number.isFinite(since)) cutoffs.push(since);
+  if (cutoffs.length === 0) return () => true;
+  const cutoff = Math.max(...cutoffs);
   return (postedAt) => {
     if (typeof postedAt !== 'number' || !Number.isFinite(postedAt)) return true;
     return postedAt >= cutoff;
@@ -1629,7 +1638,7 @@ export async function runScan(inputConfig, adapters = {}) {
   }
 
   const locationFilter = buildLocationFilter(config.location_filter);
-  const postingAgeFilter = buildPostingAgeFilter(config.max_posting_age_days, scanStartedAt.getTime());
+  const postingAgeFilter = buildPostingAgeFilter(config.max_posting_age_days, scanStartedAt.getTime(), config.posted_since);
   const salaryFilter = buildSalaryFilter(config.salary_filter, reporter);
   const trustValidator = buildTrustValidator(config.trust_filter);
   const contentFilter = buildContentFilter(config.content_filter);
@@ -1968,7 +1977,7 @@ export async function runScan(inputConfig, adapters = {}) {
   if (totalFilteredRemoteRelocation > 0) {
     console.log(`Remote relocation:     ${totalFilteredRemoteRelocation} restricted remote jobs skipped`);
   }
-  if (config.max_posting_age_days != null || totalFilteredPostingAge > 0) {
+  if (config.max_posting_age_days != null || config.posted_since != null || totalFilteredPostingAge > 0) {
     console.log(`Filtered by age:       ${totalFilteredPostingAge} removed`);
   }
   console.log(`Filtered by salary:   ${totalFilteredSalary} removed`);

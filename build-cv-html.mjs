@@ -36,11 +36,14 @@ const DEFAULT_SECTION_TITLES = {
   education: 'Education',
   certifications: 'Certifications',
   skills: 'Skills',
+  open_source: 'Open Source',
+  awards: 'Awards',
 };
 
 const CONTRACT_KEYS = new Set([
   'contract_version', 'lang', 'candidate', 'sections', 'summary', 'competencies',
   'experience', 'projects', 'education', 'certifications', 'skills',
+  'open_source', 'awards',
 ]);
 
 /** Validate the stable content-only contract before any layout code runs. */
@@ -68,7 +71,7 @@ function validateCvPayload(payload, { requireContract = false } = {}) {
     if (!entry || typeof entry !== 'object') errors.push(`experience[${index}] must be an object`);
     else if (!String(entry.company || '').trim() || !String(entry.role || '').trim()) errors.push(`experience[${index}] needs company and role`);
   }
-  for (const key of ['competencies', 'projects', 'certifications']) {
+  for (const key of ['competencies', 'projects', 'certifications', 'open_source', 'awards']) {
     if (payload[key] !== undefined && !Array.isArray(payload[key])) errors.push(`${key} must be an array`);
   }
   return { ok: errors.length === 0, errors };
@@ -117,6 +120,29 @@ function joinItems(items) {
   return typeof items === 'string' ? items : '';
 }
 
+// Bullet text: escape first, then turn **term** into <strong>term</strong> so a
+// payload can emphasize key terms without ever emitting raw markup.
+function richText(text) {
+  return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+// Optional link object {url, display} → sanitized <a>, or '' when absent.
+function linkHtml(link, className) {
+  if (!link || typeof link !== 'object' || !link.url) return '';
+  const href = sanitizeUrl(link.url);
+  if (!href) return '';
+  return `<a class="${className}" href="${href}">${escapeHtml(link.display || link.url)}</a>`;
+}
+
+// Templates opt into layout features through their metadata comment, e.g.
+// `features: project-bullets`. Existing templates declare none, so their
+// output stays byte-identical.
+function templateFeatures(template) {
+  const block = String(template).match(/<!--\s*career-ops-template\s*([\s\S]*?)-->/);
+  const line = block && block[1].match(/^\s*features\s*:\s*(.+?)\s*$/m);
+  return new Set(line ? line[1].split(/[\s,]+/).filter(Boolean) : []);
+}
+
 // --- Section builders: each returns the inner HTML for one {{PLACEHOLDER}}. ---
 
 function buildCompetencies(entries) {
@@ -131,17 +157,24 @@ function buildExperience(entries) {
   if (!Array.isArray(entries) || entries.length === 0) return '';
   return entries.filter(Boolean).map(e => {
     const bullets = Array.isArray(e.bullets)
-      ? e.bullets.filter(Boolean).map(b => `        <li>${escapeHtml(b)}</li>`).join('\n')
+      ? e.bullets.filter(Boolean).map(b => `        <li>${richText(b)}</li>`).join('\n')
       : '';
     const location = e.location
       ? `\n    <div class="job-location">${escapeHtml(e.location)}</div>`
       : '';
+    const companyHref = e.company_url ? sanitizeUrl(e.company_url) : '';
+    const company = companyHref
+      ? `<a class="job-company-link" href="${companyHref}">${escapeHtml(e.company)}</a>`
+      : escapeHtml(e.company);
+    const promotion = e.promotion
+      ? ` <span class="job-promotion">(${escapeHtml(e.promotion)})</span>`
+      : '';
     return `<div class="job">
     <div class="job-header">
-      <span class="job-company">${escapeHtml(e.company)}</span>
+      <span class="job-company">${company}</span>
       <span class="job-period">${escapeHtml(e.dates || e.period || '')}</span>
     </div>
-    <div class="job-role">${escapeHtml(e.role)}</div>${location}
+    <div class="job-role">${escapeHtml(e.role)}${promotion}</div>${location}
     <ul>
 ${bullets}
     </ul>
@@ -149,26 +182,61 @@ ${bullets}
   }).join('\n  ');
 }
 
-function buildProjects(entries) {
+function buildProjects(entries, { bulletList = false } = {}) {
   if (!Array.isArray(entries) || entries.length === 0) return '';
   return entries.filter(Boolean).map(e => {
     const badge = e.badge
       ? `<span class="project-badge">${escapeHtml(e.badge)}</span>`
       : '';
-    // Prefer a single description; fall back to joining bullets into one line so
-    // a bullets-shaped payload still renders inside the .project-desc block.
-    const descText = e.description
-      || (Array.isArray(e.bullets) ? e.bullets.filter(Boolean).join(' ') : '');
+    const metaParts = [linkHtml(e.link, 'project-link'), e.dates ? escapeHtml(e.dates) : ''].filter(Boolean);
+    const meta = metaParts.length
+      ? `<span class="project-meta">${metaParts.join(' · ')}</span>`
+      : '';
+    const bulletItems = Array.isArray(e.bullets) ? e.bullets.filter(Boolean) : [];
+    // Templates with the project-bullets feature render bullets as a list;
+    // others keep the single-line fallback that joins bullets into the
+    // .project-desc block.
+    const listBullets = bulletList && bulletItems.length > 0;
+    const descText = e.description || (listBullets ? '' : bulletItems.join(' '));
     const desc = descText
       ? `\n    <div class="project-desc">${escapeHtml(descText)}</div>`
+      : '';
+    const list = listBullets
+      ? `\n    <ul class="project-bullets">\n${bulletItems.map(b => `      <li>${richText(b)}</li>`).join('\n')}\n    </ul>`
       : '';
     const tech = e.tech
       ? `\n    <div class="project-tech">${escapeHtml(e.tech)}</div>`
       : '';
     return `<div class="project">
-    <div class="project-title">${escapeHtml(e.name)}${badge}</div>${desc}${tech}
+    <div class="project-title">${escapeHtml(e.name)}${badge}${meta}</div>${desc}${tech}${list}
   </div>`;
   }).join('\n  ');
+}
+
+// Open-source entries share the experience markup: project → company line,
+// contribution role → role line, detail (e.g. "8 merged PRs") → location slot.
+function buildOpenSource(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) return '';
+  return buildExperience(entries.filter(Boolean).map(e => ({
+    company: e.project,
+    company_url: e.url,
+    role: e.role || 'Contributor',
+    dates: e.dates,
+    location: e.detail,
+    bullets: e.bullets,
+  })));
+}
+
+function buildAwards(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) return '';
+  const items = entries.filter(Boolean).map(e => {
+    const detail = e.detail ? ` — ${escapeHtml(e.detail)}` : '';
+    const year = e.year ? ` <span class="award-year">(${escapeHtml(e.year)})</span>` : '';
+    return `      <li><span class="award-title">${escapeHtml(e.title)}</span>${year}${detail}</li>`;
+  }).join('\n');
+  return `<ul class="award-list">
+${items}
+    </ul>`;
 }
 
 function buildEducation(entries) {
@@ -236,6 +304,9 @@ function buildContactRow(candidate) {
   if (c.portfolio && c.portfolio.url) {
     items.push(`<a href="${sanitizeUrl(c.portfolio.url)}">${escapeHtml(c.portfolio.display || c.portfolio.url)}</a>`);
   }
+  if (c.github && c.github.url) {
+    items.push(`<a href="${sanitizeUrl(c.github.url)}">${escapeHtml(c.github.display || c.github.url)}</a>`);
+  }
   if (c.location) {
     items.push(`<span>${escapeHtml(c.location)}</span>`);
   }
@@ -249,7 +320,7 @@ function buildPhoto(candidate, name) {
   return `<img class="cv-photo" src="${sanitizeUrl(photo)}" alt="${escapeHtml(name || '')}">`;
 }
 
-function renderReport(payload) {
+function renderReport(payload, features = new Set()) {
   const sectionTitles = { ...DEFAULT_SECTION_TITLES, ...(payload.sections || {}) };
   const candidate = payload.candidate || {};
   const pageWidth = PAGE_WIDTHS[payload.page_format] || PAGE_WIDTHS.letter;
@@ -266,7 +337,11 @@ function renderReport(payload) {
     SECTION_EXPERIENCE: escapeHtml(sectionTitles.experience),
     EXPERIENCE: buildExperience(payload.experience),
     SECTION_PROJECTS: escapeHtml(sectionTitles.projects),
-    PROJECTS: buildProjects(payload.projects),
+    PROJECTS: buildProjects(payload.projects, { bulletList: features.has('project-bullets') }),
+    SECTION_OPEN_SOURCE: escapeHtml(sectionTitles.open_source),
+    OPEN_SOURCE: buildOpenSource(payload.open_source),
+    SECTION_AWARDS: escapeHtml(sectionTitles.awards),
+    AWARDS: buildAwards(payload.awards),
     SECTION_EDUCATION: escapeHtml(sectionTitles.education),
     EDUCATION: buildEducation(payload.education),
     SECTION_CERTIFICATIONS: escapeHtml(sectionTitles.certifications),
@@ -307,8 +382,15 @@ function injectStyleTokens(template, style) {
 
 // Merge a payload into the template and return the final HTML (throws on any
 // unresolved {{PLACEHOLDER}} so a malformed payload fails loudly, not silently).
+// Remove one <!-- MARKER --> section block up to the next section marker (or
+// the end of the page), so an empty optional section leaves no bare header.
+function dropSection(html, marker) {
+  return html.replace(new RegExp(`<!-- ${marker} -->[\\s\\S]*?(?=<!-- [A-Z][A-Z ]* -->|</div>\\s*</body>)`), '');
+}
+
 function renderHtml(template, payload) {
-  const { substitutions, candidate } = renderReport(payload);
+  const features = templateFeatures(template);
+  const { substitutions, candidate } = renderReport(payload, features);
 
   let html = injectStyleTokens(template, payload.style || {});
 
@@ -317,12 +399,14 @@ function renderHtml(template, payload) {
   html = html.replace(CONTACT_ROW_RE, () => buildContactRow(candidate));
   html = html.replace(/\{\{PHOTO\}\}/g, () => buildPhoto(candidate, candidate.name));
 
-  // Projects is the one CV section that's genuinely optional (education,
+  // Projects, open source and awards are genuinely optional (education,
   // experience, and skills are effectively always present) — drop the whole
-  // <!-- PROJECTS --> block when there are no entries, instead of leaving a
-  // bare "Projects" header with nothing under it.
-  if (!Array.isArray(payload.projects) || payload.projects.length === 0) {
-    html = html.replace(/<!-- PROJECTS -->[\s\S]*?(?=<!-- EDUCATION -->)/, '');
+  // section block when there are no entries, instead of leaving a bare header.
+  // Templates with drop-empty-sections also lose an empty Certifications block.
+  const optional = [['projects', 'PROJECTS'], ['open_source', 'OPEN SOURCE'], ['awards', 'AWARDS']];
+  if (features.has('drop-empty-sections')) optional.push(['certifications', 'CERTIFICATIONS']);
+  for (const [key, marker] of optional) {
+    if (!Array.isArray(payload[key]) || payload[key].length === 0) html = dropSection(html, marker);
   }
 
   for (const [key, value] of Object.entries(substitutions)) {
@@ -476,6 +560,7 @@ async function runSelfTest() {
     skills: [
       { category: 'Languages', items: 'Python, JavaScript, TypeScript' },
       { category: 'Frameworks', items: ['FastAPI', 'React', 'PyTorch'] },
+      { category: 'Infrastructure', items: 'Kubernetes & Docker, Terraform' },
     ],
   };
 
@@ -496,8 +581,9 @@ async function runSelfTest() {
 
   // Guard the escaping contract: the raw ampersand from "Kubernetes & Docker"
   // must reach the output escaped, and no unescaped literal must survive.
+  // (The base template renders skills but not competency tags.)
   if (!html.includes('Kubernetes &amp; Docker')) {
-    console.error('Self-test failed: HTML escaping did not apply to competency text');
+    console.error('Self-test failed: HTML escaping did not apply to skill text');
     process.exit(1);
   }
   if (/Kubernetes & Docker/.test(html)) {

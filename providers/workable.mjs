@@ -76,16 +76,84 @@ export default {
     const feedUrls = resolveFeedUrls(entry);
     if (feedUrls.length === 0) throw new Error(`workable: cannot derive feed URL for ${entry.name}`);
     const jobsByUrl = new Map();
+    let sawSearchNotice = false;
     for (const feedUrl of feedUrls) {
       assertWorkableUrl(feedUrl);
       // redirect:'error' prevents SSRF via server-side redirects; combined with
       // assertWorkableUrl above it guarantees the final hostname stays in the allowlist.
       const text = await ctx.fetchText(feedUrl, { redirect: 'error' });
-      for (const job of parseWorkableMarkdown(text, entry.name)) jobsByUrl.set(job.url, job);
+      const parsed = parseWorkableMarkdown(text, entry.name);
+      if (parsed.length === 0 && isSearchNotice(text)) sawSearchNotice = true;
+      for (const job of parsed) jobsByUrl.set(job.url, job);
+    }
+    // Larger boards answer the unfiltered markdown feed with a "use the search
+    // endpoint" notice and no table. Fall back to the public v3 jobs API, which
+    // needs no auth and pages through the full board.
+    if (jobsByUrl.size === 0 && sawSearchNotice) {
+      const slug = new URL(feedUrls[0]).pathname.split('/').filter(Boolean)[0];
+      for (const job of await fetchWorkableApi(slug, entry.name, ctx)) jobsByUrl.set(job.url, job);
     }
     return [...jobsByUrl.values()];
   },
 };
+
+const MAX_API_PAGES = 30;
+
+function isSearchNotice(text) {
+  return typeof text === 'string' && /Use the search endpoint/i.test(text);
+}
+
+/**
+ * Page through `POST https://apply.workable.com/api/v3/accounts/<slug>/jobs`.
+ * Exported for unit tests.
+ */
+export async function fetchWorkableApi(slug, companyName, ctx) {
+  const apiUrl = assertWorkableUrl(`https://apply.workable.com/api/v3/accounts/${encodeURIComponent(slug)}/jobs`);
+  const jobs = [];
+  let token = null;
+  for (let page = 0; page < MAX_API_PAGES; page++) {
+    const body = { query: '', location: [], department: [], worktype: [], remote: [] };
+    if (token) body.token = token;
+    const data = await ctx.fetchJson(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+      redirect: 'error',
+    });
+    jobs.push(...parseWorkableApiResults(data?.results, slug, companyName));
+    token = data?.nextPage;
+    if (!token || !Array.isArray(data?.results) || data.results.length === 0) break;
+  }
+  return jobs;
+}
+
+/**
+ * Map v3 API `results[]` to provider jobs. Internal-only postings are skipped.
+ * Exported for unit tests.
+ */
+export function parseWorkableApiResults(results, slug, companyName) {
+  if (!Array.isArray(results)) return [];
+  const jobs = [];
+  for (const r of results) {
+    if (!r || typeof r.title !== 'string' || typeof r.shortcode !== 'string') continue;
+    if (r.isInternal === true || (r.state && r.state !== 'published')) continue;
+    const locs = Array.isArray(r.locations) && r.locations.length ? r.locations : [r.location].filter(Boolean);
+    const location = locs
+      .filter((l) => l && !l.hidden)
+      .map((l) => [l.city, l.country].filter(Boolean).join(', '))
+      .filter(Boolean);
+    if (r.remote === true || r.workplace === 'remote') location.push('Remote');
+    const postedAt = Date.parse(r.published);
+    jobs.push({
+      title: r.title.trim(),
+      url: `https://apply.workable.com/${slug}/jobs/view/${r.shortcode}`,
+      location: [...new Set(location)].join(' | '),
+      company: companyName,
+      ...(Number.isFinite(postedAt) ? { postedAt } : {}),
+    });
+  }
+  return jobs;
+}
 
 /**
  * Parse Workable's public markdown feed. Exported as a named export for unit

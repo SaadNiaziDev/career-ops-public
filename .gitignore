@@ -14,6 +14,7 @@ data/blacklist.md
 data/pdf-index.tsv
 data/agent-inbox.md
 data/active-interviews.md
+data/application-stage-history.json
 data/reply-candidates.json
 data/contacts.tsv
 data/interview-rounds.tsv
@@ -23,6 +24,7 @@ data/parser-output/**/*.json
 !data/parser-output/.gitkeep
 !data/parser-output/**/.gitkeep
 data/cache/ats-companies/
+data/scan-artifacts/
 # Received offers/contracts, promise notes, prep reports (PII — never commit)
 data/offers/*
 !data/offers/.gitkeep
@@ -91,6 +93,8 @@ plugins.lock
 **/*.tsbuildinfo
 
 # Generated
+tmp/
+relocation-jobs-47.csv
 .resolved-prompt-*
 node_modules/
 bun.lock

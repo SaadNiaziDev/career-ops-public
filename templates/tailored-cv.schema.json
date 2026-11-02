@@ -18,7 +18,8 @@
         "location": { "type": "string" },
         "photo": { "type": "string" },
         "linkedin": { "$ref": "#/$defs/link" },
-        "portfolio": { "$ref": "#/$defs/link" }
+        "portfolio": { "$ref": "#/$defs/link" },
+        "github": { "$ref": "#/$defs/link" }
       },
       "additionalProperties": false
     },
@@ -26,10 +27,12 @@
     "summary": { "type": "string", "minLength": 1 },
     "competencies": { "type": "array", "items": { "type": "string" } },
     "experience": { "type": "array", "items": { "$ref": "#/$defs/experience" }, "minItems": 1 },
-    "projects": { "type": "array", "items": { "type": "object" } },
+    "projects": { "type": "array", "items": { "$ref": "#/$defs/project" } },
     "education": { "type": "array", "items": { "type": "object" } },
     "certifications": { "type": "array", "items": { "type": "object" } },
-    "skills": { "type": "array", "items": { "type": "object" } }
+    "skills": { "type": "array", "items": { "type": "object" } },
+    "open_source": { "type": "array", "items": { "$ref": "#/$defs/openSource" } },
+    "awards": { "type": "array", "items": { "$ref": "#/$defs/award" } }
   },
   "$defs": {
     "link": {
@@ -43,10 +46,48 @@
       "required": ["company", "role", "dates", "bullets"],
       "properties": {
         "company": { "type": "string", "minLength": 1 },
+        "company_url": { "type": "string" },
         "role": { "type": "string", "minLength": 1 },
+        "promotion": { "type": "string" },
         "location": { "type": "string" },
         "dates": { "type": "string" },
         "bullets": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "project": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "badge": { "type": "string" },
+        "tech": { "type": "string" },
+        "description": { "type": "string" },
+        "bullets": { "type": "array", "items": { "type": "string" } },
+        "link": { "$ref": "#/$defs/link" },
+        "dates": { "type": "string" }
+      }
+    },
+    "openSource": {
+      "type": "object",
+      "required": ["project"],
+      "properties": {
+        "project": { "type": "string", "minLength": 1 },
+        "url": { "type": "string" },
+        "role": { "type": "string" },
+        "dates": { "type": "string" },
+        "detail": { "type": "string" },
+        "bullets": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "award": {
+      "type": "object",
+      "required": ["title"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "year": { "type": "string" },
+        "detail": { "type": "string" }
       },
       "additionalProperties": false
     }

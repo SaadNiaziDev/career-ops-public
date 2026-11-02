@@ -172,6 +172,49 @@ try {
     fail(`expected only "Good Role" through, got ${JSON.stringify(filteredJobs.map(j => j.title))}`);
   }
 
+  // v3 API results → jobs (fallback for boards whose markdown feed returns a search notice)
+  const { parseWorkableApiResults } = workableModule;
+  const apiJobs = parseWorkableApiResults([
+    { title: 'Senior MERN Engineer ', shortcode: 'AB12', state: 'published', published: '2026-10-14T00:00:00.000Z',
+      remote: false, workplace: 'hybrid', locations: [{ city: 'Lahore', country: 'Pakistan', hidden: false }] },
+    { title: 'Internal Role', shortcode: 'CD34', state: 'published', isInternal: true, locations: [] },
+    { title: 'Remote Dev', shortcode: 'EF56', state: 'published', remote: true, location: { country: 'Pakistan' } },
+    { title: 'No Code' },
+  ], 'devsinc-17', 'Devsinc');
+  if (apiJobs.length === 2
+    && apiJobs[0].url === 'https://apply.workable.com/devsinc-17/jobs/view/AB12'
+    && apiJobs[0].title === 'Senior MERN Engineer'
+    && apiJobs[0].location === 'Lahore, Pakistan'
+    && apiJobs[0].postedAt === Date.parse('2026-10-14T00:00:00.000Z')
+    && apiJobs[1].location === 'Pakistan | Remote') {
+    pass('parseWorkableApiResults maps title/url/location/postedAt and skips internal + malformed rows');
+  } else {
+    fail(`parseWorkableApiResults returned ${JSON.stringify(apiJobs)}`);
+  }
+
+  // fetch() falls back to the paginated v3 API when jobs.md is only a search notice
+  const calls = [];
+  const fakeCtx = {
+    fetchText: async () => '# Devsinc — Open Positions\n\n> This company has 36 open positions. Use the search endpoint to filter results.\n',
+    fetchJson: async (url, opts) => {
+      const body = JSON.parse(opts.body);
+      calls.push({ url, method: opts.method, token: body.token ?? null });
+      return body.token
+        ? { results: [{ title: 'Page Two', shortcode: 'P2', state: 'published', locations: [] }] }
+        : { nextPage: 'tok1', results: [{ title: 'Page One', shortcode: 'P1', state: 'published', locations: [] }] };
+    },
+  };
+  const fallbackJobs = await workable.fetch({ name: 'Devsinc', careers_url: 'https://apply.workable.com/devsinc-17/' }, fakeCtx);
+  if (fallbackJobs.map(j => j.title).join(',') === 'Page One,Page Two'
+    && calls.length === 2
+    && calls[0].url === 'https://apply.workable.com/api/v3/accounts/devsinc-17/jobs'
+    && calls[0].method === 'POST'
+    && calls[1].token === 'tok1') {
+    pass('workable.fetch() falls back to the v3 API and follows nextPage tokens');
+  } else {
+    fail(`v3 fallback: jobs=${JSON.stringify(fallbackJobs)} calls=${JSON.stringify(calls)}`);
+  }
+
 } catch (e) {
   fail(`workable provider tests crashed: ${e.message}`);
 }

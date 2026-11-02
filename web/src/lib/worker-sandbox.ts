@@ -32,6 +32,8 @@ export type WorkerLaunch = {
   args: string[];
   cwd: string;
   env: NodeJS.ProcessEnv;
+  /** Removes per-launch scratch space; call once the worker has exited. */
+  cleanup: () => void;
 };
 
 export type WorkerSpawnOptions = Omit<LaunchOptions, "args"> & {
@@ -64,10 +66,12 @@ const TASK_PHASE: Record<string, WorkerPhase> = {
   research: "fetch",
   discover: "fetch",
   "ai-search": "fetch",
+  "contacto-research": "fetch",
   "form-interpret": "local-analysis",
   "form-prefill": "local-analysis",
   "cv-ingest": "local-analysis",
   "local-analysis": "local-analysis",
+  "contacto-write": "write",
 };
 
 const PROVIDER = {
@@ -86,8 +90,16 @@ function initializeSandbox(): Promise<void> {
         allowedDomains: [...new Set([...PROVIDER.claude.domains, ...PROVIDER.codex.domains])],
         deniedDomains: [],
         allowLocalBinding: false,
+        // Masked credentials are only swapped back on egress when the proxy
+        // terminates TLS; an opaque CONNECT tunnel forwards the sentinel and
+        // the provider answers 401 "Invalid bearer token".
+        tlsTerminate: {},
       },
       filesystem: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },
+      // The proxy only installs its sentinel→real injector when a global
+      // credentials block exists; per-launch masks (credentialConfig) then
+      // register their sentinels against it.
+      credentials: { envVars: [] },
     } satisfies SandboxRuntimeConfig).catch((error) => {
       initialized = undefined;
       throw new Error(`Worker OS sandbox initialization failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -132,9 +144,15 @@ export function workerRoots(task: string, root: string, target?: string): { read
       return [];
     }
   };
+  // Root scripts plus what they load at import time: tracker-parse.mjs reads
+  // tracker-aliases.json, and js-yaml is their only third-party import.
   const scripts = () => {
     try {
-      return fs.readdirSync(base, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".mjs")).map((entry) => file(entry.name));
+      return [
+        ...fs.readdirSync(base, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".mjs")).map((entry) => file(entry.name)),
+        file("tracker-aliases.json"),
+        file("node_modules/js-yaml"),
+      ];
     } catch {
       return [];
     }
@@ -153,17 +171,22 @@ export function workerRoots(task: string, root: string, target?: string): { read
     case "evaluate":
       return {
         readRoots: [
-          ...read("cv.md", "article-digest.md", "portals.yml", "config/profile.yml", "modes/_profile.md", "modes/_custom.md", "modes/_shared.md", "modes/oferta.md", "modes/research.md", "templates/states.yml", "data/applications.md", "data/pipeline.md", "data/pdf-index.tsv"),
+          ...read("cv.md", "article-digest.md", "portals.yml", "config/profile.yml", "modes/_profile.md", "modes/_custom.md", "modes/_shared.md", "modes/oferta.md", "modes/research.md", "templates/states.yml", "batch/batch-prompt.md", "data/applications.md", "data/pipeline.md", "data/pdf-index.tsv"),
           file("modes"), file("templates"), ...scripts(),
         ],
-        writeRoots: [file("reports"), file("batch/tracker-additions"), file("data/applications.md")],
+        // merge-tracker replaces applications.md atomically: a dot-prefixed temp
+        // sibling renamed over it, after the same for applications.md.bak.
+        writeRoots: [file("reports"), file("batch/tracker-additions"), file("data/applications.md"), file("data/applications.md.bak"), file("data/.applications.md.*")],
       };
     case "pdf":
       return { readRoots: [...read("cv.md", "article-digest.md", "config/profile.yml", "modes/_profile.md", "modes/_custom.md", "modes/_shared.md", "modes/pdf.md", "data/pdf-index.tsv", "templates/cv-template.html"), ...matchingReports()], writeRoots: [file("output"), file("data/pdf-index.tsv")] };
     case "cover":
     case "email":
       return { readRoots: [...read("cv.md", "article-digest.md", "config/profile.yml", "modes/_profile.md", "modes/_custom.md", "modes/_shared.md", `modes/${task}.md`, "data/pdf-index.tsv"), ...matchingReports()], writeRoots: [file("data/drafts")] };
+    case "contacto-research":
+      return { readRoots: [...read("cv.md", "config/profile.yml", "modes/_profile.md", "modes/_custom.md", "modes/_shared.md", "modes/contacto.md"), ...matchingReports()], writeRoots: [] };
     case "contacto":
+    case "contacto-write":
       return { readRoots: [...read("cv.md", "config/profile.yml", "modes/_profile.md", "modes/_custom.md", "modes/_shared.md", "modes/contacto.md"), ...matchingReports()], writeRoots: [file("data/drafts"), file("data/contacts.tsv")] };
     case "titles":
       return { readRoots: [...read("cv.md", "config/profile.yml", "modes/_profile.md", "modes/_custom.md", "modes/_shared.md", "modes/titles.md", "portals.yml")], writeRoots: [file("data/titles-suggestions.json")] };
@@ -201,6 +224,16 @@ function codexLoginAuth(): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Bun-based CLIs (Claude Code) call getcwd() at boot, which macOS implements by
+ * opening "." for reading; the scope-root deny blocks that and the CLI exits with
+ * "An unknown error occurred (Unexpected)". A bracket glob compiles to an
+ * exact-match Seatbelt regex, so only the directory itself becomes readable —
+ * files beneath it stay denied unless granted separately. */
+function exactDirectoryReadRoot(dir: string): string | undefined {
+  if (process.platform !== "darwin" || /[*?[\]{}]/.test(dir)) return undefined;
+  return `${dir.slice(0, -1)}[${dir.at(-1)}]`;
 }
 
 function shellQuote(value: string): string {
@@ -299,6 +332,7 @@ export async function buildWorkerLaunch(options: LaunchOptions): Promise<WorkerL
       args: workerCliArgs(cliId, options.args, capabilities),
       cwd,
       env,
+      cleanup: () => {},
     };
   }
   let cliRuntimeRoots = [options.binPath];
@@ -308,19 +342,43 @@ export async function buildWorkerLaunch(options: LaunchOptions): Promise<WorkerL
   } catch {
     /* An unresolved runtime path stays fail-closed under the OS policy. */
   }
+  let realCwd = cwd;
+  try {
+    realCwd = fs.realpathSync(cwd);
+  } catch {
+    /* A missing cwd fails at spawn; keep the resolved spelling. */
+  }
+  const cwdReadRoot = exactDirectoryReadRoot(realCwd);
   const readRoots = [...new Set([...options.readRoots, ...cliRuntimeRoots].map((root) => path.resolve(root)))];
+  if (cwdReadRoot) readRoots.push(cwdReadRoot);
   const writeRoots = [...new Set(options.writeRoots.map((root) => path.resolve(root)))];
   if (!PROVIDER[cliId].env.some((key) => env[key])) {
     throw new Error(`No sandbox-safe credential is available for ${cliId}. Configure a provider API/OAuth token in the server environment; CLI login files are intentionally inaccessible.`);
   }
 
   await initializeSandbox();
-  const command = [options.binPath, ...workerCliArgs(cliId, options.args, capabilities)].map(shellQuote).join(" ");
+  // Claude Code's Bash tool keeps per-session state under
+  // $CLAUDE_CODE_TMPDIR/claude-<uid>/ (default /tmp), which the OS policy does
+  // not grant, so every command failed with EPERM mkdir. A private per-launch
+  // directory keeps Bash working without sharing scratch space between workers.
+  const hostTmp = fs.realpathSync(os.tmpdir());
+  const scratch = fs.mkdtempSync(path.join(hostTmp, "career-ops-worker-"));
+  const cleanup = () => fs.rmSync(scratch, { recursive: true, force: true });
+  env.CLAUDE_CODE_TMPDIR = scratch;
+  // The sandbox points TMPDIR at /tmp/claude, which does not exist, so
+  // os.tmpdir() consumers crash. Tracker scripts serialize on a lock under
+  // os.tmpdir(); the host temp root shares that lock with the server, the
+  // CLI and parallel workers, and only tracker writers may create it.
+  const writesTracker = writeRoots.includes(path.join(scopeRoot, "data", "applications.md"));
+  const trackerLocks = writesTracker ? [path.join(hostTmp, "career-ops-merge-tracker-**")] : [];
+  const command = `TMPDIR=${shellQuote(hostTmp)} ${[options.binPath, ...workerCliArgs(cliId, options.args, capabilities)].map(shellQuote).join(" ")}`;
   const config: Partial<SandboxRuntimeConfig> = {
     filesystem: {
       denyRead: [...new Set([os.homedir(), scopeRoot])],
-      allowRead: readRoots,
-      allowWrite: writeRoots,
+      // A write grant without read leaves scripts unable to list what they
+      // update (reserve-report-num scans reports/, merge-tracker its inbox).
+      allowRead: [...new Set([...readRoots, ...writeRoots])],
+      allowWrite: [...writeRoots, scratch, ...trackerLocks],
       denyWrite: [],
     },
     credentials: credentialConfig(cliId),
@@ -329,9 +387,10 @@ export async function buildWorkerLaunch(options: LaunchOptions): Promise<WorkerL
   try {
     wrapped = await SandboxManager.wrapWithSandboxArgv(command, "/bin/sh", config, undefined, cwd);
   } catch (error) {
+    cleanup();
     throw new Error(`Worker sandbox rejected '${options.task}': ${error instanceof Error ? error.message : String(error)}`);
   }
-  return { command: wrapped.argv[0]!, args: wrapped.argv.slice(1), cwd, env };
+  return { command: wrapped.argv[0]!, args: wrapped.argv.slice(1), cwd, env, cleanup };
 }
 
 export async function spawnSandboxedWorker(options: WorkerSpawnOptions): Promise<ChildProcessByStdio<null, Readable, Readable>> {
@@ -340,15 +399,25 @@ export async function spawnSandboxedWorker(options: WorkerSpawnOptions): Promise
   try {
     if (options.signal?.aborted) throw new WorkerCapacityError("cancelled");
     const launch = await buildWorkerLaunch(options);
-    if (options.signal?.aborted) throw new WorkerCapacityError("cancelled");
+    if (options.signal?.aborted) {
+      launch.cleanup();
+      throw new WorkerCapacityError("cancelled");
+    }
     const child = spawn(launch.command, launch.args, {
       cwd: launch.cwd,
       env: launch.env,
       stdio: ["ignore", "pipe", "pipe"],
       detached: options.detached,
     });
-    child.once("close", admission.release);
-    child.once("error", admission.release);
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      launch.cleanup();
+      admission.release();
+    };
+    child.once("close", finish);
+    child.once("error", finish);
     return child;
   } catch (error) {
     admission.release();

@@ -400,7 +400,9 @@ export function findReportFile(n: string): string | null {
   } catch {
     return null;
   }
-  const match = files.find((f) => f.endsWith(".md") && parseInt(f, 10) === target);
+  const match = files.find(
+    (f) => f.endsWith(".md") && !/-RESERVED\.md$/i.test(f) && parseInt(f, 10) === target,
+  );
   return match ? path.join(careerOpsRoot(), "reports", match) : null;
 }
 

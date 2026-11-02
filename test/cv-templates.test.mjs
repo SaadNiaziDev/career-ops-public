@@ -191,3 +191,11 @@ test('loadProfileDefault: reads nested key, null when unset/missing', () => {
   assert.equal(loadProfileDefault('cv', { profilePath: profile }), 'executive-authority');
   assert.equal(loadProfileDefault('cv', { profilePath: join(dir, 'nope.yml') }), null);
 });
+
+test('resolveTemplate: retired CV template names fall back to the base template', () => {
+  const dir = fixtureDir();
+  for (const name of ['academic', 'compact', 'modern', 'dense']) {
+    assert.equal(resolveTemplate('cv', name, { dir }), join(dir, 'cv-template.html'));
+  }
+  assert.throws(() => resolveTemplate('cv', 'no-such-template', { dir }), /Template not found/);
+});
