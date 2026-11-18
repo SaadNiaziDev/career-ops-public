@@ -6,6 +6,11 @@ UI-first fork of [career-ops](https://github.com/santifer/career-ops) by Saad Al
 
 **It is designed to be made yours.** Customize archetypes, scoring, portals, and narrative in user-layer files. The agent edits those directly when you ask.
 
+## Git Commits (CRITICAL)
+
+- Commit messages are **one line only**: `type(scope): summary`. No body.
+- **Never** add `Co-Authored-By` or any other attribution/trailer line to commits.
+
 ## Data Contract (CRITICAL)
 
 There are two layers. Read `DATA_CONTRACT.md` for the full list.

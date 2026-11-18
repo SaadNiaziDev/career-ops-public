@@ -12,6 +12,11 @@ license: MIT
 
 career-ops is a UI-first job-search command center. Primary dashboard: `npm run web:dev` (http://localhost:3000). Agents (Claude Code, Codex) run the same modes against local files.
 
+## Git Commits (CRITICAL)
+
+- Commit messages are **one line only**: `type(scope): summary`. No body.
+- **Never** add `Co-Authored-By` or any other attribution/trailer line to commits.
+
 ## Invocation Notes
 
 - CLIs with slash-command registration can expose this router as `/career-ops`.
