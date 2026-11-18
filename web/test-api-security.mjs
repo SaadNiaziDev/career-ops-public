@@ -122,3 +122,21 @@ test('the first local page response establishes an HttpOnly session cookie', asy
   assert.match(cookie, /HttpOnly/i);
   assert.match(cookie, /SameSite=Strict/i);
 });
+
+test('loopback writes use the validated Host when NextURL normalizes it', () => {
+  const response = proxy(request('/api/application-activity', {
+    method: 'POST', host: '127.0.0.1:3000',
+    headers: authenticatedHeaders({ origin: 'http://127.0.0.1:3000', 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' }),
+  }));
+  assert.equal(response.status, 200);
+});
+
+test('origin hostname, port, and protocol must match the validated request host', () => {
+  for (const origin of ['http://localhost:3000', 'http://127.0.0.1:3001', 'https://127.0.0.1:3000', 'http://attacker.example:3000']) {
+    const response = proxy(request('/api/application-activity', {
+      method: 'POST', host: '127.0.0.1:3000',
+      headers: authenticatedHeaders({ origin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'x-forwarded-host': new URL(origin).host }),
+    }));
+    assert.equal(response.status, 403, origin);
+  }
+});

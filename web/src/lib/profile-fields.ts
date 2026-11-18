@@ -6,6 +6,7 @@ export type ProfileFields = {
   country?: string; visa?: string; timezone?: string; dealBreakers?: string[];
   outputLanguage?: string; spendTier?: string;
   appliedDays?: number; subsequentDays?: number; maxFollowups?: number; thankyouDays?: number;
+  outreachTone?: string; outreachNeverSay?: string[]; calendarLink?: string; leadProof?: string;
 };
 export const PROFILE_PATHS: Record<keyof ProfileFields, string[]> = {
   name: ['candidate','full_name'], email: ['candidate','email'], location: ['candidate','location'],
@@ -15,12 +16,13 @@ export const PROFILE_PATHS: Record<keyof ProfileFields, string[]> = {
   dealBreakers: ['constraints','deal_breakers'], outputLanguage: ['language','output'], spendTier: ['spend_tier'],
   appliedDays: ['followup_cadence','applied_first_days'], subsequentDays: ['followup_cadence','applied_subsequent_days'],
   maxFollowups: ['followup_cadence','applied_max_followups'], thankyouDays: ['followup_cadence','interview_thankyou_days'],
+  outreachTone: ['outreach','tone'], outreachNeverSay: ['outreach','never_say'], calendarLink: ['outreach','calendar_link'], leadProof: ['outreach','lead_proof'],
 };
 
 export function validateProfilePatch(patch: Record<string, unknown>): string | null {
   for (const [key, value] of Object.entries(patch)) {
     if (!(key in PROFILE_PATHS)) return `Unknown profile field: ${key}`;
-    if (['roles','dealBreakers'].includes(key)) {
+    if (['roles','dealBreakers','outreachNeverSay'].includes(key)) {
       if (!Array.isArray(value) || value.some(v => typeof v !== 'string' || v.length > 500) || value.length > 100) return `${key} must be a list of text values.`;
     } else if (['compMin','compMax','appliedDays','subsequentDays','maxFollowups','thankyouDays'].includes(key)) {
       if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return `${key} must be a non-negative number.`;
@@ -41,6 +43,11 @@ export function validateProfilePatch(patch: Record<string, unknown>): string | n
     if (!Number.isFinite(low) || !Number.isFinite(high) || low > high) return 'Compensation minimum must not exceed maximum.';
   }
   if (typeof patch.remote === 'string' && /remote.only/i.test(patch.remote) && /onsite.only|on.site.only/i.test(patch.remote)) return 'Location policy conflicts: choose remote-only or onsite-only.';
+  if (patch.outreachTone !== undefined && !['polite','confident','spicy'].includes(String(patch.outreachTone))) return 'Choose polite, confident, or spicy.';
+  for (const key of ['calendarLink','leadProof'] as const) {
+    const v = patch[key];
+    if (typeof v === 'string' && v && !/^https?:\/\/\S+$/i.test(v)) return `${key === 'calendarLink' ? 'Calendar link' : 'Lead proof'} must be a full https:// link.`;
+  }
   if (patch.spendTier !== undefined && !['economy','standard','premium'].includes(String(patch.spendTier))) return 'Choose economy, standard, or premium.';
   return null;
 }

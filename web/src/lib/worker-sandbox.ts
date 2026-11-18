@@ -188,6 +188,15 @@ export function workerRoots(task: string, root: string, target?: string): { read
     case "contacto":
     case "contacto-write":
       return { readRoots: [...read("cv.md", "config/profile.yml", "modes/_profile.md", "modes/_custom.md", "modes/_shared.md", "modes/contacto.md"), ...matchingReports()], writeRoots: [file("data/drafts"), file("data/contacts.tsv")] };
+    case "outreach":
+      return {
+        readRoots: [
+          ...read("cv.md", "config/profile.yml", "modes/_profile.md", "modes/_custom.md", "article-digest.md", "voice-dna.md").filter((f) => fs.existsSync(f)),
+          ...(fs.existsSync(file("writing-samples")) ? [file("writing-samples")] : []),
+          ...(target && /^\d+$/.test(target) ? matchingReports() : []),
+        ],
+        writeRoots: [],
+      };
     case "titles":
       return { readRoots: [...read("cv.md", "config/profile.yml", "modes/_profile.md", "modes/_custom.md", "modes/_shared.md", "modes/titles.md", "portals.yml")], writeRoots: [file("data/titles-suggestions.json")] };
     case "interview-prep":

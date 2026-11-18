@@ -6,6 +6,7 @@ import type { Application, InboxJob, ScanFind } from "@/lib/career-ops";
 import { cleanRoleTitles, paramsToFilters, paramsToAi, type ExploreFilters } from "@/lib/explore";
 import { useCliConfig, resolveCliIdForRun } from "@/lib/cli-config";
 import { fmtUsd } from "@/lib/explore-spend";
+import { SearchTabs } from "./search-tabs";
 import { PageShell } from "@/components/dossier/page-shell";
 import { DossierStack } from "@/components/dossier/dossier-stack";
 import { MaterialSymbol } from "@/components/material-symbol";
@@ -165,8 +166,7 @@ export function ExplorerView({
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex flex-wrap items-center gap-3">
               <MaterialSymbol name="explore" size={24} className="text-[var(--md-sys-color-primary)]" />
-              <h1 className="mb-0 md-headline-medium">Explore</h1>
-              <Badge tone="warn">New</Badge>
+              <h1 className="mb-0 md-headline-medium">Search</h1>
             </div>
             <div className="w-full sm:ml-auto sm:w-auto" data-co-tour="explore-modes">
               <ExploreModeToggle mode={mode} onChange={setMode} cliConfigured={cliConfigured} />
@@ -180,6 +180,8 @@ export function ExplorerView({
             </p>
           )}
         </header>
+
+        <SearchTabs current="find" />
 
         {!rootExists && (
           <p className="md3-alert md3-alert--warning mb-5">

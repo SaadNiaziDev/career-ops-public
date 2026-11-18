@@ -7,6 +7,7 @@ import { MaterialSymbol } from "@/components/material-symbol";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { Md3Collapse } from "@/components/ui/md3-collapse";
 import { cn } from "@/lib/cn";
+import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 
 const STYLE = `
@@ -83,12 +84,19 @@ export function ApplyView() {
       {!busy && (
         <div className="co-rise mb-4 flex items-baseline justify-between gap-3">
           <h2 className="font-display text-xl text-[var(--md-sys-color-on-surface)] drop-shadow-sm">{a.title || "Application"}</h2>
-          <button
-            onClick={a.reset}
-            className="md3-action-btn md3-action-btn--text inline-flex items-center gap-1 text-xs"
-          >
-            <MaterialSymbol name="refresh" size={14} /> new
-          </button>
+          <span className="flex shrink-0 items-center gap-1">
+            {a.trackerNum && (
+              <Link href={`/apply?n=${a.trackerNum}`} className="md3-action-btn md3-action-btn--text inline-flex items-center gap-1 text-xs">
+                <MaterialSymbol name="inventory_2" size={14} /> kit #{a.trackerNum}
+              </Link>
+            )}
+            <button
+              onClick={a.reset}
+              className="md3-action-btn md3-action-btn--text inline-flex items-center gap-1 text-xs"
+            >
+              <MaterialSymbol name="refresh" size={14} /> new
+            </button>
+          </span>
         </div>
       )}
 
@@ -237,7 +245,7 @@ export function ApplyView() {
                 </Md3ActionButton>
                 <span className="text-xs text-[var(--md-sys-color-on-surface-variant)]">
                   {a.snapshotState === "submitted"
-                    ? "Tracker marked Applied; answers and files saved."
+                    ? (a.trackerNum ? "Tracker marked Applied; answers and files saved." : "Answers saved. This form isn't linked to a tracker row, so update its status from the pipeline.")
                     : "Only confirm after the employer shows a success message."}
                 </span>
               </div>

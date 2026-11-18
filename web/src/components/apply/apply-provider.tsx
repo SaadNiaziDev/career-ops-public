@@ -25,10 +25,15 @@ type ApplyCtx = {
   error: string;
   snapshotState: SnapshotState | null;
   snapshotSaving: boolean;
-  open: (url: string, opts?: { prefill?: boolean; company?: string; trackerNum?: string }) => Promise<void>;
+  /** Tracker # this session belongs to (null for a pasted URL). */
+  trackerNum: string | null;
+  /** Opens the real form. Resolves true once fields are ready (and drafted when prefill is requested). */
+  open: (url: string, opts?: { prefill?: boolean; forcePrefill?: boolean; company?: string; trackerNum?: string }) => Promise<boolean>;
   prefill: () => Promise<void>;
   setAnswer: (idOrLabel: string, value: string) => void;
   fill: () => Promise<void>;
+  /** Open the form if needed (restoring saved answers), fill it in the visible browser and stop before submit. */
+  prefillInBrowser: (url: string, opts: { company?: string; trackerNum: string }) => Promise<boolean>;
   agentFill: () => Promise<void>;
   confirmSubmitted: () => Promise<void>;
   reset: () => void;
@@ -66,6 +71,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState("");
   const [snapshotState, setSnapshotState] = useState<SnapshotState | null>(null);
   const [snapshotSaving, setSnapshotSaving] = useState(false);
+  const [trackerNumState, setTrackerNumState] = useState<string | null>(null);
   const sessionId = useRef<string | null>(null);
   const trackerNum = useRef<string | null>(null);
   const companyRef = useRef<string>("");
@@ -88,6 +94,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
     const data = await response.json() as { snapshot?: ApplicationSnapshot | null };
     if (!data.snapshot) return false;
     const restored = restoredAnswers(data.snapshot, fs);
+    answersRef.current = restored.answers;
     setAnswers(restored.answers);
     sourcesRef.current = restored.sources;
     setSnapshotState(data.snapshot.state);
@@ -130,19 +137,20 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
 
   // Stream the agentic drive (the AI reaching the form live) and finalize the
   // session when it succeeds → fields ready → auto-prefill fires.
-  const drive = useCallback(async (id: string) => {
+  const drive = useCallback(async (id: string): Promise<boolean> => {
     setDriveSteps([]);
     try {
       const r = await fetch("/api/apply/drive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: id, cliId: cliId(), goal: "reach" }) });
       if (!r.body) {
         setError("The agent couldn't start.");
         setStatus("error");
-        return;
+        return false;
       }
       const reader = r.body.getReader();
       const dec = new TextDecoder();
       let buf = "";
       let finished = false;
+      let reached = false;
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -161,10 +169,12 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
           if (ev.t === "step") setDriveSteps((p) => [...p, ev as DriveStep]);
           else if (ev.t === "done") {
             finished = true;
+            fieldsRef.current = ev.fields ?? [];
             setFields(ev.fields ?? []);
             await restoreSnapshot(ev.fields ?? []);
             if (ev.title) setTitle(ev.title);
             setIssues(ev.issues ?? []);
+            reached = true;
             setStatus("ready"); // → the ready-effect auto-prefills if pending
           } else if (ev.t === "error") {
             finished = true;
@@ -177,13 +187,21 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
         setError("The agent stopped before reaching a form.");
         setStatus("error");
       }
+      return reached;
     } catch (e) {
       setError(`The agent couldn't reach the form: ${e instanceof Error ? e.message : "stream error"}.`);
       setStatus("error");
+      return false;
     }
   }, [restoreSnapshot]);
 
-  const open = useCallback(async (u: string, opts?: { prefill?: boolean; company?: string; trackerNum?: string }) => {
+  const open = useCallback(async (u: string, opts?: { prefill?: boolean; forcePrefill?: boolean; company?: string; trackerNum?: string }): Promise<boolean> => {
+    if (sessionId.current) {
+      // Free the previous off-screen tab before opening another form.
+      const prev = sessionId.current;
+      sessionId.current = null;
+      void fetch("/api/apply/close", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: prev }), keepalive: true }).catch(() => {});
+    }
     setStatus("opening");
     setError("");
     setSnapshotState(null);
@@ -198,7 +216,11 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
     setDriveSteps([]);
     setUrl(u);
     urlRef.current = u;
+    fieldsRef.current = [];
+    answersRef.current = {};
+    sourcesRef.current = {};
     trackerNum.current = opts?.trackerNum ?? null;
+    setTrackerNumState(opts?.trackerNum ?? null);
     setCompany(opts?.company ?? "");
     companyRef.current = opts?.company ?? "";
     pendingPrefill.current = false;
@@ -208,7 +230,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       if (d.error) {
         setError(d.error);
         setStatus("error");
-        return;
+        return false;
       }
       sessionId.current = d.id;
       setTitle(d.title);
@@ -217,16 +239,22 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       if (d.needsDrive) {
         // The form is behind navigation → the agent drives to reach it, streamed.
         setStatus("driving");
-        await drive(d.id);
-        return;
+        const reached = await drive(d.id);
+        if (reached && opts?.forcePrefill) pendingPrefill.current = true;
+        return reached;
       }
+      fieldsRef.current = d.fields;
       setFields(d.fields);
       await restoreSnapshot(d.fields);
+      // "Regenerate answers" re-drafts even when a saved snapshot was restored.
+      if (opts?.forcePrefill) pendingPrefill.current = true;
       setIssues(d.issues ?? []);
       setStatus("ready");
+      return true;
     } catch {
       setError("Could not open the form.");
       setStatus("error");
+      return false;
     }
   }, [drive, restoreSnapshot]);
 
@@ -245,10 +273,11 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       for (const [id, v] of Object.entries(raw)) {
         a[id] = v?.value ?? "";
         m[id] = { needsConfirmation: !!v?.needs_confirmation };
-        sourcesRef.current[id] = v?.needs_confirmation ? "ai" : "profile";
+        sourcesRef.current[id] = "ai"; // every drafted value came from the AI planner
       }
       answersDirty.current = true;
       answerVersion.current += 1;
+      answersRef.current = a;
       setAnswers(a);
       setMeta(m);
     };
@@ -326,6 +355,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       sourcesRef.current[f.id] = "user";
       answersDirty.current = true;
       answerVersion.current += 1;
+      answersRef.current = { ...answersRef.current, [f.id]: value };
       setAnswers((prev) => ({ ...prev, [f.id]: value }));
     }
   }, []);
@@ -341,7 +371,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
     setStatus("filling");
     setSteps([]);
     try {
-      const r = await fetch("/api/apply/fill", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: sessionId.current, answers, fields, handoff: true, company: companyRef.current }) });
+      const r = await fetch("/api/apply/fill", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: sessionId.current, answers: answersRef.current, fields: fieldsRef.current, handoff: true, company: companyRef.current, trackerNum: trackerNum.current }) });
       const d = await r.json();
       if (d.error) {
         setError(d.error);
@@ -371,7 +401,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       setError("Fill failed.");
       setStatus("error");
     }
-  }, [answers, fields, saveSnapshot]);
+  }, [saveSnapshot]);
 
   // FULL-AGENT FILL — the agent fills the real form turn-by-turn from the verified
   // answers, streamed (drive panel), never submits, then hands off. Used as the
@@ -428,11 +458,41 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
   const agentFillRef = useRef(agentFill);
   agentFillRef.current = agentFill;
 
+  // The user clicked "I submitted this application" → tracker status goes through
+  // the canonical status API (confirm-gated, stage history), then the exact
+  // answers are recorded in the report as "submitted".
   const confirmSubmitted = useCallback(async () => {
-    if (!window.confirm("Confirm that you clicked Submit on the employer's form. This will mark the application Applied.")) return;
+    const markApplied = async (n: string) => {
+      setSnapshotSaving(true);
+      const r = await fetch("/api/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ n, status: "Applied", confirmedSubmission: true }) }).catch(() => null);
+      setSnapshotSaving(false);
+      if (r?.ok) return true;
+      const d = r ? await r.json().catch(() => ({})) as { error?: string } : {};
+      setError(d.error ? `Answers saved, but the tracker wasn't updated: ${d.error} Mark it from the Apply kit.` : "Couldn't mark the tracker Applied. Open the Apply kit to retry.");
+      return false;
+    };
+    let n = trackerNum.current;
+    if (n && !(await markApplied(n))) return;
     const saved = await saveSnapshot("submitted");
-    if (saved) setIssues((prev) => [...prev, { level: "info", code: "submission-recorded", message: "Submission recorded. Your exact answers and document version are saved in the report." }]);
+    // A pasted URL that matched a tracker row: the snapshot write resolved its number.
+    if (!n && saved && trackerNum.current) {
+      n = trackerNum.current;
+      setTrackerNumState(n);
+      if (!(await markApplied(n))) return;
+    }
+    if (saved || n) setIssues((prev) => [...prev, { level: "info", code: "submission-recorded", message: n ? "Marked Applied. Your exact answers and document version are saved in the report." : "Submission recorded." }]);
   }, [saveSnapshot]);
+
+  const prefillInBrowser = useCallback(async (u: string, opts: { company?: string; trackerNum: string }): Promise<boolean> => {
+    const sameSession = !!sessionId.current && urlRef.current === u && trackerNum.current === opts.trackerNum && fieldsRef.current.length > 0;
+    if (!sameSession) {
+      const ok = await open(u, { company: opts.company, trackerNum: opts.trackerNum });
+      if (!ok) return false;
+    }
+    companyRef.current = opts.company ?? companyRef.current;
+    await fill();
+    return true;
+  }, [fill, open]);
 
   const reset = useCallback(() => {
     if (sessionId.current) {
@@ -441,7 +501,10 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
     }
     sessionId.current = null;
     trackerNum.current = null;
+    setTrackerNumState(null);
     urlRef.current = "";
+    fieldsRef.current = [];
+    answersRef.current = {};
     sourcesRef.current = {};
     answersDirty.current = false;
     answerVersion.current = 0;
@@ -465,8 +528,8 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ status, url, title, company, fields, answers, meta, steps, shots, prefillLog, issues, driveSteps, error, snapshotState, snapshotSaving, open, prefill, setAnswer, fill, agentFill, confirmSubmitted, reset }),
-    [status, url, title, company, fields, answers, meta, steps, shots, prefillLog, issues, driveSteps, error, snapshotState, snapshotSaving, open, prefill, setAnswer, fill, agentFill, confirmSubmitted, reset],
+    () => ({ status, url, title, company, fields, answers, meta, steps, shots, prefillLog, issues, driveSteps, error, snapshotState, snapshotSaving, trackerNum: trackerNumState, open, prefill, setAnswer, fill, prefillInBrowser, agentFill, confirmSubmitted, reset }),
+    [status, url, title, company, fields, answers, meta, steps, shots, prefillLog, issues, driveSteps, error, snapshotState, snapshotSaving, trackerNumState, open, prefill, setAnswer, fill, prefillInBrowser, agentFill, confirmSubmitted, reset],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

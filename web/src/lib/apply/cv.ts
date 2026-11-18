@@ -1,5 +1,25 @@
 import fs from "node:fs";
-import { artifactFiles, artifactPath } from "@/lib/cv/artifacts";
+import path from "node:path";
+import { careerOpsRoot } from "@/lib/career-ops";
+import { artifactFiles, artifactPath, manifestArtifactName } from "@/lib/cv/artifacts";
+
+/**
+ * The tailored CV the pdf worker indexed for this report number in
+ * data/pdf-index.tsv (latest row wins). Exact, so it never attaches another
+ * company's CV. Mirrors /api/cv-pdf?report=. Absolute path or null.
+ */
+export function resolveIndexedCv(reportNum?: string | null): string | null {
+  if (!reportNum || !/^\d+$/.test(reportNum)) return null;
+  let lines: string[];
+  try {
+    lines = fs.readFileSync(path.join(careerOpsRoot(), "data/pdf-index.tsv"), "utf8").split("\n");
+  } catch {
+    return null;
+  }
+  const entry = lines.map((line) => line.split("\t")).filter((cols) => Number(cols[0]) === Number(reportNum) && manifestArtifactName(cols[1])).at(-1);
+  const name = manifestArtifactName(entry?.[1]);
+  return name ? artifactPath(name, "pdf") : null;
+}
 
 /**
  * Locate the tailored CV PDF the real `pdf` mode wrote to output/ for a given

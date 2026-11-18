@@ -254,7 +254,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
           if (status === "done") {
             // Tell server-snapshot surfaces (Today, pipeline) to refetch — the
             // worker just wrote a real tracker row / report they don't yet see.
-            if (typeof window !== "undefined" && ["evaluate", "pdf", "cover", "email", "contacto", "titles", "interview-prep", "interview-questions", "interview-plan", "interview-practice", "interview-debrief", "interview-redflag"].includes(opts.kind ?? "")) {
+            if (typeof window !== "undefined" && ["evaluate", "pdf", "cover", "email", "contacto", "outreach", "titles", "interview-prep", "interview-questions", "interview-plan", "interview-practice", "interview-debrief", "interview-redflag"].includes(opts.kind ?? "")) {
               window.dispatchEvent(new CustomEvent("co-job-done", { detail: { kind: opts.kind, input: opts.input } }));
             }
           }

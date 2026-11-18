@@ -44,11 +44,9 @@ export function CommandPalette({
       icon: n.icon,
       href: n.href,
     }));
-    const actions: PaletteItem[] = [
-      { id: "export", group: "Actions", label: "Export tracker as CSV", icon: "download", action: onExport },
-      { id: "scan", group: "Actions", label: "Run portal scan", icon: "radar", href: "/explore" },
-      { id: "add", group: "Actions", label: "Paste a job URL", icon: "link", href: "/add" },
-    ];
+    const actions: PaletteItem[] = onExport
+      ? [{ id: "export", group: "Actions", label: "Export tracker as CSV", icon: "download", action: onExport }]
+      : [];
     const jobItems: PaletteItem[] = jobs.map((j) => ({
       id: `job-${j.num}`,
       group: "Jobs",

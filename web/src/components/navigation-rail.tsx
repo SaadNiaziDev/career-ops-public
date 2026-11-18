@@ -1,15 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { CoMark } from "@/components/co-mark";
-import { NAV_ITEMS, isActivePath } from "@/lib/nav-items";
+import { NavigationLinks } from "@/components/navigation-links";
 import { useJobs } from "@/components/jobs/job-store";
 import { useWorkersUi } from "@/components/jobs/worker-sheet";
 
 export function NavigationRail() {
-  const pathname = usePathname();
   const { jobs } = useJobs();
   const { open, toggle } = useWorkersUi();
   const running = jobs.filter((j) => j.status === "running").length;
@@ -20,28 +18,7 @@ export function NavigationRail() {
         <CoMark size={28} />
       </Link>
       <div className="md3-rail-scroll">
-        {NAV_ITEMS.map(({ href, label, icon }) => {
-          const active = isActivePath(href, pathname);
-          return (
-            <Link
-              key={href}
-              href={href}
-              className="md3-rail-item"
-              data-active={active ? "true" : "false"}
-              aria-current={active ? "page" : undefined}
-            >
-              <span className="md3-rail-pill">
-                <MaterialSymbol
-                  name={icon}
-                  filled={active}
-                  size={24}
-                  className={active ? "text-[var(--md-sys-color-on-secondary-container)]" : "text-[var(--md-sys-color-on-surface-variant)]"}
-                />
-              </span>
-              <span className="md3-rail-label">{label}</span>
-            </Link>
-          );
-        })}
+        <NavigationLinks layout="rail" />
       </div>
 
       <div className="md3-rail-footer">

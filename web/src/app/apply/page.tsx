@@ -1,38 +1,17 @@
-"use client";
-
-import { ApplyView } from "@/components/apply-view";
-import { ApplyBackdropMount } from "@/components/apply/apply-backdrop-mount";
-import { MaterialSymbol } from "@/components/material-symbol";
-import { PageShell } from "@/components/dossier/page-shell";
-import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
-import { DossierStack } from "@/components/dossier/dossier-stack";
+import { ApplyPageView, type ApplyPageMode } from "@/components/apply/apply-page-view";
+import { listOutreach } from "@/lib/outreach";
+import { buildKit, buildQueue } from "@/lib/apply/kit-server";
 
 export const dynamic = "force-dynamic";
 
-export default function ApplyPage() {
-  return (
-    <div className="relative min-h-screen">
-      <ApplyBackdropMount />
-      <div className="relative z-10">
-        <PageShell width="narrow">
-          <DossierStack>
-            <div data-co-tour="apply-intro">
-              <DossierPageHeader
-                title={
-                  <span className="inline-flex items-center gap-3">
-                    <MaterialSymbol name="send" size={24} className="text-[var(--md-sys-color-primary)]" />
-                    Apply
-                  </span>
-                }
-                description="career-ops reads the real application form on your machine and re-renders it here in plain language, pre-filled from your CV. You verify every answer — then it fills the real form behind the scenes and you submit it yourself. It never submits for you."
-              />
-            </div>
-            <div data-co-tour="apply-form">
-              <ApplyView />
-            </div>
-          </DossierStack>
-        </PageShell>
-      </div>
-    </div>
-  );
+// /apply            → apply queue (Evaluated, 4.0+, not applied) with kit readiness
+// /apply?n=<num>    → the Apply kit for tracker row <num>
+// /apply?view=form  → paste any application form URL
+export default async function ApplyPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = await searchParams;
+  const n = typeof params.n === "string" ? params.n.trim() : "";
+  const mode: ApplyPageMode = params.view === "email" ? "email" : params.view === "form" ? "form" : n ? "kit" : "queue";
+  const kit = mode === "kit" && /^\d{1,6}$/.test(n) ? buildKit(n) : null;
+  const queue = mode === "queue" ? buildQueue() : [];
+  return <ApplyPageView mode={mode} n={n} kit={kit} queue={queue} emails={mode === "email" ? listOutreach() : []} />;
 }

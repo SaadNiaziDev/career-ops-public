@@ -15,10 +15,12 @@ data/pdf-index.tsv
 data/agent-inbox.md
 data/active-interviews.md
 data/application-stage-history.json
+data/application-activity/
 data/reply-candidates.json
 data/contacts.tsv
 data/interview-rounds.tsv
 data/drafts/
+data/outreach/
 data/titles-suggestions.json
 data/parser-output/**/*.json
 !data/parser-output/.gitkeep

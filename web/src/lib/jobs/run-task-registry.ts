@@ -1,5 +1,5 @@
 export type RunTaskKind =
-  | "evaluate" | "research" | "pdf" | "cover" | "email" | "titles" | "contacto" | "fix-portal"
+  | "evaluate" | "research" | "pdf" | "cover" | "email" | "titles" | "contacto" | "outreach" | "fix-portal"
   | "interview-prep" | "interview-questions" | "interview-plan" | "interview-practice" | "interview-debrief" | "interview-redflag";
 
 export type RunTaskEvidence = { reportChanged?: boolean; pdfVerified?: boolean; writesChanged?: boolean; emittedOutput?: boolean };
@@ -28,6 +28,8 @@ const POLICIES: Record<RunTaskKind, Policy> = {
   email: { requiredFile: "modes/email.md", requiresCv: true, workerPhase: "write", fetchPosting: false, timeoutMs: 300_000, completionCheck: "writes", reportNumber: "input-if-numeric", group: "standard" },
   titles: { requiredFile: "modes/titles.md", requiresCv: true, workerPhase: "write", fetchPosting: false, timeoutMs: 300_000, completionCheck: "writes", reportNumber: "find-by-input", group: "standard" },
   contacto: { requiredFile: "modes/contacto.md", requiresCv: true, workerPhase: "write", fetchPosting: false, timeoutMs: 360_000, completionCheck: "writes", reportNumber: "input-if-numeric", group: "standard" },
+  // Read-only web research: the worker returns JSON; the server validates and saves it (data/outreach/).
+  outreach: { requiredFile: "", requiresCv: true, workerPhase: "fetch", fetchPosting: false, timeoutMs: 360_000, completionCheck: "output", reportNumber: "none", group: "standard" },
   "fix-portal": { requiredFile: "verify-portals.mjs", requiresCv: false, workerPhase: "write", fetchPosting: false, timeoutMs: 285_000, completionCheck: "writes", reportNumber: "find-by-input", group: "standard" },
   "interview-prep": { requiredFile: "modes/interview-prep.md", requiresCv: true, workerPhase: "write", fetchPosting: false, timeoutMs: 360_000, completionCheck: "writes", reportNumber: "input-if-numeric", group: "interview" },
   "interview-questions": { requiredFile: "modes/interview-prep.md", requiresCv: true, workerPhase: "write", fetchPosting: false, timeoutMs: 360_000, completionCheck: "writes", reportNumber: "input-if-numeric", group: "interview" },

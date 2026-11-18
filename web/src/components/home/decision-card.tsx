@@ -12,26 +12,20 @@ import type { Application } from "@/lib/career-ops";
 
 export function DecisionCard({ app }: { app: Application }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<"" | "Applied" | "Discarded">("");
+  const [busy, setBusy] = useState<"" | "Discarded">("");
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const score = scoreNum(app.score);
   const tone = scoreTone(app.score);
 
-  const setStatus = async (status: "Applied" | "Discarded") => {
-    if (status === "Applied" && !window.confirm("Have you submitted the application? This only records an application you have sent.")) return;
-    let overrideReason: string | undefined;
-    if (status === "Applied" && Number.isFinite(score) && score < 4) {
-      overrideReason = window.prompt("This role scored below 4.0. Why do you want to apply anyway?")?.trim();
-      if (!overrideReason) return;
-    }
+  const setStatus = async (status: "Discarded") => {
     setBusy(status);
     setError(null);
     try {
       const response = await fetch("/api/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ n: app.n, status, overrideReason, confirmedSubmission: status === "Applied" }),
+        body: JSON.stringify({ n: app.n, status }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Could not update application status. Please retry.");
@@ -57,14 +51,11 @@ export function DecisionCard({ app }: { app: Application }) {
         {Number.isFinite(score) && score > 0 && <Badge tone={tone}>{app.score}</Badge>}
       </div>
       <div className="md3-actions-row">
-        <Link href={`/pipeline/${app.n}`} className="md3-action-btn md3-action-btn--filled">{score >= 4 ? "Review & prepare" : "Review role"}</Link>
+        <Link href={`/apply?n=${app.n}`} className="md3-action-btn md3-action-btn--filled">{score >= 4 ? "Review & prepare" : "Review role"}</Link>
         <Md3ActionButton variant={score >= 4 ? "outlined" : "filled"} icon="close" loading={busy === "Discarded"} disabled={!!busy} onClick={() => void setStatus("Discarded")}>
           Skip
         </Md3ActionButton>
-        <Md3ActionButton variant="outlined" icon="check" loading={busy === "Applied"} disabled={!!busy} onClick={() => void setStatus("Applied")}>{score < 4 ? "Confirm submitted anyway" : "Confirm submitted"}</Md3ActionButton>
-        <Link href={`/pipeline/${app.n}`} className="md3-action-btn md3-action-btn--text" aria-label="Open report">
-          <span className="material-symbols-outlined text-[18px] leading-none">description</span>
-        </Link>
+
       </div>
       {error && <p role="alert" className="mt-3 text-sm text-[var(--md-sys-color-error)]">{error}</p>}
     </Md3Card>

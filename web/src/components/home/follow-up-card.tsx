@@ -72,6 +72,7 @@ export function FollowUpCard({
           num: followup.num,
           company: followup.company,
           note,
+          message: draft,
           channel: contact?.channel || "manual",
           contactName: contact?.name || "",
           contactEmail: contact?.email || "",

@@ -1,10 +1,9 @@
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { promisify } from "node:util";
 import { careerOpsRoot, findApplication, findReportFile, readApplications, readReport, rootScript } from "@/lib/career-ops";
-import { resolveTailoredCv } from "@/lib/apply/cv";
+import { resolveIndexedCv, resolveTailoredCv } from "@/lib/apply/cv";
 import { readSessionSnapshot } from "@/lib/apply/session";
 import { detectAtsVendor, isSensitiveField, mergeLiveValues, parseApplicationSnapshot, type ApplicationSnapshot, type SnapshotField, type SnapshotState } from "@/lib/apply/snapshot";
 import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
@@ -12,7 +11,6 @@ import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const run = promisify(execFile);
 const FIELD_TYPES = new Set(["text", "email", "tel", "url", "number", "date", "textarea", "select", "checkbox", "radio", "file"]);
 
 declare global {
@@ -41,8 +39,8 @@ function safeFields(fields: unknown): SnapshotField[] {
   });
 }
 
-function cvRecord(company: string) {
-  const file = resolveTailoredCv(company);
+function cvRecord(company: string, reportNum?: string) {
+  const file = resolveIndexedCv(reportNum) ?? resolveTailoredCv(company);
   if (!file) return [];
   const relative = path.relative(careerOpsRoot(), file);
   if (relative.startsWith("..") || path.isAbsolute(relative)) return [];
@@ -71,12 +69,6 @@ function serializeWrite(task: () => Promise<void>): Promise<void> {
   return current;
 }
 
-async function markApplied(trackerNum: string): Promise<void> {
-  await run("node", [rootScript("set-status"), trackerNum, "Applied", "--json"], {
-    cwd: careerOpsRoot(), maxBuffer: 512 * 1024,
-  });
-}
-
 export async function GET(req: Request) {
   const trackerNum = new URL(req.url).searchParams.get("tracker") ?? "";
   if (!/^\d+$/.test(trackerNum)) return Response.json({ error: "valid tracker required" }, { status: 400 });
@@ -102,7 +94,7 @@ export async function POST(req: Request) {
   const live = body.sessionId && body.state !== "draft"
     ? await readSessionSnapshot(body.sessionId).catch(() => ({ fields: [], files: [] }))
     : { fields: [], files: [] };
-  const cvFiles = cvRecord(app.company);
+  const cvFiles = cvRecord(app.company, app.report.match(/\[(\d+)\]/)?.[1] ?? app.n);
   const cvNames = new Set(cvFiles.map((file) => path.basename(file.path)));
   const snapshot: ApplicationSnapshot = {
     state: body.state,
@@ -115,10 +107,10 @@ export async function POST(req: Request) {
   };
 
   try {
-    await serializeWrite(async () => {
-      await writeSnapshot(reportFile, snapshot);
-      if (body.state === "submitted") await markApplied(app.n);
-    });
+    // Records answers only. The tracker status changes through /api/status
+    // (confirm-gated, stage history, undo) — the client calls it before
+    // saving a "submitted" snapshot.
+    await serializeWrite(() => writeSnapshot(reportFile, snapshot));
     return Response.json({ ok: true, trackerNum: app.n, snapshot });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message.slice(0, 300) : "snapshot write failed" }, { status: 500 });

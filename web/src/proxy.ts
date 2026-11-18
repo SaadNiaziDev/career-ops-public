@@ -68,7 +68,10 @@ function validCsrfHeaders(request: NextRequest): boolean {
   const fetchSite = request.headers.get("sec-fetch-site");
   if (!origin || fetchSite !== "same-origin") return false;
   try {
-    return new URL(origin).origin === request.nextUrl.origin;
+    // NextURL normalizes loopback hostnames to localhost. Compare against the
+    // already-validated Host instead, preserving the browser's exact origin.
+    const expected = new URL(`${request.nextUrl.protocol}//${request.headers.get("host")}`).origin;
+    return new URL(origin).origin === expected;
   } catch {
     return false;
   }

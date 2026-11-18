@@ -1,0 +1,156 @@
+import fs from "node:fs";
+import path from "node:path";
+import { careerOpsRoot } from "@/lib/career-ops";
+import { atomicWrite } from "@/lib/core/safe-write";
+import {
+  addDays,
+  FOLLOWUP_DAYS,
+  type EmailConfidence,
+  type OutreachFollowup,
+  type OutreachPerson,
+  type OutreachRecord,
+} from "@/lib/outreach-shared";
+
+export * from "@/lib/outreach-shared";
+
+const ID_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
+
+export function outreachDir(): string {
+  return path.join(careerOpsRoot(), "data", "outreach");
+}
+
+function recordPath(id: string): string {
+  if (!ID_RE.test(id)) throw new Error("invalid outreach id");
+  return path.join(outreachDir(), `${id}.json`);
+}
+
+export function listOutreach(): OutreachRecord[] {
+  let files: string[] = [];
+  try {
+    files = fs.readdirSync(outreachDir()).filter((f) => f.endsWith(".json"));
+  } catch {
+    return [];
+  }
+  const out: OutreachRecord[] = [];
+  for (const f of files) {
+    try {
+      out.push(JSON.parse(fs.readFileSync(path.join(outreachDir(), f), "utf8")) as OutreachRecord);
+    } catch {
+      /* skip unreadable record */
+    }
+  }
+  return out.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+}
+
+export function readOutreach(id: string): OutreachRecord | null {
+  try {
+    return JSON.parse(fs.readFileSync(recordPath(id), "utf8")) as OutreachRecord;
+  } catch {
+    return null;
+  }
+}
+
+export function saveOutreach(record: OutreachRecord): void {
+  fs.mkdirSync(outreachDir(), { recursive: true });
+  atomicWrite(recordPath(record.id), JSON.stringify(record, null, 2) + "\n");
+}
+
+function slug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "role";
+}
+
+const str = (v: unknown, max = 4000): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const EMAIL_RE = /^[^\s@<>"]+@[^\s@<>"]+\.[a-z]{2,}$/i;
+
+function person(raw: unknown): OutreachPerson | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const name = str(r.name, 120);
+  if (!name) return null;
+  let email = str(r.email, 200);
+  let emailConfidence = (["found", "pattern", "none"].includes(str(r.emailConfidence)) ? str(r.emailConfidence) : "none") as EmailConfidence;
+  if (!EMAIL_RE.test(email)) {
+    email = "";
+    emailConfidence = "none";
+  }
+  if (email && emailConfidence === "none") emailConfidence = "pattern";
+  const url = (v: unknown) => (/^https?:\/\//i.test(str(v, 500)) ? str(v, 500) : "");
+  return {
+    name,
+    title: str(r.title, 160),
+    email,
+    emailConfidence,
+    emailEvidence: url(r.emailEvidence) || undefined,
+    linkedin: url(r.linkedin) || undefined,
+    x: url(r.x) || undefined,
+    sourceUrl: url(r.sourceUrl) || undefined,
+    why: str(r.why, 400) || undefined,
+  };
+}
+
+/** Pull the LAST ```json block from worker output and validate it into a record. */
+export function parseOutreachOutput(
+  text: string,
+  meta: { trackerNum?: string; jobUrl?: string; tone?: string },
+): OutreachRecord | { error: string } {
+  const blocks = [...text.matchAll(/```json\s*([\s\S]*?)```/gi)];
+  const rawJson = blocks.at(-1)?.[1];
+  if (!rawJson) return { error: "The worker finished without returning the outreach result." };
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(rawJson) as Record<string, unknown>;
+  } catch {
+    return { error: "The outreach result was not valid JSON." };
+  }
+  const contact = person(data.contact);
+  if (!contact) return { error: "No hiring contact could be confirmed for this role." };
+  const subject = str(data.subject, 200);
+  const body = str(data.body, 6000);
+  if (!subject || !body) return { error: "The outreach result had no email subject or body." };
+  const company = str(data.company, 120) || "Unknown company";
+  const role = str(data.role, 160);
+  const followups: OutreachFollowup[] = Array.isArray(data.followups)
+    ? (data.followups as unknown[])
+        .map((f, i) => {
+          const r = (f ?? {}) as Record<string, unknown>;
+          const day = typeof r.day === "number" && r.day > 0 && r.day < 60 ? Math.round(r.day) : FOLLOWUP_DAYS[i] ?? 7;
+          return { day, body: str(r.body, 3000) };
+        })
+        .filter((f) => f.body)
+        .slice(0, 3)
+    : [];
+  const now = new Date().toISOString();
+  const jobUrl = str(data.jobUrl, 500) || meta.jobUrl;
+  return {
+    id: `${meta.trackerNum ? `${meta.trackerNum}-` : ""}${slug(company)}-${slug(contact.name)}-${Date.now().toString(36)}`,
+    createdAt: now,
+    updatedAt: now,
+    trackerNum: meta.trackerNum,
+    company,
+    role,
+    jobUrl: /^https?:\/\//i.test(jobUrl ?? "") ? jobUrl : undefined,
+    companyDomain: str(data.companyDomain, 120) || undefined,
+    contact,
+    alternates: Array.isArray(data.alternates) ? (data.alternates as unknown[]).map(person).filter((p): p is OutreachPerson => Boolean(p)).slice(0, 3) : [],
+    subject,
+    body,
+    linkedinNote: str(data.linkedinNote, 600) || undefined,
+    followups,
+    status: "ready",
+    tone: meta.tone,
+  };
+}
+
+export function scheduleFollowups(record: OutreachRecord, sentAt: string): OutreachFollowup[] {
+  return record.followups.map((f) => ({ ...f, dueAt: addDays(sentAt, f.day) }));
+}
+
+/** Companies emailed within the last `days` — used to avoid double-emailing a company. */
+export function recentlyContactedCompanies(days = 30): Set<string> {
+  const cutoff = addDays(new Date().toISOString(), -days);
+  return new Set(
+    listOutreach()
+      .filter((r) => (r.status === "sent" || r.status === "replied") && (r.sentAt ?? "").slice(0, 10) >= cutoff)
+      .map((r) => r.company.toLowerCase()),
+  );
+}

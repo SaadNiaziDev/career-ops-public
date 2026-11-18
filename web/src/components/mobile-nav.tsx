@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
 import { CoMark } from "@/components/co-mark";
 import { WorkerTray } from "@/components/jobs/worker-sheet";
 import { UsageMeter } from "@/components/usage-meter";
-import { NAV_ITEMS, isActivePath } from "@/lib/nav-items";
+import { NavigationLinks } from "@/components/navigation-links";
 import { useJobs } from "@/components/jobs/job-store";
 import { useDialogFocus } from "@/lib/use-dialog-focus";
 
@@ -86,32 +86,8 @@ export function MobileNav() {
           </button>
         </div>
 
-        <nav className="flex flex-col gap-1 px-3">
-          {NAV_ITEMS.map(({ href, label, icon, chip }) => {
-            const active = isActivePath(href, pathname);
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setOpen(false)}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex min-h-[48px] items-center gap-3 rounded-[var(--md-sys-shape-corner-medium)] px-3 md-body-large transition-colors",
-                  active
-                    ? "bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)]"
-                    : "text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-high)]",
-                )}
-              >
-                <MaterialSymbol name={icon} filled={active} size={22} />
-                {label}
-                {chip && (
-                  <span className="ml-auto rounded-[var(--md-sys-shape-corner-full)] bg-[var(--md-sys-color-tertiary-container)] px-2 py-0.5 md-label-small text-[var(--md-sys-color-on-tertiary-container)]">
-                    {chip}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+        <nav aria-label="Primary" className="px-3 pb-3">
+          <NavigationLinks layout="drawer" onNavigate={() => setOpen(false)} />
         </nav>
 
         <div className="border-t border-[var(--md-sys-color-outline-variant)] px-3 pt-3">

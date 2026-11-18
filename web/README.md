@@ -26,16 +26,16 @@ Interview session transcripts are joined by `tracker_num` frontmatter. Preview a
 
 Background workers (evaluate, PDF, research) run through **Claude Code**, **Codex**, or **Cursor Agent CLI** — pick one in **Config**. Interactive Cursor also loads the same skill via `.cursor/skills/career-ops/`.
 
-## Features
+## Workflow
 
-- **Today** — follow-ups, fresh matches, roles awaiting a decision
-- **Add job** — paste a URL; evaluate, add to inbox, or AI-search similar roles
-- **Explore** — free reverse-ATS scan; optional AI hunt (requires configured CLI)
-- **Pipeline** — inbox triage, tracker, reports, status updates
-- **Outreach** — contacts ledger + cover/email/contact drafts per role
-- **Apply kit** — tailored CV (PDF), cover letter, recruiter email, find contacts (one-click on each report)
-- **Apply** — assisted form prefill; never auto-submits
-- **Analytics / CV / Portals / Config**
+- **Search** — free ATS discovery, optional AI search, and saved matches in one workspace. Add a job link from here and evaluate it before preparing an application.
+- **Apply** — one workspace per role for the CV, form answers, cover letter, email, and submission record. Opening Gmail or copying a message leaves it as a draft; confirm only after sending.
+- **Track** — application records with the date, submission method, URL, CV filename, exact sent messages, follow-ups, contacts, notes, and status history. Older tracker entries stay available with missing details clearly marked.
+- **Tools** — Today, CV, profile, contacts, portals, analytics, and configuration.
+
+Submission and message history is stored in immutable local JSON files under `data/application-activity/`, alongside the existing Markdown tracker. Sent outreach is also retained in `data/outreach/`. No database or additional service is required. This workflow does not automatically import an external mailbox.
+
+Run `npm run test:flow` from `web/` for an isolated browser check of Search → Apply → Track, including sent-message confirmation and mobile layouts. It uses fictional data, intercepts the Gmail draft, and never sends email or changes your real applications.
 
 ## Safety
 

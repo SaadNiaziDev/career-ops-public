@@ -10,7 +10,9 @@ import { DimensionChart } from "@/components/report/dimension-chart";
 import { StatusSelect } from "@/components/status-select";
 import { CompanyLogo } from "@/components/company-logo";
 import { ScoreMethodology } from "@/components/score-methodology";
-import { PipelineActions } from "@/components/pipeline/pipeline-actions";
+import { ApplyButton } from "@/components/apply-button";
+import { ApplicationRecordPanel } from "@/components/applications/application-record";
+import type { ApplicationRecord } from "@/lib/application-records";
 import { DeleteFromTracker } from "@/components/delete-from-tracker";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { PageShell } from "@/components/dossier/page-shell";
@@ -20,7 +22,7 @@ import { Md3Collapse } from "@/components/ui/md3-collapse";
 import { Md3Empty } from "@/components/ui/md3-empty";
 import { useJobs } from "@/components/jobs/job-store";
 import { findJobForReport } from "@/components/jobs/job-utils";
-import { TONE_BAR, TONE_TEXT as TONE_TEXT_ROLES } from "@/lib/tone";
+import { TONE_TEXT as TONE_TEXT_ROLES } from "@/lib/tone";
 import { cn } from "@/lib/cn";
 import { parseReportDocument } from "@/lib/core/report-document.mjs";
 
@@ -29,7 +31,6 @@ type Section = { heading: string; letter: string | null; content: string };
 type AlertTone = "success" | "warning" | "error" | "info";
 
 const TONE_TEXT = TONE_TEXT_ROLES;
-const SCORE_BAR = TONE_BAR;
 
 const ALERT_CLASS: Record<AlertTone, string> = {
   success: "md3-alert--success",
@@ -287,12 +288,16 @@ export function ReportView({
   app,
   report,
   canDelete = false,
+  record,
+  drafts = [],
 }: {
   id: string;
   app: Application | null;
   report: string | null;
   file?: string | null;
   canDelete?: boolean;
+  record?: ApplicationRecord;
+  drafts?: { kind: string; content: string }[];
 }) {
   const parsedDocument = report ? parseReportDocument(report) : null;
   const meta = parsedDocument ? {
@@ -306,10 +311,9 @@ export function ReportView({
   const score = app?.score || field("Score");
   const date = app?.date || field("Date");
   const archetype = field("Archetype");
-  const url = field("URL");
+  const url = field("URL") || app?.url;
 
   const n = scoreNum(score ?? "");
-  const tone = score ? scoreTone(score) : "muted";
   const applies = !Number.isNaN(n) ? n >= 4.0 : null;
   const company = app?.company ?? meta?.title ?? `Report #${id}`;
   const { jobs } = useJobs();
@@ -321,7 +325,7 @@ export function ReportView({
         <nav className="flex items-center gap-2 md-body-medium text-[var(--md-sys-color-on-surface-variant)]">
           <Link href="/pipeline" className="inline-flex items-center gap-1 hover:text-[var(--md-sys-color-primary)]">
             <MaterialSymbol name="arrow_back" size={18} />
-            Pipeline
+            Track
           </Link>
           <span>/</span>
           <span className="font-mono md-body-small">#{id}</span>
@@ -344,12 +348,12 @@ export function ReportView({
         <header className="flex flex-wrap items-start gap-5">
           <CompanyLogo name={company} size={64} className="rounded-[var(--md-sys-shape-corner-large-increased)]" />
           <div className="min-w-0 flex-1">
-            <h1 className="md-display-small-emphasized truncate text-[var(--md-sys-color-on-surface)]">{company}</h1>
+            <h1 className="md-display-small-emphasized break-words text-[var(--md-sys-color-on-surface)]">{company}</h1>
             {app?.role && (
-              <p className="mt-1 truncate md-title-large text-[var(--md-sys-color-on-surface-variant)]">{app.role}</p>
+              <p className="mt-1 break-words md-title-large text-[var(--md-sys-color-on-surface-variant)]">{app.role}</p>
             )}
           </div>
-          {score && (
+          {score && !record && (
             <div className="shrink-0 text-right">
               <span className="block text-[64px] font-bold leading-none text-[var(--md-sys-color-primary)] tabular-nums">
                 {formatScoreDisplay(score)}
@@ -360,7 +364,11 @@ export function ReportView({
         </header>
 
         <div className="grid grid-cols-1 items-start gap-7 lg:grid-cols-[minmax(0,1fr)_380px]">
-          <main className="min-w-0">
+          <div className="min-w-0 space-y-5">
+            {record && <ApplicationRecordPanel initial={record} drafts={drafts} />}
+            <details open={!record} className="rounded-2xl border border-[var(--md-sys-color-outline-variant)] p-4">
+              <summary className="cursor-pointer font-medium">Evaluation &amp; evidence</summary>
+              <div className="mt-4">
             {report ? (
               <ReportBody
                 body={meta?.body ?? report}
@@ -383,19 +391,15 @@ export function ReportView({
                 }
               />
             )}
-          </main>
+                <div className="mt-4"><ScoreMethodology /></div>
+              </div>
+            </details>
+          </div>
 
           <aside className="dossier-stack lg:sticky lg:top-6">
             <Md3Card title={<span className="md-title-small">Act on it</span>} className="report-meta-card">
-              <PipelineActions
-                n={id}
-                company={company}
-                role={app?.role}
-                url={url}
-                pdfReady={(app?.pdf ?? "").includes("✅")}
-                status={app?.status}
-                variant="rail"
-              />
+              <ApplyButton n={id} company={company} url={url || app?.url} pdfReady={(app?.pdf ?? "").includes("✅")} status={app?.status} rail />
+              {app?.status && /interview|offer/i.test(app.status) && <Link href={`/pipeline/${id}/interview`} className="md3-action-btn md3-action-btn--outlined mt-2 w-full">Interview workspace</Link>}
               {url && url.startsWith("http") && (
                 <a
                   href={url}
@@ -409,37 +413,7 @@ export function ReportView({
               )}
             </Md3Card>
 
-            <Md3Card title={<span className="md-title-small">Decision</span>} className="report-meta-card">
-              {score ? (
-                <div className="mb-3">
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <span className="text-xs text-[var(--md-sys-color-on-surface-variant)]">Evaluation score</span>
-                    <strong className={cn("tabular-nums", TONE_TEXT[tone])}>{formatScoreDisplay(score)}</strong>
-                  </div>
-                  {!Number.isNaN(n) && (
-                    <>
-                      <div className="report-score-track relative">
-                        <div className="h-1.5 overflow-hidden rounded-full bg-[var(--md-sys-color-surface-container-highest)]">
-                          <div
-                            className={cn("h-full rounded-full transition-[width]", SCORE_BAR[tone])}
-                            style={{ width: `${Math.min(Math.max(n / 5, 0), 1) * 100}%` }}
-                          />
-                        </div>
-                        <div className="report-apply-line" style={{ left: "80%" }} aria-hidden />
-                      </div>
-                      <div className="relative mt-1 h-3 text-[10px] text-[var(--md-sys-color-on-surface-variant)]">
-                        <span className="absolute left-0">1.0</span>
-                        <span className="absolute" style={{ left: "80%", transform: "translateX(-50%)" }}>
-                          4.0 apply
-                        </span>
-                        <span className="absolute right-0">5.0</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">No score on record.</p>
-              )}
+            <Md3Card title={<span className="md-title-small">Status &amp; details</span>} className="report-meta-card">
 
               <div className="mt-1">
                 {meta?.legitimacy && (
@@ -467,7 +441,7 @@ export function ReportView({
                 {app?.status && (
                   <div className="report-glance-row">
                     <span className="report-glance-label">Status</span>
-                    <StatusSelect n={id} current={app.status} score={app.score} />
+                    <StatusSelect n={id} current={app.status} score={app.score} submissionRecorded={record?.events.some((event) => event.kind === "application")} />
                   </div>
                 )}
               </div>
@@ -479,7 +453,6 @@ export function ReportView({
               )}
             </Md3Card>
 
-            <ScoreMethodology />
           </aside>
         </div>
       </DossierStack>

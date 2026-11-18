@@ -9,7 +9,7 @@ test("one immutable descriptor owns every /api/run kind and unknown kinds fail c
     return `${kind}:${args.join("|")}`;
   });
   const descriptors = Object.values(registry);
-  assert.equal(descriptors.length, 14);
+  assert.equal(descriptors.length, 15);
   for (const task of descriptors) {
     assert.equal(registry[task.kind], task);
     assert.equal(typeof task.prompt, "function");
@@ -49,5 +49,8 @@ test("groups and execution policy are declared on the registry entries", () => {
   assert.equal(registry["interview-questions"].timeoutMs, 360_000);
   assert.equal(registry["interview-practice"].timeoutMs, 300_000);
   assert.equal(registry.research.workerPhase, "fetch");
-  assert.ok(Object.values(registry).filter((task) => task.kind !== "research").every((task) => task.workerPhase === "write"));
+  // outreach is read-only research: the server, not the worker, saves its JSON result.
+  assert.equal(registry.outreach.workerPhase, "fetch");
+  assert.equal(registry.outreach.completionCheck, "output");
+  assert.ok(Object.values(registry).filter((task) => !["research", "outreach"].includes(task.kind)).every((task) => task.workerPhase === "write"));
 });

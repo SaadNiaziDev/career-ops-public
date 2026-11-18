@@ -1,18 +1,16 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { Md3ActionButton } from "@/components/ui/md3-action-button";
-import { useJobs } from "@/components/jobs/job-store";
-import { useApply } from "@/components/apply/apply-provider";
-import { cn } from "@/lib/cn";
 import Link from "next/link";
+import { MaterialSymbol } from "@/components/material-symbol";
+import { cn } from "@/lib/cn";
 import { canonStatus } from "@/lib/format";
 
+// Entry point from a pipeline row/report into its Apply kit (/apply?n=<num>).
+// The kit prepares whatever is missing (CV, answers, cover letter) itself, so
+// this is never locked behind "generate the PDF first".
 export function ApplyButton({
   n,
   url,
-  company,
-  pdfReady,
   status,
   rail = false,
 }: {
@@ -23,41 +21,18 @@ export function ApplyButton({
   status?: string;
   rail?: boolean;
 }) {
-  const router = useRouter();
-  const { jobs } = useJobs();
-  const apply = useApply();
   const canonicalStatus = canonStatus(status ?? "");
-
-  if (["APPLIED", "RESPONDED"].includes(canonicalStatus)) {
-    return <Link href={`/pipeline/${n}`} className={cn("md3-action-btn md3-action-btn--outlined", rail && "w-full")}>
-      {canonicalStatus === "APPLIED" ? "Open application" : "Log response"}
-    </Link>;
-  }
-
-  const pdfJobDone = jobs.some((j) => j.kind === "pdf" && j.input === n && j.status === "done");
+  const applied = ["APPLIED", "RESPONDED"].includes(canonicalStatus);
   const hasUrl = !!url && /^https?:\/\//i.test(url);
-  const ready = (pdfReady || pdfJobDone) && hasUrl;
-
-  if (!ready) {
-    const reason = !hasUrl ? "No application URL on this report" : "Generate the tailored CV first";
-    return (
-      <Md3ActionButton variant="outlined" disabled className={cn(rail && "w-full")} title={reason} icon="lock">
-        Apply
-      </Md3ActionButton>
-    );
-  }
 
   return (
-    <Md3ActionButton
-      variant="filled"
-      icon="send"
-      className={cn(rail && "w-full")}
-      onClick={() => {
-        apply.open(url!, { prefill: true, company, trackerNum: n });
-        router.push("/apply");
-      }}
+    <Link
+      href={`/apply?n=${encodeURIComponent(n)}`}
+      className={cn("md3-action-btn", applied ? "md3-action-btn--outlined" : "md3-action-btn--filled", rail && "w-full")}
+      title={hasUrl ? "Open the Apply kit: CV, answers, cover letter, then you submit" : "Open the Apply kit (this report has no application URL yet)"}
     >
-      Apply
-    </Md3ActionButton>
+      <MaterialSymbol name={applied ? "inventory_2" : "send"} size={18} />
+      <span className="md3-action-btn__label">{applied ? "Apply kit" : "Apply"}</span>
+    </Link>
   );
 }

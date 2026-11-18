@@ -65,7 +65,12 @@ export async function POST(req: Request) {
       } catch (e) {
         emit({ t: "error", message: e instanceof Error ? e.message.slice(0, 160) : "drive failed" });
       } finally {
-        controller.close();
+        // The success paths already closed the stream; a second close() throws.
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
       }
     },
   });

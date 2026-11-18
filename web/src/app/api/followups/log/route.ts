@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { activityIdFor, saveActivity } from "@/lib/application-activity-store";
 import path from "node:path";
 import { careerOpsRoot } from "@/lib/career-ops";
 import { updateContact } from "@/lib/contacts";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 // calculator reads this to advance the schedule). Mirrors how the CLI records a
 // follow-up. One dated line per logged follow-up.
 export async function POST(req: Request) {
-  let body: { num?: string | number; company?: string; note?: string; channel?: string; contactName?: string; contactEmail?: string; sentAt?: string };
+  let body: { num?: string | number; company?: string; note?: string; channel?: string; contactName?: string; contactEmail?: string; sentAt?: string; message?: string };
   try {
     body = (await req.json()) as { num?: string | number; company?: string; note?: string };
   } catch {
@@ -41,6 +42,9 @@ export async function POST(req: Request) {
     const previous = fs.readFileSync(file, "utf8");
     if (previous.split(/\r?\n/).some((existing) => existing.startsWith(`- ${today} · ${num}${company} —`))) {
       return Response.json({ error: "A follow-up is already recorded for this application today." }, { status: 409 });
+    }
+    if (typeof body.message === "string" && body.message.trim()) {
+      saveActivity(careerOpsRoot(), { id: activityIdFor(`followup-log:${today}:${numValue}`), n: numValue, kind: "followup", at: new Date(sentAt).toISOString(), channel: /linkedin/i.test(channel) ? "linkedin" : /email|gmail/i.test(channel) ? "email" : "other", recipient: contactEmail || contactName || undefined, body: body.message.slice(0, 20_000), note, sourceKey: `followup-log:${today}:${numValue}` });
     }
     atomicWrite(file, `${previous}${previous.endsWith("\n") ? "" : "\n"}${line}`);
   } catch (e) {

@@ -52,6 +52,7 @@
   "author": "Saad Ali Khan",
   "license": "MIT",
   "dependencies": {
+    "claude": "^0.1.1",
     "dotenv": "^17.0.0",
     "js-yaml": "^4.3.2",
     "playwright": "1.61.1"

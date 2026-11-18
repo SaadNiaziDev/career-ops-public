@@ -1,27 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { Md3Select } from "@/components/ui/md3-select";
 import { CANONICAL_STATES } from "@/lib/format";
 
-export function StatusSelect({ n, current, score }: { n: string; current: string; score?: string }) {
+export function StatusSelect({ n, current, submissionRecorded = false }: { n: string; current: string; score?: string; submissionRecorded?: boolean }) {
   const [status, setStatus] = useState(current);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  useEffect(() => setStatus(current), [current]);
+
   async function onChange(next: string) {
+    if (next === "Applied" && status !== "Applied" && !submissionRecorded) { router.push(`/apply?n=${n}#submit-record`); return; }
     const prev = status;
-    let overrideReason: string | undefined;
-    if (next === "Applied" && !window.confirm("Have you submitted the application? Marking Applied records a submission that has already happened.")) return;
-    const scoreValue = Number.parseFloat(String(score ?? "").replace(/[^\d.\-]/g, ""));
-    if (next === "Applied" && Number.isFinite(scoreValue) && scoreValue < 4) {
-      overrideReason = window.prompt("This role scored below 4.0. Why do you want to apply anyway?")?.trim();
-      if (!overrideReason) return;
-    }
     setStatus(next);
     setBusy(true);
     setError(null);
@@ -29,7 +25,7 @@ export function StatusSelect({ n, current, score }: { n: string; current: string
       const res = await fetch("/api/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ n, status: next, overrideReason, confirmedSubmission: next === "Applied" }),
+        body: JSON.stringify({ n, status: next, confirmedSubmission: next === "Applied" }),
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(result.error || "Status update failed. Please retry.");

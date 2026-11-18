@@ -5,6 +5,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
+import { createCareerOpsFixture } from "./test-support/career-ops-fixture.mjs";
 import { createIsolatedNextProject } from "./test-support/isolated-next-project.mjs";
 
 const WEB = path.dirname(new URL(import.meta.url).pathname);
@@ -21,7 +22,8 @@ async function unusedPort() {
 
 test("status API updates a tracker through the compiled route", { skip: process.platform === "win32", timeout: 90_000 }, async (t) => {
   const temp = fs.mkdtempSync(path.join(WEB, ".status-route-test-"));
-  const tracker = path.join(temp, "applications.md");
+  const fixtureRoot = createCareerOpsFixture(ROOT, path.join(temp, "home"));
+  const tracker = path.join(fixtureRoot, "data/applications.md");
   const project = createIsolatedNextProject(WEB, temp);
   const port = await unusedPort();
   fs.writeFileSync(tracker, [
@@ -36,7 +38,7 @@ test("status API updates a tracker through the compiled route", { skip: process.
     env: {
       ...process.env,
       CAREER_OPS_SESSION_TOKEN: SESSION,
-      CAREER_OPS_ROOT: ROOT,
+      CAREER_OPS_ROOT: fixtureRoot,
       CAREER_OPS_TRACKER: tracker,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -74,7 +76,7 @@ test("status API updates a tracker through the compiled route", { skip: process.
       "sec-fetch-site": "same-origin",
       "content-type": "application/json",
     },
-    body: JSON.stringify({ n: "1", status: "Applied" }),
+    body: JSON.stringify({ n: "1", status: "Applied", confirmedSubmission: true }),
   });
   const body = await response.json();
   assert.equal(response.status, 200, JSON.stringify(body));

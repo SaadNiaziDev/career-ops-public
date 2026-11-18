@@ -22,6 +22,7 @@ This fork is UI-first: the web app (`web/`) and Node scripts share the same file
 | `interview-prep/sessions/*.md` | Session transcripts (gitignored except scaffold) |
 | `portals.yml` | Customized company / scan config |
 | `data/applications.md` | Application tracker |
+| `data/application-activity/*` | Immutable submission and sent-message records, including channel, recipient, exact text, and CV filename |
 | `data/pipeline.md` | URL inbox |
 | `data/scan-history.tsv` | Scan dedup history |
 | `data/scan-runs.tsv` | Per-run scan counters |
@@ -29,6 +30,7 @@ This fork is UI-first: the web app (`web/`) and Node scripts share the same file
 | `data/contacts.tsv` | Outreach contacts linked to tracker rows |
 | `data/interview-rounds.tsv` | Per-tracker interview round schedule and status |
 | `data/drafts/*` | Cover letter, email, and contact outreach drafts |
+| `data/outreach/*` | One-click outreach drafts: hiring contact, email, follow-ups, sent state |
 | `data/titles-suggestions.json` | CV-driven adjacent title suggestions (titles mode) |
 | `data/offers/*` | Received offers/contracts and prep reports (PII — gitignored) |
 | `data/blacklist.md` | Do-not-apply list (opt-in) |
