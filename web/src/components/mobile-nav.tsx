@@ -77,7 +77,7 @@ export function MobileNav() {
         aria-label="Navigation menu"
         inert={!open}
         className={cn("co-mdrawer xl:hidden", open && "open")}
-        data-lenis-prevent
+       
       >
         <div className="flex items-center justify-between px-4 py-3">
           <span className="md-title-medium text-[var(--md-sys-color-on-surface)]">Menu</span>

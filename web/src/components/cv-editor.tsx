@@ -465,7 +465,7 @@ export function CvEditor() {
   }
 
   return (
-    <div className="cv-studio" data-co-tour="cv-editor">
+    <div className="cv-studio">
       <h1 className="sr-only">Master CV and tailored CVs</h1>
       {/* Blueprint S07 — three peers on one screen: markdown, the printed page,
           style. Everything that used to stack (page header, source row, view
@@ -597,7 +597,7 @@ export function CvEditor() {
             // instead of growing the page as the CV gets longer.
             <label className="md3-field md3-field--textarea min-h-0 flex-col">
               <textarea
-                data-lenis-prevent
+               
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 spellCheck={false}
@@ -620,7 +620,7 @@ export function CvEditor() {
               )}
               <div
                 ref={previewBoxRef}
-                data-lenis-prevent
+               
                 className="relative flex min-h-0 flex-1 justify-center overflow-auto bg-white p-4"
               >
                       {previewLoading && (
@@ -675,7 +675,7 @@ export function CvEditor() {
           )}
 
           {settings && activeSource !== "cv.md" && (
-            <aside className="cv-studio__rail" data-lenis-prevent>
+            <aside className="cv-studio__rail">
                   <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">
                     Changes preview instantly. Save to write them to <code>config/profile.yml</code> so PDF runs use them too.
                   </p>

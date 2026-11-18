@@ -7,25 +7,20 @@
     "dev": "node scripts/start-local.mjs dev",
     "build": "next build",
     "start": "node scripts/start-local.mjs start",
-    "sessions:backfill": "node scripts/backfill-interview-session-ids.mjs",
-    "sessions:backfill:apply": "node scripts/backfill-interview-session-ids.mjs --apply",
     "typecheck": "tsc --noEmit",
     "test:flow": "node test-application-flow.mjs",
     "test:mobile": "npm run build && node test-mobile-layout.mjs",
-    "test": "node --experimental-strip-types --test test-application-activity.mjs test-clean-chips.mjs test-interview-shared.mjs test-format.mjs test-vacancy-identity.mjs test-first-score-policy.mjs test-list-sort-policy.mjs test-apply-snapshot.mjs test-apply-kit.mjs test-run-policy.mjs test-run-registry.mjs test-run-task-registry.mjs test-cli-output-adapters.mjs test-worker-admission.mjs test-request-bounds.mjs test-onboarding-readiness.mjs test-csv-safety.mjs test-public-url-policy.mjs test-api-security.mjs test-worker-sandbox.mjs test-worker-limits.mjs test-status-route.mjs test-outreach.mjs test-brain.mjs"
+    "test": "node --experimental-strip-types --test test-application-activity.mjs test-clean-chips.mjs test-format.mjs test-vacancy-identity.mjs test-first-score-policy.mjs test-list-sort-policy.mjs test-apply-snapshot.mjs test-apply-kit.mjs test-run-policy.mjs test-run-registry.mjs test-run-task-registry.mjs test-cli-output-adapters.mjs test-worker-admission.mjs test-request-bounds.mjs test-onboarding-readiness.mjs test-csv-safety.mjs test-public-url-policy.mjs test-api-security.mjs test-worker-sandbox.mjs test-worker-limits.mjs test-status-route.mjs test-outreach.mjs test-brain.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sandbox-runtime": "^0.0.77",
-    "@paper-design/shaders-react": "^0.0.77",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "js-yaml": "^4.3.2",
-    "lenis": "^1.3.25",
     "next": "16.3.6",
     "playwright-core": "^1.61.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "react-joyride": "^3.2.0",
     "react-markdown": "^9.0.1",
     "remark-gfm": "^4.0.0",
     "tailwind-merge": "^3.5.0"

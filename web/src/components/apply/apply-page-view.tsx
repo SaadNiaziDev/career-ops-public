@@ -60,7 +60,7 @@ export function ApplyPageView({ mode, n, kit, queue, emails }: { mode: ApplyPage
       <div className="relative z-10">
         <PageShell width={mode === "email" ? "wide" : "narrow"}>
           <DossierStack>
-            <div data-co-tour="apply-intro">
+            <div>
               <DossierPageHeader
                 title={
                   <span className="inline-flex items-center gap-3">
@@ -101,7 +101,7 @@ export function ApplyPageView({ mode, n, kit, queue, emails }: { mode: ApplyPage
                 </Md3Empty>
               ))}
             {mode === "form" && (
-              <div data-co-tour="apply-form">
+              <div>
                 <ApplyView />
               </div>
             )}

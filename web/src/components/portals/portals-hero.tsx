@@ -4,7 +4,7 @@ import { DossierHero } from "@/components/dossier/dossier-hero";
 
 export function PortalsHero() {
   return (
-    <div data-co-tour="portals-hero">
+    <div>
     <DossierHero
       eyebrow="Scanner config"
       title="Portals & keywords"

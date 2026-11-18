@@ -13,7 +13,7 @@ export function NavigationRail() {
   const running = jobs.filter((j) => j.status === "running").length;
 
   return (
-    <nav className="md3-rail sticky top-0 h-screen shrink-0" aria-label="Primary" data-co-tour="nav-rail">
+    <nav className="md3-rail sticky top-0 h-screen shrink-0" aria-label="Primary">
       <Link href="/" className="md3-rail-mark" aria-label="career-ops home">
         <CoMark size={28} />
       </Link>
@@ -26,7 +26,7 @@ export function NavigationRail() {
         <button
           type="button"
           className="md3-rail-item"
-          data-co-tour="workers"
+         
           data-active={open ? "true" : "false"}
           aria-pressed={open}
           aria-label={running > 0 ? `Activity, ${running} running` : "Activity"}

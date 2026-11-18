@@ -13,7 +13,6 @@ import { useTheme } from "@/components/providers/theme-provider";
 import { cliDisplayName, readCliConfig, writeCliConfig, CONFIG_KEY } from "@/lib/cli-config";
 import { cn } from "@/lib/cn";
 import type { ReadinessResult } from "@/lib/onboarding/readiness";
-import { ProductTourControls } from "@/components/product-tour/product-tour-host";
 
 // The rail switches between groups: one group is mounted at a time. This is a
 // deliberate departure from blueprint S13 · redline 1 ("section rail, not tabs
@@ -282,7 +281,7 @@ export function ConfigForm() {
               </button>
             </ConfigRow>
 
-            <div className="mt-4 flex flex-col gap-2" data-co-tour="config-cli">
+            <div className="mt-4 flex flex-col gap-2">
               {clis === null ? (
                 <p className="text-sm text-[var(--md-sys-color-on-surface-variant)]">Scanning PATH…</p>
               ) : (
@@ -334,7 +333,7 @@ export function ConfigForm() {
 
           <section className={cn("config-panel mt-6", ["identity","goals","constraints","documents","followups"].includes(activeSection) ? "" : "hidden")}>
             <header className="config-group-head"><h2 className="md-title-medium">{SECTIONS.find(s=>s.id===activeSection)?.label}</h2><code className="config-group-file">config/profile.yml</code></header>
-            <div data-co-tour="config-profile"><ProfilePanel section={activeSection as "identity"|"goals"|"constraints"|"documents"|"followups"}/></div>
+            <div><ProfilePanel section={activeSection as "identity"|"goals"|"constraints"|"documents"|"followups"}/></div>
             {activeSection === "goals" && <><ConfigDivider/><div><p className="text-base font-semibold">Scoring weights</p><p className="mb-4 mt-1 text-[13px] text-[var(--md-sys-color-outline)]">Controls how Explore ranks jobs. Saved to <code>portals.yml → ranking.weights</code>.</p><WeightsEditor/></div></>}
           </section>
 
@@ -344,8 +343,6 @@ export function ConfigForm() {
             file="data/ · reports/"
             active={activeSection === "data"}
           >
-            <ProductTourControls />
-            <ConfigDivider />
             <div className="flex flex-wrap items-center gap-4">
               <div className="min-w-0 flex-1">
                 <p className="text-base font-semibold">

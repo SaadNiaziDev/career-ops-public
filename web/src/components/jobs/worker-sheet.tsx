@@ -165,7 +165,7 @@ export function WorkerSheet() {
               <MaterialSymbol name="close" size={22} />
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3" data-lenis-prevent>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
             <WorkerTray />
           </div>
           <div className="border-t border-[var(--md-sys-color-outline-variant)] px-4 py-3">

@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "lenis/dist/lenis.css";
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ── Material Design 3 — shared tokens (theme-agnostic) ───────────────────── */
@@ -842,24 +841,7 @@ html.dark .dossier-hero-scrim {
   margin-top: 2px;
 }
 
-/* ── Lenis + page shell ───────────────────────────────────────────────────── */
-.lenis-scroll-progress {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 45;
-  height: 2px;
-  width: 100%;
-  transform-origin: 0 50%;
-  background: var(--md-sys-color-primary);
-  pointer-events: none;
-  opacity: 0.85;
-}
-@media (max-width: 767px) {
-  .lenis-scroll-progress {
-    top: env(safe-area-inset-top, 0px);
-  }
-}
+/* ── Page shell ── */
 .page-shell {
   margin-inline: auto;
   width: 100%;
@@ -889,10 +871,6 @@ html.dark .dossier-hero-scrim {
   .dossier-hero-inner {
     transform: none !important;
   }
-}
-.lenis-drawer-root .ant-drawer-body,
-.lenis-drawer-root .report-prose {
-  overscroll-behavior: contain;
 }
 
 /* ── MD3 navigation rail ─────────────────────────────────────────────────── */
@@ -1800,12 +1778,6 @@ html.dark .dossier-hero-scrim {
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-/* Lenis owns window scroll with smoothWheel — any nested scroller it is not
-   told about swallows the wheel instead of scrolling. Every internal scroller
-   in the studio must carry data-lenis-prevent. */
-.cv-studio [data-lenis-prevent] {
-  overscroll-behavior: contain;
 }
 .cv-studio__bar {
   display: flex;

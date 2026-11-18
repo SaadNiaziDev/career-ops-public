@@ -115,13 +115,13 @@ export function JobLinkHub({ compact = false, origin = "/add", className }: Prop
   const body = (
     <>
       {notice && <p role="status" className={cn("md3-alert mb-3", `md3-alert--${notice.tone}`)}>{notice.text}</p>}
-      <div data-co-tour="add-job-hub"><Md3Input
+      <div><Md3Input
         icon="link" type="url" placeholder="https://company.com/careers/…" value={raw}
         onChange={(event) => { inspectionAbort.current?.abort(); setBusy(false); setRaw(event.target.value); setInspection(null); setConfirmedOpen(false); setPostingText(""); setShowPaste(false); }}
         onKeyDown={(event) => event.key === "Enter" && void inspect()}
         aria-label="Job posting URL"
       /></div>
-      <div className={cn("md3-actions-row mt-4", compact && "mt-3")} data-co-tour="add-job-actions">
+      <div className={cn("md3-actions-row mt-4", compact && "mt-3")}>
         <Md3ActionButton variant="filled" icon="travel_explore" disabled={!url || busy} loading={busy} onClick={() => void inspect()}>
           Check link
         </Md3ActionButton>

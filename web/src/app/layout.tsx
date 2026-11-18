@@ -1,13 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { robotoFlex, robotoMono } from "@/lib/fonts";
 import { AppShell } from "@/components/app-shell";
-import { LenisProvider } from "@/components/providers/lenis-provider";
 import { THEME_INIT_SCRIPT } from "@/lib/theme-script";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "career-ops — official web experience",
-  description: "The official, local-first web experience for career-ops.",
+  title: "career-ops",
+  description: "Local-first job search: search, apply, track.",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "career-ops" },
 };
 
@@ -27,9 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="font-sans antialiased">
-        <LenisProvider>
-          <AppShell>{children}</AppShell>
-        </LenisProvider>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

@@ -12,7 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useJobs } from "@/components/jobs/job-store";
 import { usePipeline } from "@/components/pipeline/pipeline-provider";
-import { HeroGlow } from "@/components/hero-glow";
 import { PageShell } from "@/components/dossier/page-shell";
 import { DossierStack, DossierInsetStack } from "@/components/dossier/dossier-stack";
 import {
@@ -145,7 +144,6 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
         </nav>
 
         <Md3Card className="relative overflow-hidden !p-0">
-          {running && <HeroGlow />}
           <DossierInsetStack className="relative z-10 p-[var(--card-pad-y)] px-[var(--card-pad-x)]">
             <div className="flex w-full flex-wrap items-center justify-between gap-2.5">
               <div className="flex flex-wrap items-center gap-2.5">

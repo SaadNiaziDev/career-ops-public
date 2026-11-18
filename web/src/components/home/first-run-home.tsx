@@ -9,7 +9,6 @@ import { CvIngest } from "@/components/cv/cv-ingest";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { cliDisplayName, readCliConfig, writeCliConfig } from "@/lib/cli-config";
 import { cn } from "@/lib/cn";
-import { markPhaseComplete } from "@/lib/product-tour";
 
 type WizardStep = "cv" | "cli" | "verify";
 type Check = { id: string; label: string; ok: boolean; cause?: string; recovery?: string };
@@ -83,7 +82,6 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
       localStorage.setItem("career-ops:onboarding-diagnostics", JSON.stringify(data.checks));
       if (response.ok && data.ready) {
         localStorage.removeItem("career-ops:onboarding-diagnostics");
-        markPhaseComplete("onboarding");
         localStorage.removeItem("career-ops:first-run-step");
         window.location.assign("/explore");
       }
@@ -104,7 +102,7 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
 
   return (
     <PageShell width="default">
-      <div data-co-tour="welcome">
+      <div>
         <p className="md-eyebrow">Welcome</p>
         <h1 className="md-display-small-emphasized mt-2">Find your next opportunity</h1>
         <p className="mt-2.5 max-w-[640px] text-[17px] leading-relaxed text-[var(--md-sys-color-on-surface-variant)]">
@@ -141,7 +139,7 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
       </ol>
 
       {wizardStep === "cli" ? (
-        <section className="mt-7" data-co-tour="cli">
+        <section className="mt-7">
           <h2 className="text-lg font-medium text-[var(--md-sys-color-on-surface)]">Choose an AI engine</h2>
           <p className="mt-1 max-w-[640px] text-sm text-[var(--md-sys-color-on-surface-variant)]">
             This step is optional. We select an installed engine automatically. Choose one here only if you want to change it.
@@ -175,7 +173,7 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
           </div>
         </section>
       ) : wizardStep === "cv" ? (
-        <section className="mt-7" data-co-tour="cv">
+        <section className="mt-7">
           <h2 className="text-lg font-medium text-[var(--md-sys-color-on-surface)]">Add your CV</h2>
           <p className="mt-1 max-w-[640px] text-sm text-[var(--md-sys-color-on-surface-variant)]">
             Drop a PDF or <code className="font-mono text-[12px]">.md</code> file, or paste the text. PDF text is extracted locally
@@ -220,7 +218,7 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
           </button>
         </section>
       ) : (
-        <section className="mt-7" data-co-tour="verify">
+        <section className="mt-7">
           <h2 className="text-lg font-medium text-[var(--md-sys-color-on-surface)]">Verify this machine</h2>
           <p className="mt-1 max-w-[640px] text-sm text-[var(--md-sys-color-on-surface-variant)]">
             A small local smoke test checks CLI sign-in, saved files, writable folders, and PDF rendering before your first job.

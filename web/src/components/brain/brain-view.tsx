@@ -173,8 +173,8 @@ export function BrainView({ initial, loadError }: { initial: BrainState | null; 
         title="Brain"
         description="Teach outreach who you are. Every email it writes reads from here."
         extra={
-          <Link href="/outreach" className="inline-flex items-center gap-1 text-sm text-[var(--md-sys-color-primary)] hover:underline">
-            Go to Outreach <MaterialSymbol name="arrow_forward" size={16} />
+          <Link href="/apply?view=email" className="inline-flex items-center gap-1 text-sm text-[var(--md-sys-color-primary)] hover:underline">
+            Go to email drafts <MaterialSymbol name="arrow_forward" size={16} />
           </Link>
         }
       />

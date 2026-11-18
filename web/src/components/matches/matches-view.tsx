@@ -605,7 +605,7 @@ export function MatchesView({ items, search }: { items: MatchItem[]; search: Mat
             </div>
             <Tabs tab={tab} counts={counts} onChange={changeTab} />
             {visible.length > 0 && (
-              <nav aria-label={`${tab} matches`} className="hidden max-h-[calc(100vh-22rem)] min-h-[12rem] overflow-y-auto overscroll-contain rounded-[var(--md-sys-shape-corner-extra-large)] bg-[var(--md-sys-color-surface-container)] py-1 lg:block" data-lenis-prevent>
+              <nav aria-label={`${tab} matches`} className="hidden max-h-[calc(100vh-22rem)] min-h-[12rem] overflow-y-auto overscroll-contain rounded-[var(--md-sys-shape-corner-extra-large)] bg-[var(--md-sys-color-surface-container)] py-1 lg:block">
                 {visible.map((item) => (
                   <ListRow key={item.id} item={item} active={selected?.id === item.id} running={runningFor(item).length > 0} onClick={() => select(item.id)} />
                 ))}

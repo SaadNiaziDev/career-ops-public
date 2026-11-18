@@ -399,7 +399,6 @@ export function ReportView({
           <aside className="dossier-stack lg:sticky lg:top-6">
             <Md3Card title={<span className="md-title-small">Act on it</span>} className="report-meta-card">
               <ApplyButton n={id} company={company} url={url || app?.url} pdfReady={(app?.pdf ?? "").includes("✅")} status={app?.status} rail />
-              {app?.status && /interview|offer/i.test(app.status) && <Link href={`/pipeline/${id}/interview`} className="md3-action-btn md3-action-btn--outlined mt-2 w-full">Interview workspace</Link>}
               {url && url.startsWith("http") && (
                 <a
                   href={url}

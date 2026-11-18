@@ -414,7 +414,7 @@ export function OutreachView({ initialItems, picks, embedded = false }: { initia
     if (!value) return;
     const company = items.find((i) => i.trackerNum === value)?.company;
     const avoidContacts = items.filter((i) => company && i.company === company && i.status !== "dismissed").map((i) => i.contact.name);
-    const id = startJob({ title: `Finding who's hiring: ${label}`, kind: "outreach", input: value, page: "/outreach", context: { tone, avoidContacts } });
+    const id = startJob({ title: `Finding who's hiring: ${label}`, kind: "outreach", input: value, page: "/apply?view=email", context: { tone, avoidContacts } });
     if (!id) toast({ message: "Pick a CLI in Config first.", tone: "error" });
   }
 
@@ -429,7 +429,6 @@ export function OutreachView({ initialItems, picks, embedded = false }: { initia
       <DossierPageHeader
         title="Email drafts"
         description="Find a hiring contact, review your message, and open it in your mail app. Confirm after sending to save the exact message in Track."
-        extra={<Link href="/contacts" className="text-sm text-[var(--md-sys-color-primary)] hover:underline">All contacts</Link>}
       />
 
       <div className="mb-5 rounded-3xl border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] p-4">

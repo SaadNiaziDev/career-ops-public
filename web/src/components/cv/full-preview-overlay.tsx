@@ -215,7 +215,7 @@ export function FullPreviewOverlay({
 
       <div className="cv-overlay__body">
         {/* Page thumbnails — 150px, click to jump, selected outlined in primary. */}
-        <nav className="cv-overlay__thumbs" aria-label="Pages" data-lenis-prevent>
+        <nav className="cv-overlay__thumbs" aria-label="Pages">
           {Array.from({ length: pages }, (_, i) => (
             <button
               key={i}
@@ -252,7 +252,7 @@ export function FullPreviewOverlay({
           ))}
         </nav>
 
-        <div ref={scrollRef} className="cv-overlay__stage" data-lenis-prevent>
+        <div ref={scrollRef} className="cv-overlay__stage">
           {showDiff ? (
             <div className="cv-diff">
               <p className="mb-3 text-sm text-[var(--md-sys-color-on-surface-variant)]">
@@ -311,7 +311,7 @@ export function FullPreviewOverlay({
           )}
         </div>
 
-        <aside className="cv-overlay__rail" data-lenis-prevent>
+        <aside className="cv-overlay__rail">
           {/* Fit panel — collapses to one line when the CV already fits. */}
           {fit.pages <= 1 ? (
             <p className="cv-fit cv-fit--ok">

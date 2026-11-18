@@ -168,7 +168,7 @@ export function ExplorerView({
               <MaterialSymbol name="explore" size={24} className="text-[var(--md-sys-color-primary)]" />
               <h1 className="mb-0 md-headline-medium">Search</h1>
             </div>
-            <div className="w-full sm:ml-auto sm:w-auto" data-co-tour="explore-modes">
+            <div className="w-full sm:ml-auto sm:w-auto">
               <ExploreModeToggle mode={mode} onChange={setMode} cliConfigured={cliConfigured} />
             </div>
           </div>
@@ -222,7 +222,7 @@ export function ExplorerView({
                   {aiCost.estUsd != null && ` · estimated ${fmtUsd(aiCost.estUsd)}`}
                 </p>
               )}
-              <div data-co-tour="explore-results">{isResults && <ResultsList offers={enriched} />}</div>
+              <div>{isResults && <ResultsList offers={enriched} />}</div>
               {showPhase("empty-loose") && (
                 <EmptyState
                   tone="loose"
@@ -294,7 +294,7 @@ export function ExplorerView({
                 onRefine={() => setRefineOpen(true)}
               />
             )}
-            <div data-co-tour="explore-results">{isResults && <ResultsList offers={enriched} />}</div>
+            <div>{isResults && <ResultsList offers={enriched} />}</div>
 
             {showScanFinds && (
               <ScanFindsSection offers={scanFindOffers} latestDate={scans.latestDate} totalPending={scans.totalPending} />
@@ -344,7 +344,7 @@ export function ExplorerView({
               onOpenChange={setRefineOpen}
               title={<span className="inline-flex items-center gap-2"><MaterialSymbol name="tune" size={18} />Refine search</span>}
             >
-              <div className="flex w-full flex-col gap-4" data-co-tour="explore-filters">
+              <div className="flex w-full flex-col gap-4">
                 <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
                 <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Search again · free" />
               </div>
