@@ -2,45 +2,18 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import { atomicWrite } from "@/lib/core/safe-write";
-import { parseApplications } from "@/lib/tracker-table.mjs";
+import { db } from "@/lib/db";
+import { careerOpsRoot } from "@/lib/career-ops-root";
 import { parseMachineSummary } from "@/lib/format";
 import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
-import { offerDeadlineFromNotes, scheduledInterviewDates } from "@/lib/list-sort-policy";
+import { offerDeadlineFromNotes } from "@/lib/list-sort-policy";
 import { onboardingVerificationPending } from "@/lib/onboarding/readiness-state";
-import { parsePipeline } from "@/lib/core/pipeline-entry.mjs";
 
-/**
- * Resolve the career-ops "home" — the directory holding the user's sibling
- * files (cv.md, data/, reports/). In production the web/ app lives inside the
- * career-ops checkout, so the home is its parent (..). Dev overrides via
- * CAREER_OPS_ROOT to read the user's real (gitignored) data from a separate
- * checkout — see web/.env.local.
- */
-export function careerOpsRoot(): string {
-  const env = process.env.CAREER_OPS_ROOT?.trim();
-  if (env) return env;
-  return path.resolve(process.cwd(), "..");
-}
+export { careerOpsRoot, rootScript } from "@/lib/career-ops-root";
 
-/**
- * Absolute path to a core root script (e.g. doctor, verify-portals). The `.mjs`
- * is assembled here from the bare name so the literal never appears as a direct
- * `execFile`/`spawn` argument — Next's bundler statically traces such literals
- * as module imports and fails the production build otherwise.
- */
-export function rootScript(nameNoExt: string): string {
-  return path.join(careerOpsRoot(), `${nameNoExt}.mjs`);
-}
-
-// Feature-detect the core's `tracker.mjs delete --num` row-delete (#1200) by probing
-// the local script source — older checkouts lack it, so the delete UI hides itself.
+/** Rows are soft-deleted in SQLite, so deletion is always available. */
 export function trackerCanDelete(): boolean {
-  try {
-    const src = fs.readFileSync(rootScript("tracker"), "utf8");
-    return src.includes("delete") && src.includes("--num");
-  } catch {
-    return false;
-  }
+  return true;
 }
 
 function read(rel: string): string | null {
@@ -63,68 +36,27 @@ export type InboxJob = {
   fitScore?: number;
 };
 
-/** Parse data/pipeline.md — `- [ ] URL | Company | Role [| Location [| Compensation]]`.
- *  Positional split (NOT a greedy trailing group): the optional 4th `location`
- *  (#1015) and 5th `compensation` (#1017) columns must NOT bleed into `role`;
- *  any further trailing columns are ignored gracefully. */
+type JobRow = { url: string; company: string; role: string; location: string | null; compensation: string | null; posted_at: string | null; fit_score: number | null; done: number };
+
+/** The job inbox: postings found by search or added by hand, oldest first. */
 export function readInbox(): InboxJob[] {
-  const md = read("data/pipeline.md");
-  if (!md) return [];
-  const jobs: InboxJob[] = [];
-  // First-wins by URL, but a later richer row (fit / location) replaces a thin one —
-  // scanners + "Add to pipeline" can both write the same posting.
-  const byUrl = new Map<string, number>();
-  const richness = (j: InboxJob) => (j.fitScore != null ? 2 : 0) + (j.location ? 1 : 0);
-  for (const entry of parsePipeline(md).entries) {
-    if (entry.reportLinked || !entry.url || !entry.company || !entry.role) continue;
-    const job: InboxJob = {
-      done: entry.done,
-      url: entry.url,
-      company: entry.company,
-      role: entry.role,
-      location: entry.location || undefined,
-      compensation: entry.compensation || undefined,
-      postedAt: entry.postedAt,
-      fitScore: entry.fitScore,
-    };
-    const key = normalizeVacancyUrl(job.url) ?? job.url;
-    const prevIdx = byUrl.get(key);
-    if (prevIdx === undefined) {
-      byUrl.set(key, jobs.length);
-      jobs.push(job);
-      continue;
-    }
-    const prev = jobs[prevIdx];
-    if (prev && richness(job) > richness(prev)) jobs[prevIdx] = job;
-  }
-  return jobs;
+  const rows = db().prepare("SELECT url, company, role, location, compensation, posted_at, fit_score, done FROM jobs WHERE removed = 0 ORDER BY seq, created_at").all() as JobRow[];
+  return rows.map((r) => ({
+    url: r.url,
+    company: r.company,
+    role: r.role,
+    location: r.location ?? undefined,
+    compensation: r.compensation ?? undefined,
+    postedAt: r.posted_at ?? undefined,
+    fitScore: r.fit_score ?? undefined,
+    done: r.done === 1,
+  }));
 }
 
-/**
- * Read data/scan-history.tsv → Map<url, first_seen(YYYY-MM-DD)>. The scanner
- * already stamps every discovered posting with the date it was first seen
- * (col 2), so we derive the inbox's freshness signal here WITHOUT touching the
- * core (see the inbox-triage build: freshness = option A, no scanner change).
- * Tolerant by construction: no file → empty map (freshness facet just hides);
- * a malformed row is skipped, never thrown (missing ≠ corrupt).
- */
+/** url key → first date the posting was seen by a scan. */
 export function readScanDates(): Map<string, string> {
-  const tsv = read("data/scan-history.tsv");
-  const dates = new Map<string, string>();
-  if (!tsv) return dates;
-  const lines = tsv.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line || (i === 0 && line.startsWith("url\t"))) continue; // skip header
-    const tab = line.indexOf("\t");
-    if (tab < 1) continue;
-    const url = line.slice(0, tab);
-    const firstSeen = line.slice(tab + 1).split("\t")[0]?.trim();
-    // keep the EARLIEST first_seen if a url recurs (it's "first" seen, after all)
-    const key = normalizeVacancyUrl(url) ?? url;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(firstSeen) && !dates.has(key)) dates.set(key, firstSeen);
-  }
-  return dates;
+  const rows = db().prepare("SELECT key, first_seen FROM seen").all() as { key: string; first_seen: string }[];
+  return new Map(rows.map((r) => [r.key, r.first_seen]));
 }
 
 export type ScanFind = InboxJob & { firstSeen: string; source: string };
@@ -136,57 +68,26 @@ function scanSourceLabel(portal: string): string {
   const api = p.match(/^([a-z0-9]+)-api$/i);
   if (api) return api[1][0].toUpperCase() + api[1].slice(1);
   if (p === "local-parser") return "Local parser";
-  // Query-name portals read like "WebSearch — PK tracked companies"; the card has
-  // room for the source, not the whole query.
   return p.split(/\s+[—–-]\s+/)[0].slice(0, 24);
 }
 
-/** data/scan-history.tsv → Map<url, {firstSeen, portal}> (first row per url wins). */
-function readScanMeta(): Map<string, { firstSeen: string; portal: string }> {
-  const tsv = read("data/scan-history.tsv");
-  const meta = new Map<string, { firstSeen: string; portal: string }>();
-  if (!tsv) return meta;
-  const lines = tsv.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line || (i === 0 && line.startsWith("url\t"))) continue;
-    const cols = line.split("\t");
-    const [url, firstSeen, portal] = cols;
-    const key = normalizeVacancyUrl(url) ?? url;
-    if (!url || !/^\d{4}-\d{2}-\d{2}$/.test(firstSeen ?? "") || meta.has(key)) continue;
-    meta.set(key, { firstSeen, portal: portal ?? "" });
-  }
-  return meta;
-}
-
-/**
- * Pending inbox rows a scanner added within the last `days`, newest first.
- * Explore runs its own in-browser sweep whose results never touch disk, so
- * without this the CLI/portal scans (`scan.mjs` → pipeline.md) are invisible
- * there. Rows with no scan-history entry (hand-pasted URLs) are left out —
- * this is "what the scanner found", not "everything pending".
- */
+/** Pending inbox rows a scan found within the last `days`, newest first. */
 export function recentScanFinds({ days = 14, limit = 30 } = {}): {
   finds: ScanFind[];
   latestDate: string | null;
   totalPending: number;
 } {
-  const meta = readScanMeta();
+  const meta = new Map((db().prepare("SELECT key, first_seen, source FROM seen").all() as { key: string; first_seen: string; source: string }[]).map((r) => [r.key, r]));
   const pending = readInbox().filter((j) => !j.done);
   const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
   const scanned = pending
     .map((j) => {
       const m = meta.get(normalizeVacancyUrl(j.url) ?? j.url);
-      return { ...j, firstSeen: m?.firstSeen ?? "", source: scanSourceLabel(m?.portal ?? "") };
+      return { ...j, firstSeen: m?.first_seen ?? "", source: scanSourceLabel(m?.source ?? "") };
     })
     .filter((j): j is ScanFind => !!j.firstSeen && j.firstSeen >= cutoff)
     .sort((a, b) => b.firstSeen.localeCompare(a.firstSeen) || a.company.localeCompare(b.company) || a.url.localeCompare(b.url));
-
-  return {
-    finds: scanned.slice(0, limit),
-    latestDate: scanned[0]?.firstSeen ?? null,
-    totalPending: pending.length,
-  };
+  return { finds: scanned.slice(0, limit), latestDate: scanned[0]?.firstSeen ?? null, totalPending: pending.length };
 }
 
 export type Application = {
@@ -209,22 +110,12 @@ export type Application = {
 
 export type ApplicationStageEvent = { n: string; from: string; to: string; at: string };
 
-/** Status history is written by the local web status endpoint from this release onward. */
 export function readApplicationStageHistory(): ApplicationStageEvent[] {
-  const raw = read("data/application-stage-history.json");
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((row): row is ApplicationStageEvent =>
-      !!row && typeof row === "object" &&
-      typeof row.n === "string" && /^\d+$/.test(row.n) &&
-      typeof row.from === "string" && typeof row.to === "string" &&
-      typeof row.at === "string" && !Number.isNaN(Date.parse(row.at)),
-    );
-  } catch {
-    return [];
-  }
+  const rows = db().prepare("SELECT n, at, data FROM events WHERE kind = 'status' ORDER BY at").all() as { n: number; at: string; data: string }[];
+  return rows.map((r) => {
+    const d = JSON.parse(r.data) as { from?: string; to?: string };
+    return { n: String(r.n), from: d.from ?? "", to: d.to ?? "", at: r.at };
+  });
 }
 
 function reportsWithVerifiedPdf(): Set<string> {
@@ -250,46 +141,32 @@ function reportsWithVerifiedPdf(): Set<string> {
   return ready;
 }
 
-/**
- * Parse data/applications.md — the tracker table (source of truth).
- * The header-aware parsing lives in tracker-table.mjs, which resolves headers
- * through the SAME alias table the Node tooling uses (tracker-aliases.json,
- * exported by tracker-parse.mjs as HEADER_ALIASES) — one shared source, no
- * web-side mirror to drift (#954, PR #1598 review).
- */
+type AppRow = { n: number; date: string; company: string; via: string; role: string; location: string | null; score: string; status: string; pdf: string; report: string; notes: string; r_url: string | null; r_location: string | null };
+
+/** All tracked applications, in tracker-number order. */
 export function readApplications(): Application[] {
-  const md = read("data/applications.md");
-  if (!md) return [];
+  const rows = db().prepare(`SELECT a.*, r.url AS r_url, r.location AS r_location FROM applications a
+    LEFT JOIN reports r ON r.n = a.n
+    WHERE a.deleted = 0 ORDER BY a.n`).all() as AppRow[];
   const pdfReady = reportsWithVerifiedPdf();
-  const scheduled = scheduledInterviewDates(read("data/interview-rounds.tsv") ?? "");
-  return parseApplications(md, careerOpsRoot()).map((row: Application) => {
-    const report = readReportDetails(row.n);
+  return rows.map((row) => {
     const reportNum = row.report.match(/\[(\d+)\]/)?.[1];
     return {
-      ...row,
+      n: String(row.n),
+      date: row.date,
+      company: row.company,
+      via: row.via,
+      role: row.role,
+      score: row.score,
+      status: row.status,
+      report: row.report,
+      notes: row.notes,
       pdf: reportNum && pdfReady.has(String(Number.parseInt(reportNum, 10))) ? "✅" : row.pdf,
-      url: report.url,
-      location: row.location || report.location,
-      nextInterviewAt: scheduled.get(row.n),
+      url: row.r_url ?? undefined,
+      location: row.location || row.r_location || undefined,
       offerDeadline: offerDeadlineFromNotes(row.notes),
     };
   });
-}
-
-function readReportDetails(n: string): { location?: string; url?: string } {
-  const file = findReportFile(n);
-  if (!file) return {};
-  try {
-    const md = fs.readFileSync(file, "utf8");
-    const locationRow = md.match(/^\|\s*\*{0,2}Remote\*{0,2}\s*\|\s*(.+?)\s*\|\s*$/im);
-    const urlRow = md.match(/^\*\*URL:\*\*\s*<?(https?:\/\/[^\s>]+)>?/im);
-    return {
-      location: locationRow?.[1]?.replace(/[*`]/g, "").trim() || undefined,
-      url: urlRow?.[1],
-    };
-  } catch {
-    return {};
-  }
 }
 
 /**
@@ -407,13 +284,10 @@ export function findReportFile(n: string): string | null {
 }
 
 export function readReport(n: string): ReportData | null {
-  const file = findReportFile(n);
-  if (!file) return null;
-  try {
-    return { content: fs.readFileSync(file, "utf8"), file: path.basename(file) };
-  } catch {
-    return null;
-  }
+  const target = Number.parseInt(n, 10);
+  if (Number.isNaN(target)) return null;
+  const row = db().prepare("SELECT file, content FROM reports WHERE n = ?").get(target) as { file: string; content: string } | undefined;
+  return row ? { content: row.content, file: row.file } : null;
 }
 
 export function findApplication(n: string): Application | null {

@@ -21,8 +21,9 @@ This fork is UI-first: the web app (`web/`) and Node scripts share the same file
 | `interview-prep/{company}-{role}.md` | Company-specific interview prep |
 | `interview-prep/sessions/*.md` | Session transcripts (gitignored except scaffold) |
 | `portals.yml` | Customized company / scan config |
-| `data/applications.md` | Application tracker |
-| `data/application-activity/*` | Immutable submission and sent-message records, including channel, recipient, exact text, and CV filename |
+| `data/career-ops.db` | Web UI store (SQLite): applications, reports, job inbox, timeline events, email drafts. Imports changed rows from the legacy files below |
+| `data/applications.md` | Legacy application tracker (still written by CLI workers; imported into the DB) |
+| `data/application-activity/*` | Legacy timeline records (imported into the DB once) |
 | `data/pipeline.md` | URL inbox |
 | `data/scan-history.tsv` | Scan dedup history |
 | `data/scan-runs.tsv` | Per-run scan counters |

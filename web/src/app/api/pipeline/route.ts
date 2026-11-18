@@ -1,11 +1,9 @@
-import fs from "node:fs";
-import path from "node:path";
-import { careerOpsRoot, pipelineSummary } from "@/lib/career-ops";
-import { removePendingInboxUrl } from "@/lib/core/pipeline-inbox";
-import { atomicWrite } from "@/lib/core/safe-write";
+import { pipelineSummary } from "@/lib/career-ops";
+import { db } from "@/lib/db";
+import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic"; // always read fresh local files
+export const dynamic = "force-dynamic";
 
 // Exposes the user's pipeline (inbox + tracker) to the client so the assistant
 // can resolve "all the Anthropic ones" to concrete postings CLIENT-SIDE — the
@@ -33,19 +31,10 @@ export async function DELETE(req: Request) {
     return Response.json({ error: "a valid inbox URL is required" }, { status: 400 });
   }
 
-  const file = path.join(careerOpsRoot(), "data/pipeline.md");
-  let markdown: string;
-  try {
-    markdown = fs.readFileSync(file, "utf8");
-  } catch {
-    return Response.json({ error: "pipeline inbox not found" }, { status: 404 });
-  }
-
-  const result = removePendingInboxUrl(markdown, url);
-  if (result.removed === 0) {
+  const key = normalizeVacancyUrl(url) ?? url;
+  const result = db().prepare("UPDATE jobs SET removed = 1 WHERE (key = ? OR url = ?) AND done = 0 AND removed = 0").run(key, url);
+  if (Number(result.changes) === 0) {
     return Response.json({ error: "role is no longer in the inbox" }, { status: 404 });
   }
-
-  atomicWrite(file, result.content);
-  return Response.json({ ok: true, removed: result.removed });
+  return Response.json({ ok: true, removed: Number(result.changes) });
 }

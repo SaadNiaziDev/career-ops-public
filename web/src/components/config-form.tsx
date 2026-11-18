@@ -45,7 +45,7 @@ export function ConfigForm() {
   const [query, setQuery] = useState("");
   const [readiness, setReadiness] = useState<ReadinessResult | null>(null);
   const [checking, setChecking] = useState(false);
-  const [stats, setStats] = useState({ jobs: 0, reports: 0, contacts: 0 });
+  const [stats, setStats] = useState({ jobs: 0, reports: 0 });
 
   useEffect(() => {
     const cfg = readCliConfig();
@@ -82,9 +82,8 @@ export function ConfigForm() {
       .then((r) => r.json())
       .then((d) => {
         setStats({
-          jobs: d?.tracker?.rows ?? 0,
-          reports: d?.reports?.count ?? 0,
-          contacts: d?.contacts?.count ?? 0,
+          jobs: d?.data?.tracker ?? 0,
+          reports: d?.data?.reports ?? 0,
         });
       })
       .catch(() => undefined);
@@ -346,7 +345,7 @@ export function ConfigForm() {
             <div className="flex flex-wrap items-center gap-4">
               <div className="min-w-0 flex-1">
                 <p className="text-base font-semibold">
-                  {stats.jobs} jobs · {stats.reports} reports · {stats.contacts} contacts
+                  {stats.jobs} applications · {stats.reports} reports
                 </p>
                 <p className="mt-1 text-sm text-[var(--md-sys-color-on-surface-variant)]">
                   Everything lives in local files. Export before you move machines.

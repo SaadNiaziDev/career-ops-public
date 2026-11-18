@@ -1,7 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
-import { careerOpsRoot } from "@/lib/career-ops";
-import { atomicWrite } from "@/lib/core/safe-write";
+import { db } from "@/lib/db";
 import {
   addDays,
   FOLLOWUP_DAYS,
@@ -15,44 +12,22 @@ export * from "@/lib/outreach-shared";
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
 
-export function outreachDir(): string {
-  return path.join(careerOpsRoot(), "data", "outreach");
-}
-
-function recordPath(id: string): string {
-  if (!ID_RE.test(id)) throw new Error("invalid outreach id");
-  return path.join(outreachDir(), `${id}.json`);
-}
-
 export function listOutreach(): OutreachRecord[] {
-  let files: string[] = [];
-  try {
-    files = fs.readdirSync(outreachDir()).filter((f) => f.endsWith(".json"));
-  } catch {
-    return [];
-  }
-  const out: OutreachRecord[] = [];
-  for (const f of files) {
-    try {
-      out.push(JSON.parse(fs.readFileSync(path.join(outreachDir(), f), "utf8")) as OutreachRecord);
-    } catch {
-      /* skip unreadable record */
-    }
-  }
-  return out.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+  const rows = db().prepare("SELECT data FROM outreach ORDER BY updated_at DESC").all() as { data: string }[];
+  return rows.map((r) => JSON.parse(r.data) as OutreachRecord);
 }
 
 export function readOutreach(id: string): OutreachRecord | null {
-  try {
-    return JSON.parse(fs.readFileSync(recordPath(id), "utf8")) as OutreachRecord;
-  } catch {
-    return null;
-  }
+  if (!ID_RE.test(id)) return null;
+  const row = db().prepare("SELECT data FROM outreach WHERE id = ?").get(id) as { data: string } | undefined;
+  return row ? (JSON.parse(row.data) as OutreachRecord) : null;
 }
 
 export function saveOutreach(record: OutreachRecord): void {
-  fs.mkdirSync(outreachDir(), { recursive: true });
-  atomicWrite(recordPath(record.id), JSON.stringify(record, null, 2) + "\n");
+  if (!ID_RE.test(record.id)) throw new Error("invalid outreach id");
+  db().prepare(`INSERT INTO outreach (id, tracker_num, updated_at, data) VALUES (?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET tracker_num = excluded.tracker_num, updated_at = excluded.updated_at, data = excluded.data`)
+    .run(record.id, record.trackerNum ?? null, record.updatedAt || new Date().toISOString(), JSON.stringify(record));
 }
 
 function slug(value: string): string {

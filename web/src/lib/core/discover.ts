@@ -1,6 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
-import { careerOpsRoot, readInbox, readApplications } from "@/lib/career-ops";
+import { db } from "@/lib/db";
+import { readInbox, readApplications } from "@/lib/career-ops";
 import { canon } from "@/lib/explore-ai";
 
 /**
@@ -15,16 +14,8 @@ export function assembleDedupContext(): { urls: Set<string>; lines: string[] } {
   const companies = new Set<string>();
   const roles = new Set<string>();
 
-  // scan-history.tsv col 0 = url (every URL ever surfaced)
-  try {
-    const tsv = fs.readFileSync(path.join(careerOpsRoot(), "data", "scan-history.tsv"), "utf8");
-    const rows = tsv.split("\n");
-    for (let i = 1; i < rows.length; i++) {
-      const url = rows[i].split("\t")[0]?.trim();
-      if (url && /^https?:\/\//i.test(url)) urls.add(canon(url));
-    }
-  } catch {
-    /* no history yet */
+  for (const { url } of db().prepare("SELECT url FROM seen").all() as { url: string }[]) {
+    if (/^https?:\/\//i.test(url)) urls.add(canon(url));
   }
 
   for (const j of readInbox()) {

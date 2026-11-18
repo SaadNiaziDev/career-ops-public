@@ -8,6 +8,14 @@ import { validateActivityInput } from "./src/lib/application-activity-shared.ts"
 import { archiveOutreach } from "./src/lib/application-activity-outreach.ts";
 import { readActivity, saveActivity } from "./src/lib/application-activity-store.ts";
 
+// The store lives in SQLite under CAREER_OPS_ROOT; each test gets its own root.
+function tempRoot(t) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "career-activity-"));
+  process.env.CAREER_OPS_ROOT = root;
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  return root;
+}
+
 function valid(overrides = {}) {
   return { id: randomUUID(), n: "1", kind: "application", channel: "company-site", confirmed: true, ...overrides };
 }
@@ -34,8 +42,7 @@ test("history rejects traversal, future dates, unsafe links, and oversized conte
 });
 
 test("record retries are idempotent and can never overwrite an earlier message", (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "career-activity-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const root = tempRoot(t);
   const event = { id: randomUUID(), n: "1", kind: "email", channel: "gmail", recipient: "jane@example.com", body: "Original message", at: "2026-01-01T12:00:00.000Z" };
   saveActivity(root, event);
   assert.deepEqual(saveActivity(root, { ...event, at: "2026-01-02T12:00:00.000Z" }), event);
@@ -46,21 +53,20 @@ test("record retries are idempotent and can never overwrite an earlier message",
   assert.equal(records[0].body, "A separate follow-up");
   assert.equal(records[1].body, "Original message");
   assert.deepEqual(readActivity(root, "2"), []);
-  assert.equal(fs.readdirSync(path.join(root, "data/application-activity/1")).some((name) => name.startsWith('.pending-')), false);
 });
 
-test("unreadable history is surfaced rather than silently discarded", (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "career-activity-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+test("legacy activity files are imported into the database once", (t) => {
+  const root = tempRoot(t);
   const dir = path.join(root, "data/application-activity/1");
   fs.mkdirSync(dir, { recursive: true });
+  const legacy = { id: randomUUID(), n: "1", kind: "note", channel: "other", note: "Imported", at: "2026-01-01T00:00:00.000Z" };
+  fs.writeFileSync(path.join(dir, `${legacy.id}.json`), JSON.stringify(legacy));
   fs.writeFileSync(path.join(dir, `${randomUUID()}.json`), "broken json");
-  assert.throws(() => readActivity(root, "1"));
+  assert.deepEqual(readActivity(root, "1").map((event) => event.note), ["Imported"]);
 });
 
 test("outreach confirmations archive the actual message once and follow-ups separately", (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "career-outreach-archive-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const root = tempRoot(t);
   const record = { id: "1-jane", trackerNum: "1", contact: { name: "Jane", email: "jane@example.com" }, subject: "Hello", body: "Original email\n", status: "sent", sentAt: "2026-01-01T12:00:00Z", sentVia: "gmail", followups: [{ day: 3, body: "Following up", sentAt: "2026-01-04T12:00:00Z" }] };
   archiveOutreach(root, record);
   archiveOutreach(root, { ...record, sentAt: "2026-01-01T12:01:00Z" });

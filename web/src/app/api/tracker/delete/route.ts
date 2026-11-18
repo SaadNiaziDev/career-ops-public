@@ -1,23 +1,10 @@
-import { spawn } from "node:child_process";
-import { careerOpsRoot, rootScript, trackerCanDelete } from "@/lib/career-ops";
+import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Remove ONE application row from applications.md by orchestrating the core
-// write-gate `tracker.mjs delete --num N` (#1200) — we NEVER hand-edit the file
-// (atomic write + SQLite reindex + orphan-report report all live in the script).
-// This is the disc#9 fix: a bogus row (e.g. an evaluation that errored mid-run)
-// must be removable. `--dry-run` previews; the real delete is irreversible, so the
-// UI confirms first.
-
-function parseOrphan(stderr: string): string | null {
-  // dry-run: "(report file would be orphaned: <path>)"
-  // real:    "Note: report file may now be orphaned — <path>"
-  const m = stderr.match(/orphaned[:—-]+\s*([^\n)]+)\)?\s*$/im);
-  return m ? m[1].trim() : null;
-}
-
+// Remove one application from Track. Soft delete: the row stays in SQLite with
+// deleted = 1, so a later import of applications.md never brings it back.
 export async function POST(req: Request) {
   let body: { n?: string | number; dryRun?: boolean };
   try {
@@ -29,61 +16,9 @@ export async function POST(req: Request) {
   if (!/^\d+$/.test(num)) {
     return Response.json({ error: "a numeric application number is required" }, { status: 400 });
   }
+  const exists = db().prepare("SELECT 1 FROM applications WHERE n = ? AND deleted = 0").get(Number(num));
+  if (!exists) return Response.json({ error: `No application numbered ${num}` }, { status: 404 });
   const dryRun = !!body.dryRun;
-
-  if (!trackerCanDelete()) {
-    return Response.json(
-      { error: "Removing a tracker row needs a newer career-ops — update to delete rows from here." },
-      { status: 400 },
-    );
-  }
-  const args = [rootScript("tracker"), "delete", "--num", num];
-  if (dryRun) args.push("--dry-run");
-
-  const result = await new Promise<{ code: number | null; err: string }>((resolve) => {
-      let err = "";
-      let child;
-      try {
-        child = spawn(process.execPath, args, {
-          cwd: careerOpsRoot(),
-          env: { ...process.env, CAREER_OPS_TRACKER_LOCK_TIMEOUT_MS: "25000" },
-        });
-      } catch (e) {
-        resolve({ code: 1, err: e instanceof Error ? e.message : "failed to start tracker.mjs" });
-        return;
-      }
-      child.stderr.on("data", (d: Buffer) => {
-        err += d.toString();
-      });
-      child.stdout.on("data", () => {
-        /* delete reports to stderr; drain stdout so the pipe never stalls */
-      });
-      const killer = setTimeout(() => {
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          /* ignore */
-        }
-      }, 30_000);
-      child.on("error", (e) => {
-        clearTimeout(killer);
-        resolve({ code: 1, err: e.message });
-      });
-      child.on("close", (code) => {
-        clearTimeout(killer);
-        resolve({ code, err });
-      });
-  });
-
-    if (result.code !== 0) {
-      const notFound = /No application numbered/i.test(result.err);
-      const missingDep = /ERR_MODULE_NOT_FOUND.*Cannot find package/i.test(result.err);
-      const error = missingDep
-        ? "Tracker script dependencies are missing — run `npm install` in the career-ops root, then retry."
-        : result.err.trim().split("\n").find((l) => l.startsWith("Error")) ||
-          result.err.trim().split("\n")[0] ||
-          "delete failed";
-      return Response.json({ error }, { status: notFound ? 404 : 400 });
-    }
-  return Response.json({ ok: true, dryRun, orphanReport: parseOrphan(result.err) });
+  if (!dryRun) db().prepare("UPDATE applications SET deleted = 1, updated_at = ? WHERE n = ?").run(new Date().toISOString(), Number(num));
+  return Response.json({ ok: true, dryRun, orphanReport: null });
 }

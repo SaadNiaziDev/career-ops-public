@@ -1,5 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
 import { careerOpsRoot, readApplications, readApplicationStageHistory, type Application } from "@/lib/career-ops";
 import { outreachSourceKey } from "@/lib/application-activity-outreach";
 import { listOutreach } from "@/lib/outreach";
@@ -15,9 +13,6 @@ export function loadApplicationRecords(): ApplicationRecord[] {
   const contacts = readContacts();
   const outreach = listOutreach();
   const stages = readApplicationStageHistory();
-  let followups = "";
-  try { followups = fs.readFileSync(path.join(root, "data/follow-ups.md"), "utf8"); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
 
   return readApplications().map((app) => {
     const events = readActivity(root, app.n);
@@ -34,10 +29,6 @@ export function loadApplicationRecords(): ApplicationRecord[] {
     }
     for (const stage of stages.filter((item) => item.n === app.n)) {
       events.push({ id: `stage:${stage.at}:${stage.to}`, n: app.n, kind: "status", at: stage.at, channel: "unknown", note: `${stage.from} → ${stage.to}` });
-    }
-    for (const [index, line] of followups.split(/\r?\n/).entries()) {
-      const match = line.match(/^- (\d{4}-\d{2}-\d{2}) · #(\d+) /);
-      if (match?.[2] === app.n && !sources.has(`followup-log:${match[1]}:${app.n}`)) events.push({ id: `legacy-followup:${index}`, n: app.n, kind: "followup", at: match[1], channel: "unknown", note: line.replace(/^- /, ""), legacy: true });
     }
     events.sort((a, b) => b.at.localeCompare(a.at) || a.id.localeCompare(b.id));
     return { app, events, contacts: contacts.filter((contact) => contact.trackerNum === app.n) };

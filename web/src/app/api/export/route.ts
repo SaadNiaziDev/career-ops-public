@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { careerOpsRoot, readApplications } from "@/lib/career-ops";
+import { careerOpsRoot, readApplications, readInbox } from "@/lib/career-ops";
+import { listOutreach } from "@/lib/outreach";
 import { csvEscape } from "@/lib/csv";
 
 export async function GET(req: Request) {
@@ -49,9 +50,8 @@ export async function GET(req: Request) {
       exportedAt: new Date().toISOString(),
       applications: readApplications(),
       cv: fs.existsSync(path.join(root, "cv.md")) ? fs.readFileSync(path.join(root, "cv.md"), "utf8") : null,
-      pipeline: fs.existsSync(path.join(root, "data/pipeline.md"))
-        ? fs.readFileSync(path.join(root, "data/pipeline.md"), "utf8")
-        : null,
+      inbox: readInbox(),
+      outreach: listOutreach(),
     };
     return NextResponse.json(payload, {
       headers: {
