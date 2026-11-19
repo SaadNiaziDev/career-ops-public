@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { robotoFlex, robotoMono } from "@/lib/fonts";
-import { AppShell } from "@/components/app-shell";
+import { AppShell } from "@/components/shell/app-shell";
 import { THEME_INIT_SCRIPT } from "@/lib/theme-script";
 import "./globals.css";
 

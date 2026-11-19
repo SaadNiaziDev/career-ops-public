@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { Md3Input, Md3Textarea } from "@/components/ui/md3-input";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { useToast } from "@/components/providers/toast-provider";

@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { cn } from "@/lib/cn";
 
 export type Md3SelectOption = {

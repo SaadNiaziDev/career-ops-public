@@ -121,13 +121,3 @@ export function parseOutreachOutput(
 export function scheduleFollowups(record: OutreachRecord, sentAt: string): OutreachFollowup[] {
   return record.followups.map((f) => ({ ...f, dueAt: addDays(sentAt, f.day) }));
 }
-
-/** Companies emailed within the last `days` — used to avoid double-emailing a company. */
-export function recentlyContactedCompanies(days = 30): Set<string> {
-  const cutoff = addDays(new Date().toISOString(), -days);
-  return new Set(
-    listOutreach()
-      .filter((r) => (r.status === "sent" || r.status === "replied") && (r.sentAt ?? "").slice(0, 10) >= cutoff)
-      .map((r) => r.company.toLowerCase()),
-  );
-}

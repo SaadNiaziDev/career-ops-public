@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { cn } from "@/lib/cn";
+import { CONFIG_KEY } from "@/lib/cli-config";
 
 type Usage = { window5h: { tokens: number }; window7d: { tokens: number } };
 
@@ -28,7 +29,7 @@ export function UsageMeter() {
 
   useEffect(() => {
     try {
-      const cfg = localStorage.getItem("career-ops:config");
+      const cfg = localStorage.getItem(CONFIG_KEY);
       setCli(cfg ? JSON.parse(cfg).cliId || null : null);
       const b = localStorage.getItem("career-ops:usage-budget");
       if (b) setBudget({ ...DEFAULT_BUDGET, ...JSON.parse(b) });

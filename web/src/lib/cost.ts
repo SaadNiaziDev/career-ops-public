@@ -1,8 +1,4 @@
-// The cost-honesty taxonomy — a single source for the FREE vs $ boundary that the
-// Explorer teaches by repetition. Discovery (finding roles) is structurally free:
-// it calls no LLM. Only evaluation (scoring a role against your CV) spends tokens,
-// and only when the user chooses it. The framing is always local-first: "your key,
-// your AI, your machine."
+// Whether an action spends AI tokens. Scans and local actions are free; AI tasks use your subscription.
 
 export type CostClass = "free" | "free-network" | "spend";
 

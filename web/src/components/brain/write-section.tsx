@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { Md3Input, Md3Textarea } from "@/components/ui/md3-input";
 import { Md3Segmented } from "@/components/ui/md3-segmented";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";

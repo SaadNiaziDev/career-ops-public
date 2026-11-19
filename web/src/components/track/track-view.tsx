@@ -5,9 +5,9 @@ import { useMemo, useState } from "react";
 import type { ApplicationRecordSummary } from "@/lib/application-records";
 import { CHANNEL_LABELS } from "@/lib/application-activity-shared";
 import { canonStatus } from "@/lib/format";
-import { CompanyLogo } from "@/components/company-logo";
-import { MaterialSymbol } from "@/components/material-symbol";
-import { StatusSelect } from "@/components/status-select";
+import { CompanyLogo } from "@/components/ui/company-logo";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
+import { StatusSelect } from "@/components/track/status-select";
 
 type Tab = "active" | "evaluated" | "closed" | "all";
 const TABS: { id: Tab; label: string }[] = [
@@ -33,7 +33,7 @@ function day(iso?: string): string {
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** Every application: status, how and when you applied, what you sent, and the next follow-up. */
-export function PipelineView({ records }: { records: ApplicationRecordSummary[] }) {
+export function TrackView({ records }: { records: ApplicationRecordSummary[] }) {
   const [tab, setTab] = useState<Tab>("active");
   const [query, setQuery] = useState("");
 

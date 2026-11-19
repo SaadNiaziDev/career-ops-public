@@ -1,9 +1,9 @@
 "use client";
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { MaterialSymbol } from "@/components/material-symbol";
-import { CostBadge } from "@/components/cost/cost-badge";
-import type { CostClass } from "@/lib/explore-cost";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
+import { CostBadge } from "@/components/ui/cost-badge";
+import type { CostClass } from "@/lib/cost";
 import { cn } from "@/lib/cn";
 
 type Variant = "filled" | "outlined" | "text";

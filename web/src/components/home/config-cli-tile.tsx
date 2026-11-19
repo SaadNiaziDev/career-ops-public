@@ -1,6 +1,6 @@
 "use client";
 
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { Md3SelectableCard } from "@/components/ui/md3-selectable-card";
 import { cn } from "@/lib/cn";
 

@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
 import { readInbox, readApplications } from "@/lib/career-ops";
-import { canon } from "@/lib/explore-ai";
 
 /**
  * Dedup context for AI search (modes/discover.md). The maintainer contract says
@@ -34,4 +33,14 @@ export function assembleDedupContext(): { urls: Set<string>; lines: string[] } {
   if (roleList.length) lines.push(`Roles already tracked: ${roleList.join(", ")}.`);
   lines.push(`(${urls.size} posting URLs are already known and will be auto-filtered, so don't worry about matching exact URLs — just skip the companies above.)`);
   return { urls, lines };
+}
+
+/** Normalize a URL for dedup: host+path, lowercased, no query/fragment/trailing slash. */
+function canon(u: string): string {
+  try {
+    const x = new URL(u);
+    return (x.host + x.pathname).toLowerCase().replace(/\/$/, "");
+  } catch {
+    return u.toLowerCase().replace(/[?#].*$/, "").replace(/\/$/, "");
+  }
 }

@@ -95,26 +95,6 @@ export function legitimacyTone(l: string): "good" | "warn" | "bad" | "muted" {
   return "muted";
 }
 
-export type ReportMeta = {
-  title: string | null;
-  fields: { label: string; value: string }[];
-  legitimacy: string | null;
-  body: string;
-};
-
-
-
-/**
- * Tolerant report parser (per maintainer: adapt the render, don't migrate the
- * old data). Extracts the bold key/value header fields (Date/URL/Archetype/
- * Score/Legitimacy/PDF) when present and returns the body without the header
- * block. Degrades gracefully on legacy reports that lack some fields.
- */
-export function parseReport(md: string): ReportMeta {
-  const parsed = parseReportDocument(md);
-  return { title: parsed.title, fields: parsed.fields, legitimacy: parsed.legitimacy, body: parsed.body };
-}
-
 export type DimensionScores = {
   match?: number;
   north_star?: number;

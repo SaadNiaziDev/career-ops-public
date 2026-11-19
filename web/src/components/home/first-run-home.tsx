@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MaterialSymbol } from "@/components/material-symbol";
-import { PageShell } from "@/components/dossier/page-shell";
-import { ConfigCliTile, type ConfigCli } from "@/components/config/config-cli-tile";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
+import { PageShell } from "@/components/ui/page-shell";
+import { ConfigCliTile, type ConfigCli } from "@/components/home/config-cli-tile";
 import { CvIngest } from "@/components/cv/cv-ingest";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { cliDisplayName, readCliConfig, writeCliConfig } from "@/lib/cli-config";

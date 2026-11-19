@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { Badge } from "@/components/ui/badge";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { cn } from "@/lib/cn";

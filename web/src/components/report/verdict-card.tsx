@@ -1,7 +1,7 @@
 "use client";
 
 import { legitimacyTone, scoreNum, scoreTone, type MachineSummary } from "@/lib/format";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { decisionTone, TONE_CHIP, TONE_OUTLINE, TONE_TEXT, type Tone } from "@/lib/tone";
 import { cn } from "@/lib/cn";
 

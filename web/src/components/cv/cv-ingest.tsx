@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { Md3Card } from "@/components/ui/md3-card";
 import { Md3Textarea } from "@/components/ui/md3-input";
@@ -62,7 +62,6 @@ export function CvIngest({
     try {
       let reqInit = init;
       if (resolvedCli) {
-        const headers = new Headers(init.headers);
         if (init.body instanceof FormData) {
           const form = new FormData();
           for (const [k, v] of init.body.entries()) form.append(k, v);

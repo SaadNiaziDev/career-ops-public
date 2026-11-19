@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { MaterialSymbol } from "@/components/material-symbol";
-import { CompanyLogo } from "@/components/company-logo";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
+import { CompanyLogo } from "@/components/ui/company-logo";
 import { cn } from "@/lib/cn";
 import type { QueueItem } from "@/lib/apply/kit";
 

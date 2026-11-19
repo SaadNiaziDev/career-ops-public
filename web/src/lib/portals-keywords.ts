@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import { careerOpsRoot } from "@/lib/career-ops";
-import { atomicWriteWithBackup } from "@/lib/core/safe-write";
 
 export type PortalsKeywords = {
   positive: string[];
@@ -28,71 +27,4 @@ export function readPortalsKeywords(): PortalsKeywords {
   } catch {
     return { positive: [], negative: [], configured: false };
   }
-}
-
-/** Append keywords to title_filter.positive (dedup, case-insensitive). */
-export function appendPortalsKeywords(keywords: string[]): { added: string[]; positive: string[] } {
-  const root = careerOpsRoot();
-  const file = path.join(root, "portals.yml");
-  let doc: Record<string, unknown> = {};
-  try {
-    doc = (yaml.load(fs.readFileSync(file, "utf8")) as Record<string, unknown>) || {};
-  } catch {
-    try {
-      doc = (yaml.load(fs.readFileSync(path.join(root, "templates", "portals.example.yml"), "utf8")) as Record<string, unknown>) || {};
-    } catch {
-      doc = {};
-    }
-  }
-
-  const tf = doc.title_filter && typeof doc.title_filter === "object" ? { ...(doc.title_filter as object) } : {};
-  const existing = listFrom((tf as Record<string, unknown>).positive);
-  const lower = new Set(existing.map((k) => k.toLowerCase()));
-  const added: string[] = [];
-  for (const kw of keywords.map((k) => k.trim()).filter(Boolean)) {
-    if (lower.has(kw.toLowerCase())) continue;
-    existing.push(kw);
-    lower.add(kw.toLowerCase());
-    added.push(kw);
-  }
-  (tf as Record<string, unknown>).positive = existing;
-  doc.title_filter = tf;
-  atomicWriteWithBackup(file, yaml.dump(doc, { lineWidth: 100, noRefs: true }));
-  return { added, positive: existing };
-}
-
-export type NewCompany = {
-  name: string;
-  careers_url: string;
-  api?: string;
-  notes?: string;
-};
-
-/** Append a company to tracked_companies (dedup by name, case-insensitive). */
-export function appendPortalsCompany(company: NewCompany): { added: boolean; total: number } {
-  const root = careerOpsRoot();
-  const file = path.join(root, "portals.yml");
-  let doc: Record<string, unknown> = {};
-  try {
-    doc = (yaml.load(fs.readFileSync(file, "utf8")) as Record<string, unknown>) || {};
-  } catch {
-    try {
-      doc = (yaml.load(fs.readFileSync(path.join(root, "templates", "portals.example.yml"), "utf8")) as Record<string, unknown>) || {};
-    } catch {
-      doc = {};
-    }
-  }
-
-  const list = Array.isArray(doc.tracked_companies) ? [...(doc.tracked_companies as Record<string, unknown>[])] : [];
-  const name = company.name.trim();
-  const exists = list.some((c) => typeof c?.name === "string" && c.name.trim().toLowerCase() === name.toLowerCase());
-  if (exists) return { added: false, total: list.length };
-
-  const entry: Record<string, unknown> = { name, careers_url: company.careers_url.trim(), enabled: true };
-  if (company.api?.trim()) entry.api = company.api.trim();
-  if (company.notes?.trim()) entry.notes = company.notes.trim();
-  list.push(entry);
-  doc.tracked_companies = list;
-  atomicWriteWithBackup(file, yaml.dump(doc, { lineWidth: 100, noRefs: true }));
-  return { added: true, total: list.length };
 }

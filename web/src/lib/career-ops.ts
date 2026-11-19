@@ -1,10 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import yaml from "js-yaml";
-import { atomicWrite } from "@/lib/core/safe-write";
 import { db } from "@/lib/db";
 import { careerOpsRoot } from "@/lib/career-ops-root";
-import { parseMachineSummary } from "@/lib/format";
 import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
 import { offerDeadlineFromNotes } from "@/lib/offer-deadline";
 import { onboardingVerificationPending } from "@/lib/onboarding/readiness-state";
@@ -57,37 +54,6 @@ export function readInbox(): InboxJob[] {
 export function readScanDates(): Map<string, string> {
   const rows = db().prepare("SELECT key, first_seen FROM seen").all() as { key: string; first_seen: string }[];
   return new Map(rows.map((r) => [r.key, r.first_seen]));
-}
-
-export type ScanFind = InboxJob & { firstSeen: string; source: string };
-
-/** `workday-api` → `Workday`, `local-parser` → `Local parser`, else the raw label. */
-function scanSourceLabel(portal: string): string {
-  const p = portal.trim();
-  if (!p) return "Portal scan";
-  const api = p.match(/^([a-z0-9]+)-api$/i);
-  if (api) return api[1][0].toUpperCase() + api[1].slice(1);
-  if (p === "local-parser") return "Local parser";
-  return p.split(/\s+[—–-]\s+/)[0].slice(0, 24);
-}
-
-/** Pending inbox rows a scan found within the last `days`, newest first. */
-export function recentScanFinds({ days = 14, limit = 30 } = {}): {
-  finds: ScanFind[];
-  latestDate: string | null;
-  totalPending: number;
-} {
-  const meta = new Map((db().prepare("SELECT key, first_seen, source FROM seen").all() as { key: string; first_seen: string; source: string }[]).map((r) => [r.key, r]));
-  const pending = readInbox().filter((j) => !j.done);
-  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
-  const scanned = pending
-    .map((j) => {
-      const m = meta.get(normalizeVacancyUrl(j.url) ?? j.url);
-      return { ...j, firstSeen: m?.first_seen ?? "", source: scanSourceLabel(m?.source ?? "") };
-    })
-    .filter((j): j is ScanFind => !!j.firstSeen && j.firstSeen >= cutoff)
-    .sort((a, b) => b.firstSeen.localeCompare(a.firstSeen) || a.company.localeCompare(b.company) || a.url.localeCompare(b.url));
-  return { finds: scanned.slice(0, limit), latestDate: scanned[0]?.firstSeen ?? null, totalPending: pending.length };
 }
 
 export type Application = {
@@ -267,23 +233,6 @@ export function pipelineSummary(): PipelineSummary {
 
 export type ReportData = { content: string; file: string };
 
-/** Locate the evaluation report for an application number
- *  (reports/{n}-{slug}-{date}.md; the leading number may be zero-padded). */
-export function findReportFile(n: string): string | null {
-  const target = parseInt(n, 10);
-  if (Number.isNaN(target)) return null;
-  let files: string[];
-  try {
-    files = fs.readdirSync(path.join(careerOpsRoot(), "reports"));
-  } catch {
-    return null;
-  }
-  const match = files.find(
-    (f) => f.endsWith(".md") && !/-RESERVED\.md$/i.test(f) && parseInt(f, 10) === target,
-  );
-  return match ? path.join(careerOpsRoot(), "reports", match) : null;
-}
-
 export function readReport(n: string): ReportData | null {
   const target = Number.parseInt(n, 10);
   if (Number.isNaN(target)) return null;
@@ -295,110 +244,9 @@ export function findApplication(n: string): Application | null {
   return readApplications().find((a) => a.n === n) ?? null;
 }
 
-export type DimensionTrend = { key: string; label: string; avg: number; count: number };
-
-const DIM_LABELS: Record<string, string> = {
-  match: "Match",
-  north_star: "North Star",
-  comp: "Comp",
-  culture: "Culture",
-  red_flags: "Red flags",
-  global: "Global",
-};
-
-export function dimensionTrends(applications: Application[]): DimensionTrend[] {
-  const sums: Record<string, { sum: number; n: number }> = {};
-  for (const app of applications) {
-    const report = readReport(app.n);
-    if (!report) continue;
-    const ms = parseMachineSummary(report.content);
-    if (!ms?.scores) continue;
-    const entries = Object.entries(ms.scores) as [string, number | undefined][];
-    for (const [key, val] of entries) {
-      if (typeof val !== "number") continue;
-      if (!sums[key]) sums[key] = { sum: 0, n: 0 };
-      sums[key].sum += val;
-      sums[key].n += 1;
-    }
-  }
-  return Object.entries(sums).map(([key, { sum, n }]) => ({
-    key,
-    label: DIM_LABELS[key] ?? key,
-    avg: sum / n,
-    count: n,
-  }));
-}
-
-export function readRankingSignals(): { sample_size: number; insights: string[] } | null {
-  try {
-    const p = path.join(careerOpsRoot(), "data", "ranking-signals.yml");
-    if (!fs.existsSync(p)) return null;
-    const doc = yaml.load(fs.readFileSync(p, "utf8")) as { sample_size?: number; insights?: string[] };
-    return {
-      sample_size: doc.sample_size ?? 0,
-      insights: Array.isArray(doc.insights) ? doc.insights.filter(Boolean) : [],
-    };
-  } catch {
-    return null;
-  }
-}
-
 /** The CANONICAL user-customization file the CLI/TUI reads. Durable facts the
  *  web assistant learns go HERE (single source of truth) inside a managed marker
  *  block — so the CLI sees them too. No web-only memory store (that would drift). */
 export function profilePath(): string {
   return path.join(careerOpsRoot(), "modes", "_profile.md");
-}
-
-const NOTES_START = "<!-- co-web-notes:start -->";
-const NOTES_END = "<!-- co-web-notes:end -->";
-
-/** Read back ONLY the web-assistant managed notes from modes/_profile.md (small,
- *  focused — the agent reads the rest of the canonical files itself). Falls back
- *  to the legacy web-only memory file for back-compat. */
-export function readMemory(): string {
-  try {
-    const md = fs.readFileSync(profilePath(), "utf8");
-    const i = md.indexOf(NOTES_START);
-    const j = md.indexOf(NOTES_END);
-    if (i !== -1 && j !== -1 && j > i) return md.slice(i + NOTES_START.length, j).trim();
-  } catch {
-    /* no _profile.md yet */
-  }
-  try {
-    return fs.readFileSync(path.join(careerOpsRoot(), ".career-ops-web", "memory.md"), "utf8").trim();
-  } catch {
-    return "";
-  }
-}
-
-/** Append a durable fact to the canonical modes/_profile.md (creating the file +
- *  managed block if needed), PRESERVING existing user content. */
-export function rememberFact(fact: string): "ok" | "deduped" | "error" {
-  const f = fact.trim().replace(/\s+/g, " ").slice(0, 300);
-  if (!f) return "deduped";
-  const p = profilePath();
-  try {
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    let md = "";
-    try {
-      md = fs.readFileSync(p, "utf8");
-    } catch {
-      md = "";
-    }
-    const i = md.indexOf(NOTES_START);
-    const j = md.indexOf(NOTES_END);
-    if (i !== -1 && j !== -1 && j > i) {
-      if (md.slice(i, j).includes(f)) return "deduped";
-      atomicWrite(p, md.slice(0, j) + `- ${f}\n` + md.slice(j));
-      return "ok";
-    }
-    if (md.includes(f)) return "deduped";
-    const section = `\n\n## Notes from the web assistant\n${NOTES_START}\n- ${f}\n${NOTES_END}\n`;
-    const base = md.trim() ? md.replace(/\n*$/, "\n") : "# Profile customization\n";
-    atomicWrite(p, base + section);
-    return "ok";
-  } catch {
-    return "error";
-  }
 }

@@ -1,4 +1,5 @@
-import { fillSession, handoffSession, getSession } from "@/lib/apply/session";
+import { getSession } from "@/lib/apply/session";
+import { fillSession, handoffSession } from "@/lib/apply/fill";
 import { resolveIndexedCv, resolveTailoredCv, companyFromTitle } from "@/lib/apply/cv";
 import { findApplication } from "@/lib/career-ops";
 import type { ApplyField } from "@/lib/apply/extract";

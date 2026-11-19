@@ -3,9 +3,9 @@
 import { Suspense } from "react";
 import { JobsProvider } from "@/components/jobs/job-store";
 import { WorkersUiProvider, WorkerSheet, AmbientWorkerBar } from "@/components/jobs/worker-sheet";
-import { PipelineProvider } from "@/components/pipeline/pipeline-provider";
+import { PipelineProvider } from "@/components/providers/pipeline-provider";
 import { ApplyProvider } from "@/components/apply/apply-provider";
-import { NavigationRail } from "@/components/navigation-rail";
+import { NavigationRail } from "@/components/shell/navigation-rail";
 import { ToastProvider } from "@/components/providers/toast-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 

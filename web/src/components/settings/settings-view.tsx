@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { writeCliConfig } from "@/lib/cli-config";
 import type { SearchCompany, SearchSettings } from "@/lib/search/settings";
 

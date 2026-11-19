@@ -5,9 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useJobs } from "@/components/jobs/job-store";
 import { WorkerCard } from "@/components/jobs/worker-card";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { cn } from "@/lib/cn";
-import { usePipeline } from "@/components/pipeline/pipeline-provider";
+import { usePipeline } from "@/components/providers/pipeline-provider";
 import { jobDestinationHref, resolveReportNum } from "@/components/jobs/job-utils";
 import { isActiveState } from "@/lib/jobs/run-policy";
 

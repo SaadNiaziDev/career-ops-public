@@ -13,4 +13,3 @@ export const robotoMono = Roboto_Mono({
 });
 
 export const instrumentSerif = robotoFlex;
-export const instrumentSerifItalic = robotoFlex;

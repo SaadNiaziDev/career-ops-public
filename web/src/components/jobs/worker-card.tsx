@@ -1,7 +1,7 @@
 "use client";
 
 import type { Job } from "@/components/jobs/job-store";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { cn } from "@/lib/cn";
 import { fmtElapsed, humanizeJobKind, humanizeStep, isAuthError, useElapsed } from "@/components/jobs/job-utils";
 import { isActiveState, isStuck } from "@/lib/jobs/run-policy";

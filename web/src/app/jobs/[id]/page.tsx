@@ -5,15 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { Md3Card } from "@/components/ui/md3-card";
 import { Md3Empty } from "@/components/ui/md3-empty";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useJobs } from "@/components/jobs/job-store";
-import { usePipeline } from "@/components/pipeline/pipeline-provider";
-import { PageShell } from "@/components/dossier/page-shell";
-import { DossierStack, DossierInsetStack } from "@/components/dossier/dossier-stack";
+import { usePipeline } from "@/components/providers/pipeline-provider";
+import { PageShell } from "@/components/ui/page-shell";
+import { DossierStack, DossierInsetStack } from "@/components/ui/stack";
 import {
   collapseSteps,
   fmtElapsed,

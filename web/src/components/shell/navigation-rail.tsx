@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { MaterialSymbol } from "@/components/material-symbol";
-import { CoMark } from "@/components/co-mark";
-import { NavigationLinks } from "@/components/navigation-links";
-import { UsageMeter } from "@/components/usage-meter";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
+import { CoMark } from "@/components/shell/co-mark";
+import { NavigationLinks } from "@/components/shell/navigation-links";
+import { UsageMeter } from "@/components/shell/usage-meter";
 import { useJobs } from "@/components/jobs/job-store";
 import { useWorkersUi } from "@/components/jobs/worker-sheet";
 

@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ApplyView } from "@/components/apply-view";
+import { ApplyView } from "@/components/apply/form/apply-form";
 import { ApplyBackdropMount } from "@/components/apply/apply-backdrop-mount";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { Md3Empty } from "@/components/ui/md3-empty";
 import type { ApplyKit, QueueItem } from "@/lib/apply/kit";
 import type { MachineSummary } from "@/lib/format";
-import { ApplyKitPanel } from "./apply-kit";
+import { ApplyKitPanel } from "./kit/apply-kit";
 import { ApplyQueue } from "./apply-queue";
 import { EvaluationSummary } from "./evaluation-summary";
 import { KitStyles } from "./kit-styles";

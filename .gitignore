@@ -1,5 +1,16 @@
-# Your data (never committed)
+# ── Your data: never committed ──────────────────────────────────────────────
+# The app database (SQLite) and its write-ahead log / shared-memory files.
+data/*
+!data/.gitkeep
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Profile, CV and search settings
 cv.md
+cv.md.bak*
 article-digest.md
 voice-dna.md
 portals.yml
@@ -8,8 +19,8 @@ config/profile.yml
 config/*.bak-*
 config/cv-facts.json
 modes/
-data/*
-!data/.gitkeep
+
+# Generated files and personal notes
 reports/*
 !reports/.gitkeep
 output/*
@@ -21,9 +32,14 @@ writing-samples/*
 interview-prep/
 .career-ops-web/
 
-# Build and tooling
+# Personal exports and archives
+*.csv
+*.zip
+
+# ── Build and tooling ──────────────────────────────────────────────────────
 node_modules/
-web/.next/
+web/.next*/
+web/out/
 web/next-env.d.ts
 web/tsconfig.tsbuildinfo
 .env
@@ -31,6 +47,5 @@ web/tsconfig.tsbuildinfo
 *.log
 .DS_Store
 tmp/
-cv.md.bak*
-*.csv
-*.zip
+.claude/
+.playwright-mcp/

@@ -1,53 +1,10 @@
-import { chromium, type Browser, type BrowserContext, type Page, type Frame, type Response } from "playwright-core";
+import { type Browser, type BrowserContext, type Page, type Frame } from "playwright-core";
 import { extractForm, type ApplyField, type ExtractedForm } from "./extract";
 import { parseGreenhouse, fetchGreenhouseSchema } from "./greenhouse";
-import { statusBlock, dismissConsent, tryApplyTrigger, dropNewTabs, classifyEmpty, captchaWarning, multiStepInfo, verifyFill, type ApplyIssue } from "./diagnose";
+import { statusBlock, dismissConsent, tryApplyTrigger, dropNewTabs, classifyEmpty, captchaWarning, multiStepInfo, type ApplyIssue } from "./diagnose";
 import { agentInterpretForm } from "./agent-interpret";
 import { installPublicUrlPolicy, validatePublicUrl } from "@/lib/public-url-policy";
-
-/** The frame with the most interactive controls — where the agentic interpreter
- *  should look when deterministic extraction found nothing usable. */
-async function richestControlFrame(page: Page): Promise<Frame> {
-  let best = page.mainFrame();
-  let bestN = -1;
-  for (const fr of page.frames()) {
-    const n = await fr.evaluate(() => document.querySelectorAll('input, textarea, select, [role="combobox"], [contenteditable="true"]').length).catch(() => 0);
-    if (n > bestN) {
-      bestN = n;
-      best = fr;
-    }
-  }
-  return best;
-}
-
-/** Escape a value for use inside a double-quoted CSS attribute selector.
- *  Backslash FIRST, then quote — escaping only the quote would let a trailing
- *  backslash neutralize the closing quote (CodeQL js/incomplete-sanitization). */
-function cssAttr(v: string): string {
-  return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
-/** Navigate resiliently: a transient nav error / slow ATS shouldn't fail the
- *  whole apply. Up to 3 attempts with backoff; returns the navigation Response
- *  (status/headers feed the cheap status-block check). */
-async function gotoResilient(page: Page, url: string): Promise<Response | null> {
-  const fullStackJobPage = new URL(url).hostname === "talent.fullstack.com" && /^\/jobs\/[0-9a-f-]{36}\/?$/i.test(new URL(url).pathname);
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < (fullStackJobPage ? 1 : 3); attempt++) {
-    try {
-      const resp = await page.goto(url, {
-        waitUntil: fullStackJobPage ? "commit" : "domcontentloaded",
-        timeout: fullStackJobPage ? 12_000 : 30_000,
-      });
-      if (!fullStackJobPage) await page.waitForLoadState("load", { timeout: 8_000 }).catch(() => {});
-      return resp;
-    } catch (e) {
-      lastErr = e;
-      await page.waitForTimeout(800 * (attempt + 1));
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error("could not open the page");
-}
+import { richestControlFrame, gotoResilient, headedBrowser, sessionContext, nudgeScroll } from "./browser";
 
 /** Distinguish a real APPLICATION form from a careers-listing / job-search form
  *  (a closed Greenhouse posting redirects to the board, whose keyword/department
@@ -139,66 +96,6 @@ declare global {
   var __coIdleTimer: ReturnType<typeof setTimeout> | undefined;
 }
 const SESSIONS: Map<string, Session> = (globalThis.__coApplySessions ??= new Map());
-const IN_CODEX_SANDBOX = process.env.CODEX_SANDBOX === "seatbelt";
-
-async function headedBrowser(): Promise<Browser> {
-  const b = globalThis.__coHeadedBrowser;
-  if (b && b.isConnected()) {
-    // A dev-server hot reload can leave the pre-fix proxy browser on globalThis.
-    // It has no ownership marker, so retire it once before launching the direct
-    // Chrome path below.
-    if (globalThis.__coHeadedBrowserOwned === undefined) {
-      await b.close().catch(() => {});
-      globalThis.__coHeadedBrowser = undefined;
-    } else {
-      return b;
-    }
-  }
-  if (IN_CODEX_SANDBOX && process.platform === "darwin") {
-    throw new Error("Visible Chrome cannot start inside the Codex macOS sandbox. Run the web app outside Codex, or use Codex with -s danger-full-access for this session.");
-  }
-  // When configured, attach to the user's already-running Chrome. This keeps
-  // its cookies and authenticated ATS sessions instead of creating an anonymous
-  // Playwright context.
-  const cdpUrl = process.env.CAREER_OPS_CHROME_CDP_URL?.trim();
-  if (cdpUrl) {
-    try {
-      const connected = await chromium.connectOverCDP(cdpUrl);
-      globalThis.__coHeadedBrowser = connected;
-      globalThis.__coHeadedBrowserOwned = false;
-      return connected;
-    } catch {
-      throw new Error("Could not connect to authenticated Chrome. Check CAREER_OPS_CHROME_CDP_URL and retry.");
-    }
-  }
-  // Apply uses installed Chrome directly. The public-URL proxy is appropriate
-  // for headless fetch/liveness checks but breaks some ATS pages and can surface
-  // as ERR_TIMED_OUT in the visible browser. URL validation and page-level
-  // request filtering still run below.
-  try {
-    const nb = await chromium.launch({
-      channel: "chrome",
-      headless: false,
-      args: ["--window-position=-3200,-3200", "--window-size=1280,940"], // off-screen during fill; moved on-screen at handoff
-    });
-    globalThis.__coHeadedBrowser = nb;
-    globalThis.__coHeadedBrowserOwned = true;
-    return nb;
-  } catch {
-    throw new Error("The apply feature needs installed Google Chrome. Open Chrome once, then retry; headless Chrome for Testing is not used for visible application sessions.");
-  }
-}
-
-async function sessionContext(browser: Browser): Promise<{ context: BrowserContext; closeContext: boolean }> {
-  // A CDP connection exposes the user's existing default context. Reuse it so
-  // its authenticated cookies are available to the new tab. A browser launched
-  // by us has no contexts yet, so use an isolated context for cleanup safety.
-  if (globalThis.__coHeadedBrowserOwned === false) {
-    const existing = browser.contexts()[0];
-    if (existing) return { context: existing, closeContext: false };
-  }
-  return { context: await browser.newContext({ viewport: { width: 1280, height: 900 } }), closeContext: true };
-}
 
 /** Close the headed Chrome once no sessions have been active for a while, so we
  *  don't leak a browser process. Re-armed on every prune/close; cancelled on open. */
@@ -218,16 +115,6 @@ function scheduleIdleClose() {
 function prune() {
   const now = Date.now();
   for (const [id, s] of SESSIONS) if (now - s.createdAt > 15 * 60_000) void closeSession(id);
-}
-
-/** Bounded scroll pass to trigger lazy/virtualized forms that only render their
- *  fields once scrolled into view, then return to the top. */
-async function nudgeScroll(page: Page): Promise<void> {
-  for (let i = 1; i <= 3; i++) {
-    await page.evaluate((y) => window.scrollTo(0, y), i * 1200).catch(() => {});
-    await page.waitForTimeout(250);
-  }
-  await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
 }
 
 export async function openSession(url: string, cliId?: string, forceAgent?: boolean, noApplyBtn?: boolean): Promise<{ id: string; title: string; fields: ApplyField[]; shots: string[]; issues: ApplyIssue[]; needsDrive?: boolean }> {
@@ -390,22 +277,6 @@ export async function readSessionSnapshot(id: string): Promise<{
   };
 }
 
-/** Open a bare headed page on a URL (for the agentic drive loop / validation),
- *  without the full extract pipeline. Caller must close the context. */
-export async function newDrivePage(url: string): Promise<{ page: Page; context: BrowserContext; closeContext: boolean }> {
-  await validatePublicUrl(url);
-  if (globalThis.__coIdleTimer) clearTimeout(globalThis.__coIdleTimer);
-  const browser = await headedBrowser();
-  const { context, closeContext } = await sessionContext(browser);
-  const page = await context.newPage();
-  page.setDefaultTimeout(8000);
-  await installPublicUrlPolicy(page);
-  await gotoResilient(page, url);
-  await dismissConsent(page).catch(() => {});
-  await page.waitForTimeout(1000);
-  return { page, context, closeContext };
-}
-
 /** Extract+enrich the current page (used after the drive loop reaches a form). */
 export async function extractCurrent(page: Page, url: string): Promise<{ frame: Frame; form: ExtractedForm }> {
   const r = await pickFormFrame(page);
@@ -452,193 +323,4 @@ export async function closeSession(id: string): Promise<void> {
   await s?.page.close().catch(() => {});
   if (s?.closeContext) await s.context.close().catch(() => {});
   if (SESSIONS.size === 0) scheduleIdleClose();
-}
-
-export type FillStep = { fieldId: string; label: string; ok: boolean; thumb?: string };
-
-/** True for a file field that wants the candidate's résumé/CV (vs. cover letter,
- *  portfolio, or a generic attachment we leave for the user). */
-function isResumeField(f: ApplyField): boolean {
-  return f.type === "file" && /resume|résumé|\bcv\b|curriculum|lebenslauf|currículum/i.test(f.label || "");
-}
-
-/** Fill the real form with verified answers, screenshotting after each field.
- *  Attaches the tailored CV PDF to résumé/CV file fields (cvPath). NEVER clicks a
- *  submit/apply control — only fills/selects/checks/attaches. */
-export async function fillSession(
-  id: string,
-  answers: Record<string, string>,
-  fieldsMeta: ApplyField[],
-  cvPath?: string,
-): Promise<{ steps: FillStep[]; navigated: boolean; issues: ApplyIssue[] }> {
-  const s = SESSIONS.get(id);
-  if (!s) throw new Error("apply session not found (it may have expired)");
-  const byId = new Map(fieldsMeta.map((f) => [f.id, f]));
-  const steps: FillStep[] = [];
-  // Belt-and-suspenders: if filling ever navigates the page (i.e. something got
-  // submitted), the URL path changes. We never submit by construction, but we
-  // report it so the caller can flag it instead of silently "succeeding".
-  const startPath = (() => {
-    try {
-      return new URL(s.frame.url()).pathname;
-    } catch {
-      return s.frame.url();
-    }
-  })();
-
-  const shoot = async () => {
-    try {
-      const buf = await s.page.screenshot({ type: "jpeg", quality: 38 });
-      return `data:image/jpeg;base64,${buf.toString("base64")}`;
-    } catch {
-      return undefined;
-    }
-  };
-
-  // 1) Attach the tailored CV to every résumé/CV file field (even with no text
-  //    answer). The real <input type=file> was tagged data-co-field at extract
-  //    time; setInputFiles works even when the ATS visually hides it behind a
-  //    dropzone. Other file fields (cover letter, portfolio) are left to the user.
-  if (cvPath) {
-    for (const meta of fieldsMeta) {
-      if (!isResumeField(meta)) continue;
-      let ok = false;
-      try {
-        await s.frame.locator(`[data-co-field="${cssAttr(meta.id)}"]`).first().setInputFiles(cvPath);
-        ok = true;
-      } catch {
-        // fallback: any file input inside the same field container
-        try {
-          await s.frame.locator(`input[type=file]`).first().setInputFiles(cvPath);
-          ok = true;
-        } catch {
-          ok = false;
-        }
-      }
-      steps.push({ fieldId: meta.id, label: `${meta.label || "Resume"} (CV attached)`, ok, thumb: await shoot() });
-    }
-  }
-
-  for (const [fid, raw] of Object.entries(answers)) {
-    const meta = byId.get(fid);
-    const value = (raw ?? "").toString();
-    if (!meta || value === "") continue;
-    if (meta.type === "file") continue; // handled above (CV) — never auto-fill other uploads
-    // Defense-in-depth: NEVER auto-tick a legal consent/agreement checkbox — the
-    // human must affirmatively accept. (The planner already flags these
-    // needs_confirmation; this guarantees it even if it slips.)
-    if (meta.type === "checkbox" && /\b(i (have )?read|i agree|i consent|i accept|consent to|privacy notice|terms|gdpr|data protection)\b/i.test(meta.label || "")) {
-      steps.push({ fieldId: fid, label: `${meta.label} — you confirm`, ok: false, thumb: undefined });
-      continue;
-    }
-    let ok = false;
-    let gaveUp = false;
-    try {
-      const loc = s.frame.locator(`[data-co-field="${cssAttr(fid)}"]`).first();
-      if (meta.combobox) {
-        // react-select: open, type to filter, CLICK the matching option. We never
-        // press Enter — in a form, Enter can submit. Clicking an option can't.
-        await loc.scrollIntoViewIfNeeded().catch(() => {});
-        await loc.click();
-        await s.page.waitForTimeout(150);
-        await loc.pressSequentially(value, { delay: 15 }).catch(async () => {
-          await s.page.keyboard.type(value);
-        });
-        await s.page.waitForTimeout(300);
-        const esc = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const menu = '.select__menu .select__option, .select__menu-list [role="option"], [class*="menu" i] [role="option"]';
-        const exact = s.frame.locator(menu).filter({ hasText: new RegExp(`^\\s*${esc}\\s*$`, "i") }).first();
-        if (await exact.count()) {
-          await exact.click();
-        } else {
-          // fall back to the first option that contains the typed text; else give
-          // up (Escape closes the menu) — leave it for the human, never submit.
-          const partial = s.frame.locator(menu).filter({ hasText: new RegExp(esc, "i") }).first();
-          if (await partial.count()) await partial.click();
-          else {
-            await s.page.keyboard.press("Escape").catch(() => {});
-            gaveUp = true;
-          }
-        }
-      } else if (meta.type === "select") {
-        await loc.selectOption({ label: value }).catch(async () => {
-          await loc.selectOption(value);
-        });
-      } else if (meta.type === "checkbox") {
-        const want = ["true", "1", "yes", "on", "checked"].includes(value.toLowerCase());
-        let done = false;
-        try {
-          await loc.setChecked(want, { timeout: 3000 });
-          done = true;
-        } catch {
-          // custom-styled checkbox with a hidden real <input> → click its label
-          // (native toggle + React onChange) or force as a last resort.
-          if ((await loc.isChecked().catch(() => false)) === want) {
-            done = true;
-          } else {
-            const cid = await loc.getAttribute("id").catch(() => null);
-            const lab = cid ? s.frame.locator(`label[for="${cssAttr(cid)}"]`).first() : null;
-            if (lab && (await lab.count())) {
-              await lab.click().catch(() => {});
-              done = true;
-            } else {
-              try {
-                await loc.check({ force: true });
-                done = true;
-              } catch {
-                /* leave for the user */
-              }
-            }
-          }
-        }
-        gaveUp = !done;
-      } else if (meta.type === "radio") {
-        const r = s.frame.locator(`[data-co-field="${cssAttr(fid)}"][data-co-option="${cssAttr(value)}"]`).first();
-        await r.check({ timeout: 3000 }).catch(async () => {
-          await r.check({ force: true }).catch(async () => {
-            const rid = await r.getAttribute("id").catch(() => null);
-            if (rid) await s.frame.locator(`label[for="${cssAttr(rid)}"]`).first().click().catch(() => { gaveUp = true; });
-            else gaveUp = true;
-          });
-        });
-      } else {
-        await loc.fill(value);
-      }
-      ok = !gaveUp;
-    } catch {
-      ok = false;
-    }
-    steps.push({ fieldId: fid, label: meta.label, ok, thumb: await shoot() });
-  }
-  const endPath = (() => {
-    try {
-      return new URL(s.frame.url()).pathname;
-    } catch {
-      return s.frame.url();
-    }
-  })();
-  // Read the real form back: did every answer actually land? any validation
-  // error? — so we warn the user about silent divergence before the handoff.
-  const issues = await verifyFill(s.frame, fieldsMeta, answers).catch(() => [] as ApplyIssue[]);
-  return { steps, navigated: endPath !== startPath, issues };
-}
-
-/** Hand the real (now pre-filled) form to the HUMAN to review + submit. The
- *  window was kept OFF-SCREEN during fill, so bringToFront alone wouldn't make it
- *  visible — we reposition it on-screen via CDP first. We never submit. */
-export async function handoffSession(id: string): Promise<void> {
-  const s = SESSIONS.get(id);
-  if (!s) throw new Error("apply session not found");
-  try {
-    const cdp = await s.context.newCDPSession(s.page);
-    const { windowId } = (await cdp.send("Browser.getWindowForTarget")) as { windowId: number };
-    await cdp.send("Browser.setWindowBounds", {
-      windowId,
-      bounds: { left: 80, top: 60, width: 1280, height: 920, windowState: "normal" },
-    });
-    await cdp.detach().catch(() => {});
-  } catch {
-    /* CDP unavailable → bringToFront still raises it */
-  }
-  await s.page.bringToFront().catch(() => {});
 }

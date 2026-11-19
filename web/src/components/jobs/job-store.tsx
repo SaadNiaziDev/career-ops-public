@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { scoreTone } from "@/lib/format";
 import { intentKey, isActiveState, stateFromLegacyStatus, type RunState } from "@/lib/jobs/run-policy";
 import { syncCliFromServer } from "@/lib/cli-config";
+import { CONFIG_KEY } from "@/lib/cli-config";
 
 export type JobStep = { kind: "tool" | "status"; label: string; ts: number };
 export type JobResult = { score: number | null; summary: string; tone: "good" | "warn" | "bad" | "muted" };
@@ -59,7 +60,6 @@ export function useJobs() {
   return c;
 }
 
-const CONFIG_KEY = "career-ops:config";
 const JOBS_KEY = "career-ops:jobs";
 const MAX_JOB_OUTPUT = 24_000;
 

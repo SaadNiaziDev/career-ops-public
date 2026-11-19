@@ -206,10 +206,6 @@ export function resolveArtifacts(job: Job, applications: Application[] = []): Jo
   return artifacts;
 }
 
-export function resolveArtifact(job: Job, applications: Application[] = []): JobArtifact | null {
-  return resolveArtifacts(job, applications)[0] ?? null;
-}
-
 export function jobDestinationHref(job: Job, applications: Application[] = []): string {
   if (job.state === "completed") {
     const n = resolveReportNum(job, applications);
@@ -232,13 +228,6 @@ export function jobBackHref(job: Job | undefined): string {
   if (job?.page) return job.page;
   return "/pipeline";
 }
-
-export const SCORE_TAG_COLOR: Record<string, string> = {
-  good: "success",
-  warn: "warning",
-  bad: "error",
-  muted: "default",
-};
 
 export function jobDuration(job: Job): number {
   const end = job.endedAt ?? Date.now();

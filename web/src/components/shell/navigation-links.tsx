@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { NAV_ITEMS, isActivePath } from "@/lib/nav-items";
 
 /** One set of destinations for the rail and mobile menu. */

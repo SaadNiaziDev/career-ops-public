@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { MaterialSymbol } from "@/components/material-symbol";
-import { PageShell } from "@/components/dossier/page-shell";
-import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
+import { PageShell } from "@/components/ui/page-shell";
+import { DossierPageHeader } from "@/components/ui/page-header";
 import { Md3Input, Md3Textarea } from "@/components/ui/md3-input";
 import { Md3Chip } from "@/components/ui/md3-chip";
 import { Md3Empty } from "@/components/ui/md3-empty";

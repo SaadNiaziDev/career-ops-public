@@ -72,8 +72,3 @@ export function normalizeVacancyUrl(raw: string): string | null {
     return s || null;
   }
 }
-
-export function vacancyIdFromUrl(raw: string): string | null {
-  const normalized = normalizeVacancyUrl(raw);
-  return normalized ? `url:${normalized}` : null;
-}

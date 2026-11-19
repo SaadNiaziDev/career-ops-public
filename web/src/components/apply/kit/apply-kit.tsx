@@ -2,83 +2,21 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MaterialSymbol } from "@/components/material-symbol";
-import { CompanyLogo } from "@/components/company-logo";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
+import { CompanyLogo } from "@/components/ui/company-logo";
 import { Badge } from "@/components/ui/badge";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { useToast } from "@/components/providers/toast-provider";
-import { useJobs, type Job } from "@/components/jobs/job-store";
+import { useJobs } from "@/components/jobs/job-store";
 import { useApply } from "@/components/apply/apply-provider";
-import { cn } from "@/lib/cn";
 import { coverNeed as coverNeedOf, isCoverField, needsInput, plainText, type ApplyKit, type CoverNeed, type StepState } from "@/lib/apply/kit";
-import type { SnapshotField, SnapshotState } from "@/lib/apply/snapshot";
-import { ApplyAnswers, type EditableField } from "./apply-answers";
-import { ActivityComposer } from "@/components/applications/activity-composer";
-import { RoleEmailPanel } from "./role-email-panel";
-import { useCopy } from "./use-copy";
-
-const CONFIG_KEY = "career-ops:config";
-const OPENED_KEY = "career-ops:apply-opened";
-
-function hasCli(): boolean {
-  try {
-    return !!JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}").cliId;
-  } catch {
-    return false;
-  }
-}
-
-function readOpened(n: string): boolean {
-  try {
-    return (JSON.parse(localStorage.getItem(OPENED_KEY) || "[]") as string[]).includes(n);
-  } catch {
-    return false;
-  }
-}
-
-function rememberOpened(n: string) {
-  try {
-    const list = (JSON.parse(localStorage.getItem(OPENED_KEY) || "[]") as string[]).filter((x) => x !== n);
-    localStorage.setItem(OPENED_KEY, JSON.stringify([n, ...list].slice(0, 50)));
-  } catch {
-    /* per-viewer convenience only */
-  }
-}
-
-function latestJob(jobs: Job[], kind: string, n: string): Job | undefined {
-  return jobs.filter((j) => j.kind === kind && j.input === n).sort((a, b) => b.startedAt - a.startedAt)[0];
-}
-
-function isApplied(status: string): boolean {
-  return /applied|responded|interview|offer|rejected/i.test(status);
-}
-
-function host(url?: string): string {
-  try {
-    return url ? new URL(url).hostname.replace(/^www\./, "") : "";
-  } catch {
-    return "";
-  }
-}
-
-function lastStep(job?: Job): string {
-  return job?.steps.at(-1)?.label ?? "Working…";
-}
-
-async function postSnapshot(kit: ApplyKit, state: SnapshotState, fields: SnapshotField[]): Promise<boolean> {
-  const vacancyUrl = kit.answers.vacancyUrl || kit.app.url;
-  if (!vacancyUrl || fields.length === 0) return false;
-  const res = await fetch("/api/apply/snapshot", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ trackerNum: kit.app.n, vacancyUrl, state, fields }),
-  }).catch(() => null);
-  return !!res?.ok;
-}
-
-function toSnapshotFields(fields: EditableField[]): SnapshotField[] {
-  return fields.map(({ id, label, value, type, source }) => ({ id, label, value, type, source }));
-}
+import type { SnapshotState } from "@/lib/apply/snapshot";
+import { ApplyAnswers, type EditableField } from "../apply-answers";
+import { ActivityComposer } from "@/components/track/activity-composer";
+import { RoleEmailPanel } from "../role-email-panel";
+import { useCopy } from "../use-copy";
+import { hasCli, readOpened, rememberOpened, latestJob, isApplied, host, lastStep, postSnapshot, toSnapshotFields, editable } from "./kit-helpers";
+import { KitShortcuts, Step } from "./kit-step";
 
 export function ApplyKitPanel({ initialKit }: { initialKit: ApplyKit }) {
   const n = initialKit.app.n;
@@ -387,7 +325,6 @@ export function ApplyKitPanel({ initialKit }: { initialKit: ApplyKit }) {
         )}
       </section>
 
-
       {/* Steps */}
       <div id="prepare">
       <ol className="co-kit-card co-kit-in" aria-label="Apply kit steps">
@@ -554,76 +491,5 @@ export function ApplyKitPanel({ initialKit }: { initialKit: ApplyKit }) {
       </p>
       <KitShortcuts onPrepare={() => !applied && !anyRunning && !allReady && prepareAll()} onOpen={() => formUrl && openApplication()} />
     </div>
-  );
-}
-
-function editable(fields: SnapshotField[]): EditableField[] {
-  return fields.map((f, i) => ({ ...f, key: f.id ? `${f.id}#${i}` : `field-${i}` }));
-}
-
-function KitShortcuts({ onPrepare, onOpen }: { onPrepare: () => void; onOpen: () => void }) {
-  const ref = useRef({ onPrepare, onOpen });
-  ref.current = { onPrepare, onOpen };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.shiftKey && e.key === "P") ref.current.onPrepare();
-      if (e.shiftKey && e.key === "O") ref.current.onOpen();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-  return (
-    <p className="hidden px-1 text-[11px] text-[var(--md-sys-color-outline)] sm:block">
-      Shortcuts: <kbd className="font-mono">Shift P</kbd> prepare everything · <kbd className="font-mono">Shift O</kbd> open the application
-    </p>
-  );
-}
-
-function Step({
-  index,
-  state,
-  title,
-  icon,
-  detail,
-  children,
-}: {
-  index: number;
-  state: StepState;
-  title: string;
-  icon: string;
-  detail: React.ReactNode;
-  children?: React.ReactNode;
-}) {
-  const stateLabel = { done: "Done", running: "In progress", todo: "To do", blocked: "Blocked", skipped: "Not needed" }[state];
-  return (
-    <li className="co-kit-step" aria-label={`${title}: ${stateLabel}`}>
-      <span className="co-kit-dot" data-state={state} aria-hidden>
-        {state === "done" ? (
-          <MaterialSymbol name="check" size={18} />
-        ) : state === "running" ? (
-          <MaterialSymbol name="progress_activity" size={18} className="animate-spin" />
-        ) : state === "skipped" ? (
-          <MaterialSymbol name="remove" size={16} />
-        ) : state === "blocked" ? (
-          <MaterialSymbol name="block" size={16} />
-        ) : (
-          <MaterialSymbol name={icon} size={18} />
-        )}
-      </span>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-baseline gap-x-2">
-          <h3 className="text-[15px] font-semibold text-[var(--md-sys-color-on-surface)]">
-            <span className="sr-only">Step {index}: </span>
-            {title}
-          </h3>
-          <span className={cn("text-xs", state === "done" ? "text-[var(--md-sys-color-primary)]" : "text-[var(--md-sys-color-outline)]")}>{stateLabel}</span>
-        </div>
-        <div className="mt-0.5 text-sm text-[var(--md-sys-color-on-surface-variant)]">{detail}</div>
-        {children && <div className="co-kit-actions">{children}</div>}
-      </div>
-    </li>
   );
 }

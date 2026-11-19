@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import type { ProfileFields } from "@/lib/profile-fields";
 
 type TextKey = "name" | "email" | "location" | "country" | "timezone" | "visa" | "compRange" | "minimum" | "currency" | "remote";

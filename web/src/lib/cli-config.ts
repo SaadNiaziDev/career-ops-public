@@ -1,7 +1,5 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-
 export const CONFIG_KEY = "career-ops:config";
 
 export type CliConfig = {
@@ -93,30 +91,4 @@ export async function syncCliFromServer(): Promise<string | null> {
 /** Resolve the engine for a run: this browser's cached choice, else the server's. */
 export async function resolveCliIdForRun(): Promise<string | null> {
   return readCliConfig().cliId || syncCliFromServer();
-}
-
-export function useCliConfig() {
-  const [config, setConfig] = useState<CliConfig>({ cliId: null });
-
-  const refresh = useCallback(() => {
-    setConfig(readCliConfig());
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    const onChange = () => refresh();
-    window.addEventListener("co-config-changed", onChange);
-    window.addEventListener("storage", onChange);
-    return () => {
-      window.removeEventListener("co-config-changed", onChange);
-      window.removeEventListener("storage", onChange);
-    };
-  }, [refresh]);
-
-  return {
-    cliId: config.cliId,
-    cliConfigured: !!config.cliId,
-    cliName: cliDisplayName(config.cliId),
-    refresh,
-  };
 }

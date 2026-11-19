@@ -1,5 +1,5 @@
 import type { InputHTMLAttributes, Ref, TextareaHTMLAttributes } from "react";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { cn } from "@/lib/cn";
 
 export function Md3Input({

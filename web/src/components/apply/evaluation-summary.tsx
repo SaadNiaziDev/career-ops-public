@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import type { MachineSummary } from "@/lib/format";
 
 const DIMENSIONS: [keyof NonNullable<MachineSummary["scores"]>, string][] = [

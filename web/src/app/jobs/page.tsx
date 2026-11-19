@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { useJobs } from "@/components/jobs/job-store";
-import { PageShell } from "@/components/dossier/page-shell";
-import { DossierPageHeader } from "@/components/dossier/dossier-page-header";
-import { DossierStack } from "@/components/dossier/dossier-stack";
-import { usePipeline } from "@/components/pipeline/pipeline-provider";
+import { PageShell } from "@/components/ui/page-shell";
+import { DossierPageHeader } from "@/components/ui/page-header";
+import { DossierStack } from "@/components/ui/stack";
+import { usePipeline } from "@/components/providers/pipeline-provider";
 import { humanizeJobKind, jobDestinationHref, resolveReportNum } from "@/components/jobs/job-utils";
 import { isActiveState, type RunState } from "@/lib/jobs/run-policy";
 

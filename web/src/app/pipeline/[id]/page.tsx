@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { readReport, findApplication, trackerCanDelete } from "@/lib/career-ops";
 import { loadApplicationRecords, applicationDrafts } from "@/lib/application-records";
-import { ReportView } from "@/components/report-view";
+import { ReportView } from "@/components/report/report-view";
 
 export const dynamic = "force-dynamic";
 

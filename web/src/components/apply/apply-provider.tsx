@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ApplyField } from "@/lib/apply/extract";
 import type { ApplyIssue, DriveStep } from "@/lib/apply/issue";
 import { restoredAnswers, snapshotFields, type AnswerSource, type ApplicationSnapshot, type SnapshotState } from "@/lib/apply/snapshot";
+import { CONFIG_KEY } from "@/lib/cli-config";
 
 export type FillStep = { fieldId: string; label: string; ok: boolean; thumb?: string };
 type Meta = { needsConfirmation?: boolean };
@@ -46,7 +47,6 @@ export function useApply(): ApplyCtx {
   return c;
 }
 
-const CONFIG_KEY = "career-ops:config";
 function cliId(): string | null {
   try {
     return JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}").cliId || null;

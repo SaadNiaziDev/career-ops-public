@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MaterialSymbol } from "@/components/material-symbol";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { Md3Segmented } from "@/components/ui/md3-segmented";
 import { runAtsChecks } from "@/lib/cv/ats";
 import { assessFit, describeChange, type CvStyleLike } from "@/lib/cv/fit";

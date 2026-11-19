@@ -7,7 +7,9 @@ export type CvPageFormat = "a4" | "letter";
 export const DEFAULT_PAGE_FORMAT: CvPageFormat = "a4";
 
 /** Page box in CSS px at 96dpi — A4 794×1123, US Letter 816×1056. */
-export const PAGE_BOX: Record<CvPageFormat, { width: number; height: number; label: string }> = {
+export type PageBox = { width: number; height: number; label: string };
+
+export const PAGE_BOX: Record<CvPageFormat, PageBox> = {
   a4: { width: 794, height: 1123, label: "A4" },
   letter: { width: 816, height: 1056, label: "Letter" },
 };

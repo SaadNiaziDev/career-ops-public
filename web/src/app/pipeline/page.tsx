@@ -1,8 +1,8 @@
-import { PipelineView } from "@/components/pipeline-view";
+import { TrackView } from "@/components/track/track-view";
 import { loadApplicationRecords, summarizeRecords } from "@/lib/application-records";
 
 export const dynamic = "force-dynamic";
 
 export default function TrackPage() {
-  return <PipelineView records={summarizeRecords(loadApplicationRecords())} />;
+  return <TrackView records={summarizeRecords(loadApplicationRecords())} />;
 }

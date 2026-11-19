@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { OutreachDetail } from "@/components/outreach/outreach-view";
-import { ActivityComposer } from "@/components/applications/activity-composer";
+import { OutreachDetail } from "@/components/outreach/outreach-detail";
+import { ActivityComposer } from "@/components/track/activity-composer";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { useJobs } from "@/components/jobs/job-store";
 import type { OutreachRecord } from "@/lib/outreach-shared";

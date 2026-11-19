@@ -1,5 +1,5 @@
-import { MaterialSymbol } from "@/components/material-symbol";
-import { COST_META, type CostClass } from "@/lib/explore-cost";
+import { MaterialSymbol } from "@/components/shell/material-symbol";
+import { COST_META, type CostClass } from "@/lib/cost";
 import { cn } from "@/lib/cn";
 
 export function CostBadge({

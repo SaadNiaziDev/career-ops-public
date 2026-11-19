@@ -1,4 +1,5 @@
-import { getSession, finalizeDrivenSession, extractCurrent, isApplicationFormFn, handoffSession } from "@/lib/apply/session";
+import { getSession, finalizeDrivenSession, extractCurrent, isApplicationFormFn } from "@/lib/apply/session";
+import { handoffSession } from "@/lib/apply/fill";
 import { driveSession } from "@/lib/apply/drive";
 import { classifyEmpty } from "@/lib/apply/diagnose";
 

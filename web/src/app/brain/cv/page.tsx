@@ -1,4 +1,4 @@
-import { CvEditor } from "@/components/cv-editor";
+import { CvEditor } from "@/components/cv/editor/cv-editor";
 
 export const dynamic = "force-dynamic";
 
