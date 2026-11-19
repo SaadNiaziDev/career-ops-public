@@ -27,7 +27,7 @@
     "summary": { "type": "string", "minLength": 1 },
     "competencies": { "type": "array", "items": { "type": "string" } },
     "experience": { "type": "array", "items": { "$ref": "#/$defs/experience" }, "minItems": 1 },
-    "projects": { "type": "array", "items": { "$ref": "#/$defs/project" } },
+    "projects": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/project" } },
     "education": { "type": "array", "items": { "type": "object" } },
     "certifications": { "type": "array", "items": { "type": "object" } },
     "skills": { "type": "array", "items": { "type": "object" } },

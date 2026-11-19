@@ -74,6 +74,7 @@ function validateCvPayload(payload, { requireContract = false } = {}) {
   for (const key of ['competencies', 'projects', 'certifications', 'open_source', 'awards']) {
     if (payload[key] !== undefined && !Array.isArray(payload[key])) errors.push(`${key} must be an array`);
   }
+  if (requireContract && Array.isArray(payload.projects) && payload.projects.length > 4) errors.push("tailored CVs support at most 4 projects; select the most relevant projects before rendering");
   return { ok: errors.length === 0, errors };
 }
 
@@ -197,7 +198,7 @@ function buildProjects(entries, { bulletList = false } = {}) {
     // others keep the single-line fallback that joins bullets into the
     // .project-desc block.
     const listBullets = bulletList && bulletItems.length > 0;
-    const descText = e.description || (listBullets ? '' : bulletItems.join(' '));
+    const descText = [e.description, ...(listBullets ? [] : bulletItems)].filter(Boolean).join(' ');
     const desc = descText
       ? `\n    <div class="project-desc">${escapeHtml(descText)}</div>`
       : '';

@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { ApplicationFlowChart } from "./application-flow";
+import type { ApplicationFlow } from "@/lib/application-flow";
 import { useMemo, useState } from "react";
 import type { ApplicationRecordSummary } from "@/lib/application-records";
 import { CHANNEL_LABELS } from "@/lib/application-activity-shared";
@@ -33,7 +35,7 @@ function day(iso?: string): string {
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** Every application: status, how and when you applied, what you sent, and the next follow-up. */
-export function TrackView({ records }: { records: ApplicationRecordSummary[] }) {
+export function TrackView({ records, flow }: { records: ApplicationRecordSummary[]; flow: ApplicationFlow }) {
   const [tab, setTab] = useState<Tab>("active");
   const [query, setQuery] = useState("");
 
@@ -67,6 +69,8 @@ export function TrackView({ records }: { records: ApplicationRecordSummary[] }) 
         </div>
         <Link href="/apply" className="md3-action-btn md3-action-btn--outlined"><span className="md3-action-btn__label">Go to Apply</span></Link>
       </header>
+
+      <ApplicationFlowChart flow={flow} />
 
       {due.length > 0 && (
         <section className="track-due" aria-label="Follow-ups due">

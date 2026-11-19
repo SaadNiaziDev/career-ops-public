@@ -67,13 +67,13 @@ ${p.candidate}`);
 export function tailorCvPrompt(p: { report: string; candidate: string; today: string }): string {
   return withPromptSecurityHeader(`You tailor the candidate's CV for one job, for an ATS-friendly PDF. Today is ${p.today}. No tools.
 
-Use the evaluation report (JD analysis + keywords) and the candidate sources. Reorder experience bullets by relevance, put the JD's vocabulary into the summary and first bullets, choose the most relevant projects, include every relevant skill category. Up to 9 bullets for the current role, 5-7 for earlier roles, 6-11 projects with tech and 1-2 bullets each. You may wrap 1-3 key terms per bullet in **bold**. Obey any house rules in modes/_custom.md. Leave optional fields out rather than empty when unknown.
+Use the evaluation report (JD analysis + keywords) and the candidate sources. Reorder experience bullets by relevance, put the JD's vocabulary into the summary and first bullets, choose the most relevant projects, include every relevant skill category. Up to 9 bullets for the current role, 5-7 for earlier roles, At most 4 projects, selected by relevance to this JD, with tech and 1-2 evidence-backed bullets each. Use fewer if fewer relevant projects exist; never pad the count. Preserve supported contact links, employment dates, promotions, education, certifications, and relevant skill categories. Do not omit these just to fit a page limit. You may wrap 1-3 key terms per bullet in **bold**. Obey any house rules in modes/_custom.md. Leave optional fields out rather than empty when unknown. Omit any section (open_source, awards, certifications) the candidate has nothing real for: no empty entries, no placeholder values.
 
 ${TRUTH} Never add a skill the candidate does not have; only reword real experience in the JD's words.
 
 Answer with exactly one fenced json block (tailored-cv contract 1.0, no other top-level keys) and nothing after it:
 \`\`\`json
-{"contract_version":"1.0","lang":"en","candidate":{"name":"","headline":"","phone":"","email":"","linkedin":{"url":"","display":""},"portfolio":{"url":"","display":""},"github":{"url":"","display":""},"location":""},"summary":"","competencies":[],"experience":[{"company":"","company_url":"","role":"","promotion":"","location":"","dates":"","bullets":[]}],"projects":[{"name":"","badge":"","tech":"","description":"","link":{"url":"","display":""},"dates":"","bullets":[]}],"open_source":[],"awards":[],"education":[{"title":"","org":"","year":"","description":""}],"certifications":[],"skills":[{"category":"","items":""}]}
+{"contract_version":"1.0","lang":"en","candidate":{"name":"","headline":"","phone":"","email":"","linkedin":{"url":"","display":""},"portfolio":{"url":"","display":""},"github":{"url":"","display":""},"location":""},"summary":"","competencies":[],"experience":[{"company":"","company_url":"","role":"","promotion":"","location":"","dates":"","bullets":[]}],"projects":[{"name":"","badge":"","tech":"","description":"","link":{"url":"","display":""},"dates":"","bullets":[]}],"education":[{"title":"","org":"","year":"","description":""}],"skills":[{"category":"","items":""}]}
 \`\`\`
 
 ${p.report}

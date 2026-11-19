@@ -77,9 +77,9 @@ export async function renderCvArtifact({
     if (factGate.status !== 0) throw new Error((factGate.stderr || factGate.stdout || 'CV fact verification failed').trim());
   }
 
-  const expectedSections = ['summary', 'experience', 'education', 'skills']
+  const expectedSections = ['summary', 'experience', 'projects', 'education', 'certifications', 'skills', 'open_source', 'awards']
     .filter((key) => key === 'summary' ? payload.summary : Array.isArray(payload[key]) && payload[key].length)
-    .map((key) => payload.sections?.[key] || ({ summary: 'Professional Summary', experience: 'Work Experience', education: 'Education', skills: 'Skills' })[key]);
+    .map((key) => payload.sections?.[key] || ({ summary: 'Professional Summary', experience: 'Work Experience', education: 'Education', skills: 'Skills', projects: 'Projects', certifications: 'Certifications', open_source: 'Open Source', awards: 'Awards' })[key]);
 
   const result = await renderHtmlToPdf(html, resolve(pdfPath), {
     format: config.pageFormat,

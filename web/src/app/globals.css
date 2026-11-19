@@ -1577,3 +1577,13 @@ html { min-width: 1024px; }
 .settings-health { color: var(--md-sys-color-on-surface-variant); font: var(--md-sys-typescale-body-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings-health[data-status="broken"] { color: var(--md-sys-color-error); }
 .settings-health[data-status="live"] { color: var(--md-sys-color-primary); }
+
+.application-flow{border:1px solid var(--md-sys-color-outline-variant);border-radius:20px;padding:20px;margin:20px 0;background:var(--md-sys-color-surface-container)}
+.application-flow summary{cursor:pointer;padding:8px 0}
+.application-flow-scroll{max-width:100%;overflow-x:auto;margin:16px 0}
+.application-flow svg [role=button]{cursor:pointer}
+.application-flow svg [role=button]:focus-visible{outline:2px solid var(--md-sys-color-on-surface);outline-offset:4px}
+.application-flow svg path:hover,.application-flow svg path:focus-visible{stroke-opacity:.65}
+.application-flow-table{width:100%;font-size:14px;text-align:left;border-collapse:collapse}
+.application-flow-table :is(th,td){padding:8px;border-bottom:1px solid var(--md-sys-color-outline-variant);overflow-wrap:anywhere}
+.application-flow section{margin-top:16px}.application-flow li{padding:6px 0}

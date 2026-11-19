@@ -231,10 +231,10 @@ function CompaniesCard({ initial }: { initial: SearchCompany[] }) {
       </form>
       {error && <p className="search-error">{error}</p>}
       <div className="settings-companies" role="table" aria-label="Companies">
-        {companies.map((c) => {
+        {companies.map((c, index) => {
           const h = health?.[c.name];
           return (
-            <div key={c.name} className="settings-company" role="row" data-off={!c.enabled}>
+            <div key={`${c.name}:${c.url ?? ""}:${index}`} className="settings-company" role="row" data-off={!c.enabled}>
               <label className="settings-check" role="cell">
                 <input type="checkbox" checked={c.enabled} onChange={(e) => void act({ action: "toggle", name: c.name, enabled: e.target.checked })} aria-label={`Scan ${c.name}`} />
                 <strong>{c.name}</strong>

@@ -10,6 +10,7 @@ import { candidateContext, hasCv } from "@/lib/agent-context";
 import { coverLetterPrompt, evaluatePrompt, outreachPrompt, tailorCvPrompt } from "@/lib/prompts";
 import { evaluationForUrl, saveEvaluation, validateEvaluation } from "@/lib/evaluations";
 import { draftPath } from "@/lib/contacts";
+import { cleanCvPayload } from "@/lib/cv/clean-payload";
 import { atomicWrite } from "@/lib/core/safe-write";
 import { parseOutreachOutput, saveOutreach } from "@/lib/outreach";
 import { validatePublicUrl } from "@/lib/public-url-policy";
@@ -74,14 +75,15 @@ async function evaluate(input: string, cliId: string, context: Context | undefin
 
 function renderCv(n: string, payload: unknown): string {
   const root = careerOpsRoot();
-  const p = payload as { contract_version?: string; candidate?: { name?: string } };
-  if (!p || p.contract_version !== "1.0") throw new AgentError("The tailored CV did not follow the CV format. Retry.");
+  const { payload: clean, problems } = cleanCvPayload(payload);
+  if (problems.length) throw new AgentError(`The tailored CV came back incomplete (${problems.join(", ")}). Retry.`);
+  const p = clean as { candidate?: { name?: string } };
   const company = readApplications().find((a) => a.n === n)?.company ?? "role";
   const dir = path.join(root, "output", ".cv");
   fs.mkdirSync(dir, { recursive: true });
   const base = `cv-${slug(p.candidate?.name ?? "candidate")}-${slug(company)}`;
   const file = path.join(dir, `${base}.json`);
-  atomicWrite(file, JSON.stringify(payload, null, 2));
+  atomicWrite(file, JSON.stringify(clean, null, 2));
   const rendered = spawnSync(process.execPath, [engineScript("render-cv"), file, path.join(dir, `${base}.html`), path.join(dir, `${base}-${today()}.pdf`), `--report=${n}`], { cwd: root, encoding: "utf8", timeout: 120_000 });
   if (rendered.status !== 0) throw new AgentError((rendered.stderr || rendered.stdout || "The CV renderer failed.").trim().split("\n").slice(-3).join(" "));
   return `${base}-${today()}.pdf`;
