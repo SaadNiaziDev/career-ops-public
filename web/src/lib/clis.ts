@@ -2,9 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Headless worker CLIs the web UI can spawn. Cursor Agent CLI (`agent` /
-// `cursor-agent -p --force`) works like Claude Code / Codex for evaluate, PDF,
-// cover, etc. Interactive Cursor IDE still loads `.cursor/skills/career-ops/`.
+// The AI engines the app can run (see lib/agent.ts for how they are invoked).
 export type CliSpec = {
   id: string;
   name: string;
@@ -13,23 +11,11 @@ export type CliSpec = {
   bins?: string[];
   run: string;
   url: string;
-  /** headless invocation args for a single prompt */
-  args: (prompt: string) => string[];
 };
 
 export const KNOWN: CliSpec[] = [
-  { id: "claude", name: "Claude Code", bin: "claude", run: "claude -p", url: "https://claude.ai/code", args: (p) => ["-p", p] },
-  { id: "codex", name: "Codex", bin: "codex", run: "codex exec --json", url: "https://github.com/openai/codex", args: (p) => ["exec", "--json", p] },
-  // --force is required so print mode actually writes reports/PDFs (otherwise proposals only).
-  {
-    id: "cursor",
-    name: "Cursor",
-    bin: "agent",
-    bins: ["agent", "cursor-agent"],
-    run: "agent -p --force",
-    url: "https://cursor.com/cli",
-    args: (p) => ["-p", "--force", "--output-format", "text", p],
-  },
+  { id: "claude", name: "Claude Code", bin: "claude", run: "claude -p", url: "https://claude.ai/code" },
+  { id: "codex", name: "Codex", bin: "codex", run: "codex exec --json", url: "https://github.com/openai/codex" },
 ];
 
 function searchDirs(): string[] {
@@ -114,21 +100,4 @@ export function resolveDefaultCli(): { cliId: string; spec: CliSpec; binPath: st
     if (resolved) return { cliId: c.id, ...resolved };
   }
   return null;
-}
-
-export function extractCodexAgentText(output: string): string {
-  const parts: string[] = [];
-  for (const rawLine of output.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    try {
-      const ev = JSON.parse(line);
-      if (ev.type === "item.completed" && ev.item?.type === "agent_message" && typeof ev.item.text === "string") {
-        parts.push(ev.item.text);
-      }
-    } catch {
-      /* Codex may print non-JSON setup lines before JSONL; ignore them. */
-    }
-  }
-  return parts.join("\n");
 }

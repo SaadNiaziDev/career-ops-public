@@ -13,7 +13,7 @@ export function CostBadge({
 }) {
   const tone = kind === "spend" ? "spend" : "free";
   const icon =
-    kind === "spend" ? "toll" : kind === "free-gemini" ? "auto_awesome" : "eco";
+    kind === "spend" ? "toll" : "eco";
   const meta = COST_META[kind];
 
   return (

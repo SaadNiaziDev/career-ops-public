@@ -9,7 +9,7 @@ import { onboardingVerificationPending } from "./src/lib/onboarding/readiness-st
 test("every supported CLI has a non-generative authentication probe", () => {
   assert.deepEqual(authArgs("claude"), ["auth", "status", "--json"]);
   assert.deepEqual(authArgs("codex"), ["login", "status"]);
-  assert.deepEqual(authArgs("cursor"), ["status", "--format", "json"]);
+  assert.equal(authArgs("cursor"), null);
   assert.equal(authArgs("missing"), null);
 });
 

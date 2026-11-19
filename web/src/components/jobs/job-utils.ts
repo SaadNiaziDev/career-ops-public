@@ -23,17 +23,8 @@ const JOB_LABELS: Record<string, string> = {
   evaluate: "Evaluation",
   pdf: "Tailored CV",
   cover: "Cover letter",
-  email: "Application email",
-  contacto: "Recruiter outreach",
-  titles: "Adjacent titles",
   scan: "Portal scan",
   discover: "AI discovery",
-  "interview-prep": "Interview preparation",
-  "interview-questions": "Interview question bank",
-  "interview-plan": "Interview round plan",
-  "interview-practice": "Interview practice",
-  "interview-debrief": "Interview debrief",
-  "interview-redflag": "Interview red flags",
 };
 
 export function humanizeStep(label: string): string {
@@ -222,7 +213,7 @@ export function resolveArtifact(job: Job, applications: Application[] = []): Job
 export function jobDestinationHref(job: Job, applications: Application[] = []): string {
   if (job.state === "completed") {
     const n = resolveReportNum(job, applications);
-    if (n && ["evaluate", "pdf", "cover", "email", "contacto"].includes(job.kind ?? "")) {
+    if (n && ["evaluate", "pdf", "cover"].includes(job.kind ?? "")) {
       return `/pipeline/${n}`;
     }
   }

@@ -1,8 +1,6 @@
-import os from "node:os";
 import type { Frame } from "playwright-core";
-import { extractCodexAgentText, resolveCli } from "@/lib/clis";
-import { careerOpsRoot } from "@/lib/career-ops";
-import { spawnSandboxedWorker } from "@/lib/worker-sandbox";
+import { resolveCli } from "@/lib/clis";
+import { runAgent } from "@/lib/agent";
 import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
 import type { ApplyField } from "./extract";
 
@@ -81,35 +79,12 @@ Return ONLY a JSON array, no prose, no code fence:
 [{"n":0,"skip":false,"label":"First Name","type":"text","options":[],"required":true}, ...]`);
 }
 
-async function runPlanner(cliId: string, binPath: string, argsFor: (p: string) => string[], prompt: string): Promise<string> {
-  const isClaude = cliId === "claude";
-  const args = isClaude ? ["-p", prompt, "--permission-mode", "acceptEdits", "--strict-mcp-config", "--allowedTools", "Read", "--disallowedTools", "Bash,Write,Edit,NotebookEdit,Task,WebFetch,WebSearch"] : argsFor(prompt);
-  let child;
+async function runPlanner(cliId: string, prompt: string): Promise<string> {
   try {
-    child = await spawnSandboxedWorker({ cliId, task: "form-interpret", binPath, args, cwd: os.tmpdir(), scopeRoot: careerOpsRoot(), readRoots: [], writeRoots: [] });
+    return (await runAgent({ cliId, prompt, timeoutMs: 150_000 })).text;
   } catch {
     return "";
   }
-  return new Promise((resolve) => {
-    let buf = "";
-    child.stdout.on("data", (d: Buffer) => (buf += d.toString()));
-    child.stderr.on("data", () => {});
-    const killer = setTimeout(() => {
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        /* ignore */
-      }
-    }, 150_000);
-    child.on("close", () => {
-      clearTimeout(killer);
-      resolve(buf);
-    });
-    child.on("error", () => {
-      clearTimeout(killer);
-      resolve(buf);
-    });
-  });
 }
 
 type Interpreted = { n: number; skip?: boolean; label?: string; type?: string; options?: string[]; required?: boolean };
@@ -118,13 +93,11 @@ type Interpreted = { n: number; skip?: boolean; label?: string; type?: string; o
  *  re-tag the chosen controls with data-co-field, and return clean ApplyField[].
  *  Returns [] if the CLI is missing or interpretation fails (caller falls back). */
 export async function agentInterpretForm(frame: Frame, cliId: string, title: string): Promise<ApplyField[]> {
-  const resolved = resolveCli(cliId);
-  if (!resolved) return [];
+  if (!resolveCli(cliId)) return [];
   const cands = await captureCandidates(frame).catch(() => [] as Cand[]);
   if (!cands.length) return [];
 
-  const out = await runPlanner(cliId, resolved.binPath, resolved.spec.args, buildPrompt(title, cands));
-  const plannerText = cliId === "codex" ? extractCodexAgentText(out) : out;
+  const plannerText = await runPlanner(cliId, buildPrompt(title, cands));
   const m = plannerText.match(/\[[\s\S]*\]/);
   if (!m) return [];
   let parsed: Interpreted[];

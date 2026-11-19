@@ -1,13 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { CompanyLogo } from "@/components/company-logo";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { Md3ActionButton } from "@/components/ui/md3-action-button";
 import { Md3Card } from "@/components/ui/md3-card";
 import { cn } from "@/lib/cn";
-import { useJobs, type Job } from "@/components/jobs/job-store";
 import { AddCompanyCard } from "@/components/portals/add-company-card";
 
 type Company = { name: string; status: string; detail: string };
@@ -24,18 +23,6 @@ const ORDER: Record<string, number> = { broken: 0, empty: 1, live: 2, skipped: 3
 export function PortalsView() {
   const [res, setRes] = useState<Result | null>(null);
   const [loading, setLoading] = useState(false);
-  const { jobs, startJob } = useJobs();
-
-  const fixByCompany = useMemo(() => {
-    const m = new Map<string, Job>();
-    for (const j of jobs) {
-      if (j.kind !== "fix-portal" || !j.input) continue;
-      const ex = m.get(j.input);
-      if (!ex || j.startedAt > ex.startedAt) m.set(j.input, j);
-    }
-    return m;
-  }, [jobs]);
-
   function check() {
     setLoading(true);
     fetch("/api/portals/verify")
@@ -100,20 +87,6 @@ export function PortalsView() {
                       <code className="text-xs text-[var(--md-sys-color-on-surface-variant)]">{c.detail}</code>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      {c.status === "broken" ? (
-                        <FixAffordance
-                          job={fixByCompany.get(c.name)}
-                          onFix={() =>
-                            startJob({
-                              title: `Fix · ${c.name}`,
-                              subtitle: "repair portal slug",
-                              kind: "fix-portal",
-                              input: c.name,
-                              page: "/portals",
-                            })
-                          }
-                        />
-                      ) : null}
                       <span className={cn("inline-flex min-h-7 items-center rounded-[var(--md-sys-shape-corner-small)] px-2.5 text-xs font-semibold", t.className)}>
                         {t.label}
                       </span>
@@ -129,25 +102,3 @@ export function PortalsView() {
   );
 }
 
-function FixAffordance({ job, onFix }: { job?: Job; onFix: () => void }) {
-  if (job?.status === "running") {
-    return (
-      <Link href={`/jobs/${job.id}`} className="md3-btn-text min-h-10 text-sm">
-        <MaterialSymbol name="progress_activity" size={16} className="animate-spin" />
-        Fixing…
-      </Link>
-    );
-  }
-  if (job?.status === "done") {
-    return (
-      <Link href={`/jobs/${job.id}`} className="md3-btn-text min-h-10 text-sm text-[var(--md-sys-color-tertiary)]">
-        repaired · re-check
-      </Link>
-    );
-  }
-  return (
-    <Md3ActionButton variant="outlined" icon="build" onClick={onFix}>
-      Fix
-    </Md3ActionButton>
-  );
-}

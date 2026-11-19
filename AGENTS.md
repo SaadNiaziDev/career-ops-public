@@ -6,6 +6,8 @@ UI-first fork of [career-ops](https://github.com/santifer/career-ops) by Saad Al
 
 **It is designed to be made yours.** Customize archetypes, scoring, portals, and narrative in user-layer files. The agent edits those directly when you ask.
 
+> **Simplification in progress (branch `simplify`).** The web app is the only interface. All AI runs go through `web/src/lib/agent.ts` (Claude Code or Codex on the user's subscription, no file/shell tools, JSON answers) with prompts in `web/src/lib/prompts.ts`. Data lives in `data/career-ops.db` (SQLite). The system mode files in `modes/` were removed; only `modes/_profile.md` and `modes/_custom.md` (user layer) remain. Sections below that mention modes, batch, Cursor or root scripts are being retired.
+
 ## Git Commits (CRITICAL)
 
 - Commit messages are **one line only**: `type(scope): summary`. No body.

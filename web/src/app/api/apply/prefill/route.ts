@@ -1,19 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
-import { extractCodexAgentText, resolveCli } from "@/lib/clis";
-import { careerOpsRoot, readMemory } from "@/lib/career-ops";
+import { careerOpsRoot } from "@/lib/career-ops";
+import { runAgent } from "@/lib/agent";
+import { candidateContext } from "@/lib/agent-context";
 import { getSession } from "@/lib/apply/session";
-import { spawnSandboxedWorker, terminateWorkerProcess, workerRoots, WorkerCapacityError } from "@/lib/worker-sandbox";
 import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
 import { readBoundedJson, RequestTooLargeError } from "@/lib/core/request-bounds";
-import { workerClientId } from "@/lib/core/worker-admission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 320;
 const MAX_PREFILL_BODY_BYTES = 16_000;
-const MAX_PREFILL_PROMPT_BYTES = 128_000;
-const MAX_PREFILL_OUTPUT_BYTES = 256_000;
+const MAX_PREFILL_PROMPT_BYTES = 300_000;
 
 /**
  * Pull a JSON object out of an LLM's text answer, tolerating code fences,
@@ -139,15 +137,10 @@ export async function POST(req: Request) {
 
       const s = sessionId ? getSession(sessionId) : undefined;
       if (!s) return fail("apply session not found (it may have expired)");
-      const resolved = cliId ? resolveCli(cliId) : null;
-      if (!resolved) return fail(`CLI '${cliId}' not found on this machine`);
-      const { spec, binPath } = resolved;
-
       const fieldsList = s.fields
         .map((f) => `${f.id}\t${f.type}${f.required ? "*" : ""}\t${f.label}${f.options ? `\t[options: ${f.options.join(" | ")}]` : ""}`)
         .join("\n");
-      const mem = readMemory().trim();
-      const prompt = withPromptSecurityHeader(`You are pre-filling a job application for the user (company/role): ${untrustedContent("job title", s.title)}. Read cv.md and config/profile.yml; if a matching report for this company exists in reports/, read it too. Ground EVERY answer in the REAL candidate — never invent facts.${mem ? `\n\nDurable notes about the user:\n${untrustedContent("user profile notes", mem)}` : ""}
+      const prompt = withPromptSecurityHeader(`You are pre-filling a job application for the user (company/role): ${untrustedContent("job title", s.title)}. Ground EVERY answer in the candidate sources below; never invent facts. No tools.
 
 FIELDS (id ⇥ type ⇥ label ⇥ options):
 ${untrustedContent("external application form", fieldsList)}
@@ -158,111 +151,30 @@ For each field give the best answer:
 - select/radio → choose the best-matching option using the EXACT option text from the list.
 - NEVER fill legal / visa / work-authorization / salary / demographic / sensitive fields → set needs_confirmation:true and value:"".
 
-Output ONLY a compact JSON object mapping each field id → {"value": "...", "needs_confirmation": boolean}. No prose, no markdown, no code fence.`);
-      if (Buffer.byteLength(prompt, "utf8") > MAX_PREFILL_PROMPT_BYTES) return fail("Application form is too large to prefill safely (max prompt 128 KB). Reduce the number or length of its fields.");
+Output ONLY a compact JSON object mapping each field id → {"value": "...", "needs_confirmation": boolean}. No prose, no markdown, no code fence.
 
-      log(`Form: "${s.title}" · ${s.fields.length} fields · prompt ${prompt.length} chars · memory ${mem.length} chars`);
-      log(`Planner: ${cliId} (${binPath})`);
+${candidateContext({ voice: true })}`);
+      if (Buffer.byteLength(prompt, "utf8") > MAX_PREFILL_PROMPT_BYTES) return fail("Application form is too large to prefill safely. Reduce the number or length of its fields.");
 
-      const isClaude = cliId === "claude";
-      const isCodex = cliId === "codex";
-      // --strict-mcp-config with no --mcp-config = load ZERO MCP servers → much
-      // faster startup (skips the user's global playwright/gmail/linear/… servers
-      // the planner doesn't need; it only reads local files).
-      const args = isClaude
-        ? ["-p", prompt, "--permission-mode", "acceptEdits", "--strict-mcp-config", "--allowedTools", "Read,Glob,Grep", "--disallowedTools", "Bash,Write,Edit,NotebookEdit,Task,WebFetch,WebSearch"]
-        : spec.args(prompt);
-      // Scale the timeout with form size (big forms = more drafting). Cap < maxDuration.
+      log(`Form: "${s.title}" · ${s.fields.length} fields · prompt ${prompt.length} chars`);
       const killMs = Math.min(300_000, 150_000 + s.fields.length * 6_000);
-      log(`Spawning planner (timeout ${Math.round(killMs / 1000)}s)…`);
-
-      let child;
+      log(`Running ${cliId} (timeout ${Math.round(killMs / 1000)}s)…`);
+      const hb = setInterval(() => log(`…running ${Math.round((Date.now() - t0) / 1000)}s`), 4000);
+      let plannerText = "";
       try {
-        const root = careerOpsRoot();
-        const roots = workerRoots("form-prefill", root, s.title);
-        child = await spawnSandboxedWorker({ cliId: resolved.spec.id, task: "form-prefill", binPath, args, cwd: root, scopeRoot: root, ...roots, clientId: workerClientId(req), signal: workerAbort.signal, detached: process.platform !== "win32" });
+        plannerText = (await runAgent({ cliId, prompt, timeoutMs: killMs, signal: workerAbort.signal })).text;
       } catch (error) {
-        if (error instanceof WorkerCapacityError) return fail(error.message);
-        return fail(error instanceof Error ? error.message : "Worker sandbox could not be started.");
+        return fail(error instanceof Error ? error.message : "The AI engine failed.");
+      } finally {
+        clearInterval(hb);
+        req.signal.removeEventListener("abort", abortFromRequest);
       }
-
-      let stopping = false;
-      let forceKiller: ReturnType<typeof setTimeout> | undefined;
-      const stop = () => {
-        if (stopping) return;
-        stopping = true;
-        terminateWorkerProcess(child.pid, "SIGTERM");
-        forceKiller = setTimeout(() => terminateWorkerProcess(child.pid, "SIGKILL"), 5_000);
-      };
-      cancelWorker = () => {
-        workerAbort.abort();
-        stop();
-      };
-      workerAbort.signal.addEventListener("abort", stop, { once: true });
-      if (workerAbort.signal.aborted) stop();
-
-      let outputTooLarge = false;
-      const result = await new Promise<{ buf: string; code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-        // stdin = /dev/null so the CLI doesn't wait 3s for piped input.
-        let buf = "";
-        let firstByteAt = 0;
-        const hb = setInterval(() => {
-          log(`…running ${Math.round((Date.now() - t0) / 1000)}s · ${buf.length} chars received`);
-        }, 4000);
-        child.stdout.on("data", (d: Buffer) => {
-          if (outputTooLarge) return;
-          if (Buffer.byteLength(buf, "utf8") + d.byteLength > MAX_PREFILL_OUTPUT_BYTES) {
-            outputTooLarge = true;
-            log("planner output limit reached → stopping worker");
-            stop();
-            return;
-          }
-          if (!firstByteAt) {
-            firstByteAt = Date.now();
-            log(`first output byte at ${Math.round((firstByteAt - t0) / 1000)}s`);
-          }
-          buf += d.toString();
-        });
-        child.stderr.on("data", (d: Buffer) => {
-          const e = d.toString().trim();
-          if (e) log(`stderr: ${e.slice(0, 160).replace(/\s+/g, " ")}`);
-        });
-        const killer = setTimeout(() => {
-          log("TIMEOUT reached → SIGTERM");
-          stop();
-        }, killMs);
-        child.on("close", (code, signal) => {
-          clearTimeout(killer);
-          clearInterval(hb);
-          if (forceKiller) clearTimeout(forceKiller);
-          workerAbort.signal.removeEventListener("abort", stop);
-          req.signal.removeEventListener("abort", abortFromRequest);
-          responseClosed = true;
-          cancelWorker = () => {};
-          resolve({ buf, code, signal });
-        });
-        child.on("error", (e) => {
-          clearTimeout(killer);
-          clearInterval(hb);
-          log(`spawn error: ${e.message}`);
-          resolve({ buf, code: null, signal: null });
-        });
-      });
-
-      const plannerText = isCodex ? extractCodexAgentText(result.buf) : result.buf;
-      if (outputTooLarge) return fail("Planner answer too large (max 256 KB). Reduce the form size and retry.");
-      log(`Planner exited code=${result.code} signal=${result.signal} · ${result.buf.length} raw chars · ${plannerText.length} answer chars`);
-      log(`output head: ${plannerText.slice(0, 100).replace(/\s+/g, " ") || "(empty)"}`);
-      log(`output tail: ${plannerText.slice(-100).replace(/\s+/g, " ") || "(empty)"}`);
-
-      if (!plannerText.trim()) {
-        return fail(result.signal ? "planner was killed before producing any output (try again / smaller form)" : "planner produced no output (check the CLI works in this folder)");
-      }
+      log(`Answer: ${plannerText.length} chars`);
 
       const { obj, truncated } = extractJsonObject(plannerText);
       if (!obj) {
         return fail(
-          result.signal ? "planner was killed mid-answer (form too large/slow) — couldn't recover any fields" : "couldn't parse the planner's answer as JSON",
+          "couldn't parse the planner's answer as JSON",
           plannerText.slice(-300),
         );
       }

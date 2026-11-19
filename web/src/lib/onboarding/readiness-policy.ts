@@ -1,7 +1,6 @@
 export function authArgs(cliId: string): string[] | null {
   if (cliId === "claude") return ["auth", "status", "--json"];
   if (cliId === "codex") return ["login", "status"];
-  if (cliId === "cursor") return ["status", "--format", "json"];
   return null;
 }
 

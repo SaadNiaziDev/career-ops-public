@@ -1,8 +1,6 @@
-import os from "node:os";
 import type { Page, Frame } from "playwright-core";
-import { extractCodexAgentText, resolveCli, type CliSpec } from "@/lib/clis";
-import { careerOpsRoot } from "@/lib/career-ops";
-import { spawnSandboxedWorker } from "@/lib/worker-sandbox";
+import { resolveCli } from "@/lib/clis";
+import { runAgent } from "@/lib/agent";
 import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
 import { dropNewTabs } from "./diagnose";
 import type { DriveStep } from "./issue";
@@ -56,54 +54,13 @@ async function snapshot(frame: Frame): Promise<{ text: string; n: number }> {
   });
 }
 
-/** One planner turn. Claude uses resume for cheap loop context; other CLIs get
- *  the full current snapshot each turn and return a single JSON action. */
-async function plannerTurn(spec: CliSpec, binPath: string, cliId: string, prompt: string, resumeId: string | null): Promise<{ out: string; sessionId: string | null }> {
-  const isClaude = cliId === "claude";
-  const isCodex = cliId === "codex";
-  const base = resumeId ? ["-p", "--resume", resumeId, prompt] : ["-p", prompt];
-  const args = isClaude
-    ? [...base, "--output-format", "json", "--strict-mcp-config", "--disallowedTools", "Bash,Read,Write,Edit,NotebookEdit,Task,WebFetch,WebSearch,Glob,Grep"]
-    : spec.args(prompt);
-  let child;
+/** One planner turn: the full instructions + current snapshot, answered with one JSON action. */
+async function plannerTurn(cliId: string, prompt: string): Promise<string> {
   try {
-    child = await spawnSandboxedWorker({ cliId, task: "form-interpret", binPath, args, cwd: os.tmpdir(), scopeRoot: careerOpsRoot(), readRoots: [], writeRoots: [] });
+    return (await runAgent({ cliId, prompt, timeoutMs: 90_000 })).text;
   } catch {
-    return { out: "", sessionId: null };
+    return "";
   }
-  return new Promise((resolve) => {
-    let buf = "";
-    child.stdout.on("data", (d: Buffer) => (buf += d.toString()));
-    child.stderr.on("data", () => {});
-    const killer = setTimeout(() => {
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        /* ignore */
-      }
-    }, 90_000);
-    child.on("close", () => {
-      clearTimeout(killer);
-      let out = buf;
-      let sessionId: string | null = null;
-      if (isCodex) {
-        out = extractCodexAgentText(buf);
-      } else if (isClaude) {
-        try {
-          const j = JSON.parse(buf);
-          out = j.result ?? buf;
-          sessionId = j.session_id ?? null;
-        } catch {
-          /* non-json → use raw */
-        }
-      }
-      resolve({ out, sessionId });
-    });
-    child.on("error", () => {
-      clearTimeout(killer);
-      resolve({ out: buf, sessionId: null });
-    });
-  });
 }
 
 type Action = { action: string; ref?: string; text?: string; value?: string; reason?: string };
@@ -130,10 +87,9 @@ export async function driveSession(
   budget = 10,
   answers?: { label: string; value: string }[],
 ): Promise<DriveResult> {
-  const resolved = resolveCli(cliId);
   const steps: DriveStep[] = [];
-  if (!resolved) {
-    return { reached: false, turns: 0, reason: "Configured CLI was not found on this machine.", steps };
+  if (!resolveCli(cliId)) {
+    return { reached: false, turns: 0, reason: "The AI engine was not found on this machine.", steps };
   }
   const shot = async () => {
     try {
@@ -149,7 +105,6 @@ export async function driveSession(
       : `Your goal: FILL this job application with the candidate's answers below, matching each answer to its field by label, across all pages (click 'Next'/'Continue' between pages). Skip any field already correctly filled, and skip file-uploads (handled separately). NEVER submit — when everything is filled and you're on the final page, reply {"action":"done"}.
 ANSWERS (match by the field's label):
 ${answersBlock || "(no answers provided — just reach/observe)"}`;
-  let resumeId: string | null = null;
   let lastUrl = page.url();
 
   const stopVerb = goal === "reach" ? '{"action":"reached_form"}            STOP — the fillable application form is now visible' : '{"action":"done"}                    STOP — every answer is filled (you NEVER submit; the human does)';
@@ -158,9 +113,7 @@ ${answersBlock || "(no answers provided — just reach/observe)"}`;
     await dropNewTabs(page); // any "Apply" link/popup navigates in OUR tab, not a new one
     const frame = page.mainFrame();
     const snap = await snapshot(frame).catch(() => ({ text: "", n: 0 }));
-    const prompt =
-      turn === 1
-        ? withPromptSecurityHeader(`You are an agent driving a real web browser for a job seeker (we execute your actions; the human submits at the end). ${goalText}
+    const prompt = withPromptSecurityHeader(`You are an agent driving a real web browser for a job seeker (we execute your actions; the human submits at the end). ${goalText}
 You NEVER submit a form — there is no submit action; the human does that.
 Reply with EXACTLY ONE action as a JSON object, nothing else:
   {"action":"click","ref":"e3"}            click an element
@@ -172,16 +125,9 @@ Reply with EXACTLY ONE action as a JSON object, nothing else:
 
 Page: ${untrustedContent("external page title and URL", `${await page.title().catch(() => "")} (${page.url()})`)}
 Elements:
-${untrustedContent("external browser snapshot", snap.text)}`)
-        : withPromptSecurityHeader(`New page state after your last action.
-Page: ${untrustedContent("external page title and URL", `${await page.title().catch(() => "")} (${page.url()})`)}
-Elements:
-${untrustedContent("external browser snapshot", snap.text)}
+${untrustedContent("external browser snapshot", snap.text)}`);
 
-Reply ONE action JSON.`);
-
-    const { out, sessionId } = await plannerTurn(resolved.spec, resolved.binPath, cliId, prompt, resumeId);
-    if (sessionId) resumeId = sessionId;
+    const out = await plannerTurn(cliId, prompt);
     const act = parseAction(out);
     if (!act) {
       const s: DriveStep = { turn, action: "parse-error", detail: out.slice(0, 80), thumb: await shot() };

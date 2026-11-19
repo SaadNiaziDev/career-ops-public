@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { PageShell } from "@/components/dossier/page-shell";
 import { MaterialSymbol } from "@/components/material-symbol";
 import { ConfigCliTile, type ConfigCli } from "@/components/config/config-cli-tile";
-import { KeysPanel } from "@/components/config/keys-panel";
 import { ProfilePanel } from "@/components/config/profile-panel";
 import { WeightsEditor } from "@/components/config/weights-editor";
 import { Md3Segmented } from "@/components/ui/md3-segmented";
@@ -25,7 +24,7 @@ const SECTIONS = [
   { id: "goals", label: "Search goals", icon: "track_changes", file: "config/profile.yml", keywords: "roles location eligibility compensation currency" },
   { id: "identity", label: "Identity", icon: "person", file: "config/profile.yml", keywords: "name email current country timezone visa" },
   { id: "constraints", label: "Constraints", icon: "rule", file: "config/profile.yml · modes/_profile.md", keywords: "deal breakers remote hybrid onsite location" },
-  { id: "engines", label: "AI engine", icon: "terminal", file: `${CONFIG_KEY} · .env`, keywords: "cli authentication keys workers timeout" },
+  { id: "engines", label: "AI engine", icon: "terminal", file: CONFIG_KEY, keywords: "cli claude codex subscription workers timeout" },
   { id: "documents", label: "Documents", icon: "description", file: "config/profile.yml · cv.md", keywords: "master tailored cv pdf template" },
   { id: "followups", label: "Follow-ups", icon: "event_repeat", file: "config/profile.yml", keywords: "cadence reminder applied interview days" },
   { id: "data", label: "Data & diagnostics", icon: "database", file: "data/ · reports/", keywords: "export backup diagnostics files" },
@@ -318,16 +317,6 @@ export function ConfigForm() {
               />
             </ConfigRow>
 
-            <ConfigDivider />
-
-            <div>
-              <p className="text-base font-semibold">Provider keys</p>
-              <p className="mb-4 mt-1 text-[13px] text-[var(--md-sys-color-outline)]">
-                Write-only. A stored key is never sent back to this page — only whether it exists and whether it
-                still reaches its provider.
-              </p>
-              <KeysPanel />
-            </div>
           </ConfigGroup>
 
           <section className={cn("config-panel mt-6", ["identity","goals","constraints","documents","followups"].includes(activeSection) ? "" : "hidden")}>

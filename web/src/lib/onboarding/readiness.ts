@@ -64,11 +64,11 @@ function writableCheck(root: string, rel: string): ReadinessCheck {
 
 async function cliCheck(cliId: string): Promise<ReadinessCheck> {
   const selectedCli = cliId || resolveDefaultCli()?.cliId || "";
-  if (!selectedCli) return { id: "cli", label: "No AI engine detected (optional)", ok: false, cause: "Discovery and tracker setup remain available.", recovery: "Install and sign in to Claude Code, Codex, or Cursor when you want AI evaluation." };
+  if (!selectedCli) return { id: "cli", label: "No AI engine detected (optional)", ok: false, cause: "Discovery and tracker setup remain available.", recovery: "Install and sign in to Claude Code or Codex when you want AI features." };
   const resolved = resolveCli(selectedCli);
   const args = authArgs(selectedCli);
   if (!resolved || !args) {
-    return { id: "cli", label: "AI engine is unavailable (optional)", ok: false, cause: "The selected engine is not installed.", recovery: "Install Claude Code, Codex, or Cursor Agent when you want AI evaluation." };
+    return { id: "cli", label: "AI engine is unavailable (optional)", ok: false, cause: "The selected engine is not installed.", recovery: "Install Claude Code or Codex when you want AI features." };
   }
   const result = await new Promise<{ code: number | null; output: string }>((resolve) => {
     execFile(resolved.binPath, args, { cwd: careerOpsRoot(), timeout: 10_000 }, (error, stdout, stderr) => {

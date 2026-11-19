@@ -1,12 +1,7 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { resolveCli, resolveDefaultCli } from "@/lib/clis";
-import { careerOpsRoot } from "@/lib/career-ops";
 import { extractPdfText } from "@/lib/cv/pdf-text.mjs";
 import { localCvStream } from "@/lib/cv/quality";
-import { spawnSandboxedWorker, terminateWorkerProcess, WorkerCapacityError, workerRoots } from "@/lib/worker-sandbox";
-import { workerClientId } from "@/lib/core/worker-admission";
+import { AgentError, runAgent } from "@/lib/agent";
 import { untrustedContent, withPromptSecurityHeader } from "@/lib/untrusted-content";
 import { readBoundedFormData, readBoundedJson, RequestTooLargeError } from "@/lib/core/request-bounds";
 
@@ -22,24 +17,7 @@ const MAX_UPLOAD_BYTES = 5_000_000;
 const MAX_TEXT_BYTES = 200_000;
 const MAX_JSON_BYTES = 250_000;
 
-// Prefer the CANONICAL core mode (single source of truth — CLI + web parse CVs
-// identically); fall back to the inline prompt until modes/cv-ingest.md lands
-// (exactly how the explore route handles a missing discover.md).
-function readCanonicalMode(): string | null {
-  try {
-    return fs.readFileSync(path.join(careerOpsRoot(), "modes", "cv-ingest.md"), "utf8");
-  } catch {
-    return null;
-  }
-}
-
 function ingestPrompt(source: string): string {
-  const mode = readCanonicalMode();
-  if (mode) {
-    return `${mode}\n\n--- HEADLESS OUTPUT CONTRACT (the career-ops WEB is parsing your stream) ---\nFollow the mode above exactly. You are a PROPOSER running headless: emit ONLY the markdown between <<cv:start>> and <<cv:end>> (own lines, never in a code fence), then one <<cv:seed>>{...} line; or <<cv:error>>{"reason":"unreadable"} if you can't read it. Narrate one short line before <<cv:start>>.\n\n${source}`;
-  }
-  // Fallback mirrors the canonical examples/cv-example.md format (the SSOT the
-  // project ships) so a web-parsed CV is the same shape as a hand-written one.
   return `You convert a person's CV into clean cv.md markdown that EXACTLY mirrors career-ops's reference format.
 
 FORMAT (match exactly; omit a section if the source lacks it; INVENT NOTHING):
@@ -121,162 +99,35 @@ export async function POST(req: Request) {
   }
 
   const resolved = cliId ? resolveCli(cliId) : null;
-  const active = resolved ? { cliId, ...resolved } : resolveDefaultCli();
+  const active = resolved ? { cliId } : resolveDefaultCli();
   if (!active) {
     if (extractedText) return localResponse(extractedText);
-    return Response.json({ error: "Connect an AI CLI in Config, or paste / drop a .md file." }, { status: 404 });
+    return Response.json({ error: "Connect an AI engine in Settings, or paste / drop a .md file." }, { status: 404 });
   }
-  const { spec, binPath, cliId: activeCliId } = active;
   const prompt = withPromptSecurityHeader(ingestPrompt(promptSource));
-  const isClaude = activeCliId === "claude";
-  const isCodex = activeCliId === "codex";
-  const args = isClaude
-    ? [
-        "-p",
-        prompt,
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        "--include-partial-messages",
-        "--permission-mode",
-        "acceptEdits",
-        "--allowedTools",
-        "Read,Glob,Grep",
-        "--disallowedTools",
-        "Bash,Write,Edit,NotebookEdit,Task,WebFetch,WebSearch",
-      ]
-    : spec.args(prompt);
-
-  let child;
-  try {
-    const root = careerOpsRoot();
-    const roots = workerRoots("cv-ingest", root);
-    child = await spawnSandboxedWorker({ cliId: activeCliId, task: "cv-ingest", binPath, args, cwd: os.tmpdir(), scopeRoot: root, ...roots, clientId: workerClientId(req), signal: req.signal, detached: process.platform !== "win32" });
-  } catch (e) {
-    if (e instanceof WorkerCapacityError) {
-      if (e.reason === "cancelled") return new Response(null, { status: 499 });
-      return Response.json({ error: e.message }, { status: 429, headers: { "Retry-After": "5" } });
-    }
-    return Response.json({ error: e instanceof Error ? e.message : "failed to start the sandboxed CLI" }, { status: 503 });
-  }
-
+  const abort = new AbortController();
+  req.signal.addEventListener("abort", () => abort.abort(), { once: true });
   const encoder = new TextEncoder();
-  // The `closed` flag + kill timer live in the OUTER scope so the ReadableStream
-  // `cancel()` callback (fired on client disconnect / response teardown) can flip
-  // `closed` BEFORE the child's late close/error/stderr handlers run — otherwise
-  // they enqueue onto an already-closed controller and throw an UNCAUGHT
-  // "Invalid state: Controller is already closed" that crashes the server (#1155).
-  let closed = false;
-  let killer: ReturnType<typeof setTimeout> | undefined;
-  let forceKiller: ReturnType<typeof setTimeout> | undefined;
-  let stopping = false;
-  const stop = () => {
-    if (stopping) return;
-    stopping = true;
-    terminateWorkerProcess(child.pid, "SIGTERM");
-    forceKiller = setTimeout(() => terminateWorkerProcess(child.pid, "SIGKILL"), 5_000);
-  };
-  const releaseResources = () => {
-    if (killer) clearTimeout(killer);
-    if (forceKiller) clearTimeout(forceKiller);
-    req.signal.removeEventListener("abort", stop);
-  };
-  req.signal.addEventListener("abort", stop, { once: true });
-  if (req.signal.aborted) stop();
   const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      let buf = "";
+    async start(controller) {
+      let closed = false;
       let emitted = false;
-      killer = setTimeout(() => {
-        stop();
-      }, 240_000);
-      const safeClose = () => {
-        if (!closed) {
-          closed = true;
-          releaseResources();
-          try {
-            controller.close();
-          } catch {
-            /* already closed */
-          }
-        }
+      const enqueue = (text: string) => {
+        if (closed || !text) return;
+        try { controller.enqueue(encoder.encode(text)); emitted = true; } catch { closed = true; }
       };
-      // Every write goes through here: guarded on `closed` AND try/catch'd, so a
-      // lost race with cancel()/close can never throw out of an EventEmitter cb.
-      const safeEnqueue = (s: string): boolean => {
-        if (closed || !s) return false;
-        try {
-          controller.enqueue(encoder.encode(s));
-          return true;
-        } catch {
-          closed = true; // controller already closed underneath us — stop, never crash
-          return false;
-        }
-      };
-      const emit = (s: string) => {
-        if (safeEnqueue(s)) emitted = true;
-      };
-
-      child.stdout.on("data", (d: Buffer) => {
-        if (closed) return;
-        if (isCodex) {
-          buf += d.toString();
-          let nl: number;
-          while ((nl = buf.indexOf("\n")) !== -1) {
-            const line = buf.slice(0, nl).trim();
-            buf = buf.slice(nl + 1);
-            if (!line) continue;
-            try {
-              const ev = JSON.parse(line);
-              if (ev.type === "item.completed" && ev.item?.type === "agent_message") {
-                const text = ev.item.text;
-                if (typeof text === "string") emit(text);
-              }
-            } catch {
-              /* Codex may print non-JSON setup lines before JSONL; ignore them. */
-            }
-          }
-          return;
-        }
-        if (!isClaude) {
-          emit(d.toString());
-          return;
-        }
-        buf += d.toString();
-        let nl: number;
-        while ((nl = buf.indexOf("\n")) !== -1) {
-          const line = buf.slice(0, nl).trim();
-          buf = buf.slice(nl + 1);
-          if (!line) continue;
-          try {
-            const obj = JSON.parse(line);
-            if (obj.type === "stream_event" && obj.event?.type === "content_block_delta") {
-              const text = obj.event.delta?.text;
-              if (typeof text === "string") emit(text);
-            }
-          } catch {
-            /* partial / non-json line */
-          }
-        }
-      });
-      child.stderr.on("data", (d: Buffer) => {
-        const s = d.toString();
-        if (/error|not found|denied|fatal/i.test(s)) safeEnqueue(`\n[${spec.name}] ${s.trim()}\n`);
-      });
-      child.on("error", (e) => {
-        safeEnqueue(`\n[error launching ${spec.name}: ${e.message}]`);
-        safeClose();
-      });
-      child.on("close", () => {
-        if (!emitted) safeEnqueue("<<cv:error>>{\"reason\":\"no-output\"}");
-        safeClose();
-      });
+      try {
+        await runAgent({ cliId: active.cliId!, prompt, timeoutMs: 240_000, signal: abort.signal, onEvent: (e) => { if (e.type === "text") enqueue(e.text); } });
+        if (!emitted) enqueue('<<cv:error>>{"reason":"no-output"}');
+      } catch (error) {
+        if (!(error instanceof AgentError && error.status === 499)) enqueue(`\n[error: ${error instanceof Error ? error.message : "AI engine failed"}]`);
+        if (!emitted) enqueue('<<cv:error>>{"reason":"no-output"}');
+      } finally {
+        closed = true;
+        try { controller.close(); } catch { /* already closed */ }
+      }
     },
-    cancel() {
-      closed = true; // a consumer teardown must stop the child handlers from enqueuing
-      releaseResources();
-      stop();
-    },
+    cancel() { abort.abort(); },
   });
 
   return new Response(stream, {
