@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS outreach (
   id TEXT PRIMARY KEY, tracker_num TEXT, updated_at TEXT NOT NULL, data TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sync_state (source TEXT PRIMARY KEY, sig TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
 
 type Conn = { db: DatabaseSync; file: string; lastSync: number };
@@ -58,6 +59,7 @@ export function db(): DatabaseSync {
     const handle = new DatabaseSync(file);
     handle.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
     handle.exec(SCHEMA);
+    migrate(handle);
     conn = g.__careerOpsDb = { db: handle, file, lastSync: 0 };
   }
   if (Date.now() - conn.lastSync > 2_000) {
@@ -65,6 +67,22 @@ export function db(): DatabaseSync {
     syncFromFiles(conn.db, careerOpsRoot());
   }
   return conn.db;
+}
+
+/** Additive column migrations for databases created by earlier versions. */
+function migrate(d: DatabaseSync) {
+  const cols = new Set((d.prepare("PRAGMA table_info(jobs)").all() as { name: string }[]).map((c) => c.name));
+  for (const [name, type] of [["source", "TEXT"], ["why", "TEXT"], ["kind", "TEXT"]] as const) {
+    if (!cols.has(name)) d.exec(`ALTER TABLE jobs ADD COLUMN ${name} ${type}`);
+  }
+}
+
+export function getKv(key: string): string | null {
+  return (db().prepare("SELECT value FROM kv WHERE key = ?").get(key) as { value: string } | undefined)?.value ?? null;
+}
+
+export function setKv(key: string, value: string) {
+  db().prepare("INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
 }
 
 export function tx<T>(fn: () => T): T {

@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { db } from "@/lib/db";
 import { careerOpsRoot, doctorState, readApplications, readInbox, trackerCanDelete } from "@/lib/career-ops";
-import { scannerSupportsJson } from "@/lib/core/scan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +38,6 @@ export async function GET() {
       pdfs: dirCount("output", ".pdf"),
     },
     capabilities: {
-      scanJson: scannerSupportsJson(),
       trackerDelete: trackerCanDelete(),
     },
   });

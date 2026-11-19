@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:flow": "node test-application-flow.mjs",
     "test:mobile": "npm run build && node test-mobile-layout.mjs",
-    "test": "node --experimental-strip-types --test test-application-activity.mjs test-clean-chips.mjs test-format.mjs test-vacancy-identity.mjs test-first-score-policy.mjs test-list-sort-policy.mjs test-apply-snapshot.mjs test-apply-kit.mjs test-run-policy.mjs test-run-registry.mjs test-request-bounds.mjs test-onboarding-readiness.mjs test-csv-safety.mjs test-public-url-policy.mjs test-api-security.mjs test-status-route.mjs test-outreach.mjs test-brain.mjs test-agent.mjs"
+    "test": "node --experimental-strip-types --test test-application-activity.mjs test-clean-chips.mjs test-format.mjs test-vacancy-identity.mjs test-list-sort-policy.mjs test-apply-snapshot.mjs test-apply-kit.mjs test-run-policy.mjs test-run-registry.mjs test-request-bounds.mjs test-onboarding-readiness.mjs test-csv-safety.mjs test-public-url-policy.mjs test-api-security.mjs test-status-route.mjs test-outreach.mjs test-brain.mjs test-agent.mjs test-search.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

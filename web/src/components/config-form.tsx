@@ -154,9 +154,8 @@ export function ConfigForm() {
         </nav>
 
         <div className="min-w-0 flex-1">
-          <p className="md-eyebrow">Search settings by goal · all data stays in your local files</p>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-            <h1 className="md-display-small-emphasized">Config</h1>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <h1 className="md-headline-medium">Settings</h1>
             <span
               className={cn(
                 "config-status-chip",
