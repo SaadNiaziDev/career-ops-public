@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { scoreTone } from "@/lib/format";
 import { intentKey, isActiveState, stateFromLegacyStatus, type RunState } from "@/lib/jobs/run-policy";
+import { syncCliFromServer } from "@/lib/cli-config";
 
 export type JobStep = { kind: "tool" | "status"; label: string; ts: number };
 export type JobResult = { score: number | null; summary: string; tone: "good" | "warn" | "bad" | "muted" };
@@ -94,6 +95,9 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
   const controllers = useRef(new Map<string, AbortController>());
   const cancelled = useRef(new Set<string>());
   jobsRef.current = jobs;
+
+  // One AI engine per machine: pull the saved choice into this browser.
+  useEffect(() => { void syncCliFromServer(); }, []);
 
   // restore history
   useEffect(() => {

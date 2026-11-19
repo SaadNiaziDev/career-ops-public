@@ -1,8 +1,9 @@
-import { db, tx } from "@/lib/db";
-import { scoreNum } from "@/lib/format";
+import { db, tx } from "./db.ts";
+import { scoreNum } from "./format.ts";
 
 export class StatusUpdateError extends Error {
-  constructor(message: string, readonly status: number) { super(message); }
+  readonly status: number;
+  constructor(message: string, status: number) { super(message); this.status = status; }
 }
 
 const STATES: Record<string, string[]> = {

@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { careerOpsRoot } from "@/lib/career-ops-root";
 import { parseMachineSummary } from "@/lib/format";
 import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
-import { offerDeadlineFromNotes } from "@/lib/list-sort-policy";
+import { offerDeadlineFromNotes } from "@/lib/offer-deadline";
 import { onboardingVerificationPending } from "@/lib/onboarding/readiness-state";
 
 export { careerOpsRoot, rootScript } from "@/lib/career-ops-root";

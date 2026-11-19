@@ -101,6 +101,9 @@ export function ApplyKitPanel({ initialKit }: { initialKit: ApplyKit }) {
   useEffect(() => {
     setOpened(readOpened(n));
     setCli(hasCli());
+    const onConfig = () => setCli(hasCli());
+    window.addEventListener("co-config-changed", onConfig);
+    return () => window.removeEventListener("co-config-changed", onConfig);
   }, [n]);
 
   const refresh = useCallback(async () => {

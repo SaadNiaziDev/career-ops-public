@@ -16,7 +16,6 @@ export type CliConfig = {
 const CLI_NAMES: Record<string, string> = {
   claude: "Claude Code",
   codex: "Codex",
-  cursor: "Cursor",
 };
 
 export function readCliConfig(): CliConfig {
@@ -55,6 +54,9 @@ export function writeCliConfig(patch: Partial<CliConfig>): CliConfig {
       }),
     );
     window.dispatchEvent(new CustomEvent("co-config-changed"));
+    if (patch.cliId && patch.cliId !== prev.cliId) {
+      void fetch("/api/clis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cliId: patch.cliId }) }).catch(() => {});
+    }
   }
   return next;
 }
@@ -64,22 +66,33 @@ export function cliDisplayName(id: string | null | undefined): string | undefine
   return CLI_NAMES[id] ?? id;
 }
 
-/** Resolve cliId from localStorage, or auto-pick the first installed CLI on this machine. */
-export async function resolveCliIdForRun(): Promise<string | null> {
-  const saved = readCliConfig().cliId;
-  if (saved) return saved;
-
+/** The machine's AI engine (saved on the server); cached in this browser for synchronous reads. */
+export async function syncCliFromServer(): Promise<string | null> {
   try {
-    const res = await fetch("/api/clis");
-    if (!res.ok) return null;
-    const data = (await res.json()) as { clis?: { id: string; installed: boolean }[] };
-    const first = (data.clis ?? []).find((c) => c.installed);
-    if (!first) return null;
-    writeCliConfig({ cliId: first.id, mode: "cli" });
-    return first.id;
+    const res = await fetch("/api/clis", { cache: "no-store" });
+    if (!res.ok) return readCliConfig().cliId;
+    const data = (await res.json()) as { selected?: string | null; saved?: boolean; clis?: { id: string; installed: boolean }[] };
+    const local = readCliConfig().cliId;
+    // First run on the server: keep the engine this browser already chose.
+    if (!data.saved && local && data.clis?.some((c) => c.id === local && c.installed)) {
+      await fetch("/api/clis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cliId: local }) }).catch(() => {});
+      return local;
+    }
+    const selected = data.selected ?? null;
+    if (selected !== readCliConfig().cliId && typeof window !== "undefined") {
+      const prev = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
+      localStorage.setItem(CONFIG_KEY, JSON.stringify({ ...prev, mode: "cli", cliId: selected ?? "" }));
+      window.dispatchEvent(new CustomEvent("co-config-changed"));
+    }
+    return selected;
   } catch {
-    return null;
+    return readCliConfig().cliId;
   }
+}
+
+/** Resolve the engine for a run: this browser's cached choice, else the server's. */
+export async function resolveCliIdForRun(): Promise<string | null> {
+  return readCliConfig().cliId || syncCliFromServer();
 }
 
 export function useCliConfig() {

@@ -2544,3 +2544,14 @@ html { min-width: 1024px; }
 .apply-list ul { margin: 0; padding-left: 18px; color: var(--md-sys-color-on-surface-variant); font: var(--md-sys-typescale-body-small); display: flex; flex-direction: column; gap: 3px; }
 .apply-next { display: flex; gap: 6px; margin: 0; padding: 10px 12px; border-radius: var(--md-sys-shape-corner-medium); background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); font: var(--md-sys-typescale-body-small); }
 .apply-form-wrap { max-width: 960px; }
+
+/* ── Track (desktop) ─────────────────────────────────────────────────────── */
+.track-row { grid-template-columns: minmax(0, 1fr) 170px 130px 150px 120px 90px; }
+.track-sub { color: var(--md-sys-color-on-surface-variant); font: var(--md-sys-typescale-body-small); }
+.track-overdue { color: var(--md-sys-color-error); font-weight: 600; }
+.track-due { padding: 14px 16px; border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-surface-container-low); border: 1px solid var(--md-sys-color-outline-variant); }
+.track-due h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; color: var(--md-sys-color-on-surface); }
+.track-due ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.track-due li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; color: var(--md-sys-color-on-surface); font: var(--md-sys-typescale-body-medium); }
+.track-due__who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track-due__why { color: var(--md-sys-color-on-surface-variant); font: var(--md-sys-typescale-body-small); }
