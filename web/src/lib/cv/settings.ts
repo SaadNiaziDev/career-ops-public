@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import yaml from "js-yaml";
-import { careerOpsRoot, rootScript } from "@/lib/career-ops";
+import { careerOpsRoot, engineScript } from "@/lib/career-ops";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
 import { DEFAULT_CV_SOURCE, resolveCvSource } from "@/lib/cv/sources";
 import { DEFAULT_PAGE_FORMAT, type CvPageFormat } from "@/lib/cv/page";
@@ -79,7 +79,7 @@ export function listCvTemplates(): CvTemplate[] {
 
 function loadCvTemplates(): CvTemplate[] {
   const fallback: CvTemplate[] = [{ name: "standard", displayName: "Standard" }];
-  const r = spawnSync(process.execPath, [rootScript("cv-templates"), "list", "cv"], {
+  const r = spawnSync(process.execPath, [engineScript("cv-templates"), "list", "cv"], {
     cwd: careerOpsRoot(),
     encoding: "utf8",
     maxBuffer: 1024 * 1024,

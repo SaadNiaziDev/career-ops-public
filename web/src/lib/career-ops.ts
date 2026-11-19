@@ -9,7 +9,7 @@ import { normalizeVacancyUrl } from "@/lib/vacancy-identity";
 import { offerDeadlineFromNotes } from "@/lib/offer-deadline";
 import { onboardingVerificationPending } from "@/lib/onboarding/readiness-state";
 
-export { careerOpsRoot, rootScript } from "@/lib/career-ops-root";
+export { careerOpsRoot, engineScript } from "@/lib/career-ops-root";
 
 /** Rows are soft-deleted in SQLite, so deletion is always available. */
 export function trackerCanDelete(): boolean {
@@ -191,13 +191,14 @@ export function ensureOnboardingTemplates(): string[] {
   const root = careerOpsRoot();
   const autoCopied: string[] = [];
   const templates = [
-    { target: "modes/_profile.md", template: "modes/_profile.template.md" },
-    { target: "modes/_custom.md", template: "modes/_custom.template.md" },
-    { target: "portals.yml", template: "templates/portals.example.yml" },
+    { target: "modes/_profile.md", template: "_profile.template.md" },
+    { target: "modes/_custom.md", template: "_custom.template.md" },
+    { target: "portals.yml", template: "portals.example.yml" },
+    { target: "config/profile.yml", template: "profile.example.yml" },
   ];
   for (const { target, template } of templates) {
     const targetPath = path.join(root, ...target.split("/"));
-    const templatePath = path.join(root, ...template.split("/"));
+    const templatePath = path.join(process.cwd(), "engine", "templates", template);
     if (!fs.existsSync(targetPath) && fs.existsSync(templatePath)) {
       try {
         fs.mkdirSync(path.dirname(targetPath), { recursive: true });

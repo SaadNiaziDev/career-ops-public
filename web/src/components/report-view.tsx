@@ -9,7 +9,6 @@ import { VerdictCard } from "@/components/report/verdict-card";
 import { DimensionChart } from "@/components/report/dimension-chart";
 import { StatusSelect } from "@/components/status-select";
 import { CompanyLogo } from "@/components/company-logo";
-import { ScoreMethodology } from "@/components/score-methodology";
 import { ApplyButton } from "@/components/apply-button";
 import { ApplicationRecordPanel } from "@/components/applications/application-record";
 import type { ApplicationRecord } from "@/lib/application-records";
@@ -391,7 +390,6 @@ export function ReportView({
                 }
               />
             )}
-                <div className="mt-4"><ScoreMethodology /></div>
               </div>
             </details>
           </div>

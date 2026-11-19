@@ -1,53 +1,16 @@
 {
   "name": "career-ops",
-  "version": "0.1.0",
-  "description": "Local-first AI job search — web UI with Claude Code, Codex, and Cursor agents",
+  "version": "1.0.0",
+  "description": "Local job search app: search, evaluate, apply, email and track — powered by your Claude Code or Codex subscription.",
   "private": true,
   "scripts": {
-    "doctor": "node doctor.mjs",
-    "web:install": "cd web && npm ci",
-    "web:dev": "cd web && npm run dev",
-    "web:build": "cd web && npm run build",
-    "web:start": "cd web && npm run start",
-    "web:typecheck": "cd web && npm run typecheck",
-    "test:tracker": "node --test test-tracker-mutations.mjs && node set-status-tests.mjs && node tracker-columns-tests.mjs",
-    "verify": "node verify-pipeline.mjs",
-    "normalize": "node normalize-statuses.mjs",
-    "dedup": "node dedup-tracker.mjs",
-    "merge": "node merge-tracker.mjs",
-    "reconcile": "node reconcile-pipeline.mjs",
-    "repair:vacancies": "node repair-vacancies.mjs",
-    "pdf": "node generate-pdf.mjs",
-    "cover-letter": "node generate-cover-letter.mjs --payload",
-    "cv:verify-facts": "node verify-cv-facts.mjs",
-    "sync-check": "node cv-sync-check.mjs",
-    "verify:public": "node verify-public-release.mjs",
-    "tracker": "node tracker.mjs",
-    "find": "node find.mjs",
-    "patterns": "node analyze-patterns.mjs",
-    "upskill": "node upskill.mjs",
-    "add": "node add-entry.mjs",
-    "invite-match": "node invite-match.mjs",
-    "paste-reply": "node paste-reply.mjs",
-    "star": "node match-star.mjs",
-    "prepare:application": "node prepare-application.mjs",
-    "postinstall": "npx playwright install chromium --with-deps || npx playwright install chromium --with-deps"
+    "postinstall": "npm --prefix web ci && npx --prefix web playwright-core install chromium",
+    "dev": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "start": "npm --prefix web run start",
+    "test": "npm --prefix web test",
+    "typecheck": "npm --prefix web run typecheck"
   },
-  "keywords": [
-    "ai",
-    "job-search",
-    "claude-code",
-    "codex",
-    "cursor",
-    "career-ops",
-    "careerops"
-  ],
   "author": "Saad Ali Khan",
-  "license": "MIT",
-  "dependencies": {
-    "claude": "^0.1.1",
-    "dotenv": "^17.0.0",
-    "js-yaml": "^4.3.2",
-    "playwright": "1.61.1"
-  }
+  "license": "MIT"
 }

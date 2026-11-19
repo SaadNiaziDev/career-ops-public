@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { careerOpsRoot, readApplications, readReport } from "@/lib/career-ops";
+import { careerOpsRoot, engineScript, readApplications, readReport } from "@/lib/career-ops";
 import { acquireRun, attachRunCancellation, cancelRun, releaseRun } from "@/lib/core/run-registry";
 import { readBoundedJson, RequestTooLargeError } from "@/lib/core/request-bounds";
 import { intentKey } from "@/lib/jobs/run-policy";
@@ -82,7 +82,7 @@ function renderCv(n: string, payload: unknown): string {
   const base = `cv-${slug(p.candidate?.name ?? "candidate")}-${slug(company)}`;
   const file = path.join(dir, `${base}.json`);
   atomicWrite(file, JSON.stringify(payload, null, 2));
-  const rendered = spawnSync(process.execPath, [path.join(root, "render-cv.mjs"), file, path.join(dir, `${base}.html`), path.join(dir, `${base}-${today()}.pdf`), `--report=${n}`], { cwd: root, encoding: "utf8", timeout: 120_000 });
+  const rendered = spawnSync(process.execPath, [engineScript("render-cv"), file, path.join(dir, `${base}.html`), path.join(dir, `${base}-${today()}.pdf`), `--report=${n}`], { cwd: root, encoding: "utf8", timeout: 120_000 });
   if (rendered.status !== 0) throw new AgentError((rendered.stderr || rendered.stdout || "The CV renderer failed.").trim().split("\n").slice(-3).join(" "));
   return `${base}-${today()}.pdf`;
 }

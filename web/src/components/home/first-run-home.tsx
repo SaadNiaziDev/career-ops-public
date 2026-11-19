@@ -231,7 +231,7 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
                   <MaterialSymbol name={check.ok ? "check_circle" : "error"} size={17} className={check.ok ? "text-[var(--md-sys-color-primary)]" : "text-[var(--md-sys-color-error)]"} />
                   {check.label}
                 </p>
-                {!check.ok && <p className="mt-1 pl-6 text-[var(--md-sys-color-on-surface-variant)]">{check.cause} {check.recovery} {check.id === "portals.yml" ? <Link className="text-[var(--md-sys-color-primary)] underline" href="/portals">Open Portals</Link> : ["config/profile.yml", "modes/_profile.md"].includes(check.id) ? <Link className="text-[var(--md-sys-color-primary)] underline" href="/config">Open Config</Link> : null}</p>}
+                {!check.ok && <p className="mt-1 pl-6 text-[var(--md-sys-color-on-surface-variant)]">{check.cause} {check.recovery} {check.id === "portals.yml" ? <Link className="text-[var(--md-sys-color-primary)] underline" href="/config">Open Settings</Link> : ["config/profile.yml", "modes/_profile.md"].includes(check.id) ? <Link className="text-[var(--md-sys-color-primary)] underline" href="/brain">Open Brain</Link> : null}</p>}
               </div>
             ))}
           </div>

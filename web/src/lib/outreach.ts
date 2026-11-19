@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import {
   addDays,
+  fitLinkedInNote,
   FOLLOWUP_DAYS,
   type EmailConfidence,
   type OutreachFollowup,
@@ -109,7 +110,8 @@ export function parseOutreachOutput(
     alternates: Array.isArray(data.alternates) ? (data.alternates as unknown[]).map(person).filter((p): p is OutreachPerson => Boolean(p)).slice(0, 3) : [],
     subject,
     body,
-    linkedinNote: str(data.linkedinNote, 600) || undefined,
+    linkedinNote: fitLinkedInNote(str(data.linkedinNote, 1000)) || undefined,
+    linkedinFollowup: str(data.linkedinFollowup, 1500) || undefined,
     followups,
     status: "ready",
     tone: meta.tone,

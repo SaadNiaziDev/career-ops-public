@@ -18,6 +18,7 @@ import {
   followupSubject,
   gmailComposeUrl,
   isFollowupDue,
+  LINKEDIN_NOTE_MAX,
   mailtoUrl,
   nextFollowup,
   type OutreachFollowup,
@@ -160,6 +161,45 @@ function VoiceSettings() {
         <Link href="/brain" className="text-sm text-[var(--md-sys-color-primary)] hover:underline md:col-span-2">Fine-tune everything in Brain →</Link>
       </div>
     </Md3Collapse>
+  );
+}
+
+/** LinkedIn route: a connection note under the 300-character limit, then the message to send once they accept. */
+function LinkedInMessages({ item }: { item: OutreachRecord }) {
+  const { toast } = useToast();
+  const copy = async (text: string, what: string) => {
+    await navigator.clipboard.writeText(text).catch(() => {});
+    toast({ message: `${what} copied.`, tone: "neutral" });
+  };
+  const note = item.linkedinNote ?? "";
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="md-title-medium">LinkedIn</h3>
+        {item.contact.linkedin && (
+          <a href={item.contact.linkedin} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-[var(--md-sys-color-primary)] hover:underline">
+            Open {item.contact.name.split(" ")[0]}&apos;s profile <MaterialSymbol name="arrow_outward" size={14} />
+          </a>
+        )}
+      </div>
+      {note && (
+        <div className="space-y-2 rounded-xl border border-[var(--md-sys-color-outline-variant)] p-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium">1 · Connection note</span>
+            <span className={note.length > LINKEDIN_NOTE_MAX ? "text-[var(--md-sys-color-error)]" : "text-[var(--md-sys-color-on-surface-variant)]"}>{note.length}/{LINKEDIN_NOTE_MAX}</span>
+          </div>
+          <p className="whitespace-pre-wrap text-sm">{note}</p>
+          <Md3ActionButton icon="content_copy" onClick={() => void copy(note, "Connection note")}>Copy note</Md3ActionButton>
+        </div>
+      )}
+      {item.linkedinFollowup && (
+        <div className="space-y-2 rounded-xl border border-[var(--md-sys-color-outline-variant)] p-3">
+          <span className="text-sm font-medium">2 · Message after they accept</span>
+          <p className="whitespace-pre-wrap text-sm">{item.linkedinFollowup}</p>
+          <Md3ActionButton icon="content_copy" onClick={() => void copy(item.linkedinFollowup!, "Message")}>Copy message</Md3ActionButton>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -348,6 +388,8 @@ export function OutreachDetail({ item, onChange }: { item: OutreachRecord; onCha
       {c.emailConfidence === "pattern" && item.status === "ready" && (
         <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">This address follows the company's email format but wasn't published. If it bounces, use LinkedIn or one of the other people above.</p>
       )}
+
+      {(item.linkedinNote || item.linkedinFollowup) && item.status !== "dismissed" && <LinkedInMessages item={item} />}
 
       {item.followups.length > 0 && item.status !== "dismissed" && (
         <div className="space-y-3">

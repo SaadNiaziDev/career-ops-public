@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { templatePath } from "@/lib/career-ops-root";
 import { PROFILE_PATHS, validateProfilePatch, type ProfileFields } from "@/lib/profile-fields";
 import { readBoundedJson } from "@/lib/core/request-bounds";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
@@ -102,7 +103,7 @@ export async function POST(req: Request) {
   // malformed" (NEVER overwrite — that would silently destroy the user's data).
   if (!fs.existsSync(file)) {
     try {
-      base = (yaml.load(fs.readFileSync(path.join(root, "config", "profile.example.yml"), "utf8")) as Record<string, unknown>) || {};
+      base = (yaml.load(fs.readFileSync(templatePath("profile.example.yml"), "utf8")) as Record<string, unknown>) || {};
       seeded = Object.keys(base).length > 0;
     } catch {
       base = {};

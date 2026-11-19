@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { templatePath } from "@/lib/career-ops-root";
 import { atomicWrite, atomicWriteWithBackup } from "@/lib/core/safe-write";
 import { fetchPublicUrl } from "@/lib/public-url-policy";
 import {
@@ -208,7 +209,7 @@ export function saveBrain(patch: BrainPatch): BrainState {
   let base = doc;
   if (!exists) {
     try {
-      const seed = yaml.load(fs.readFileSync(path.join(careerOpsRoot(), "config", "profile.example.yml"), "utf8"));
+      const seed = yaml.load(fs.readFileSync(templatePath("profile.example.yml"), "utf8"));
       base = isObj(seed) ? seed : {};
     } catch {
       base = {};

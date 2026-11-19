@@ -1,8 +1,9 @@
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { careerOpsRoot, findApplication, findReportFile, readApplications, readReport, rootScript } from "@/lib/career-ops";
+import { careerOpsRoot, findApplication, readApplications, readReport } from "@/lib/career-ops";
+import { db } from "@/lib/db";
+import { upsertApplicationAnswersSection } from "@/lib/apply/answers-section.mjs";
 import { resolveIndexedCv, resolveTailoredCv } from "@/lib/apply/cv";
 import { readSessionSnapshot } from "@/lib/apply/session";
 import { detectAtsVendor, isSensitiveField, mergeLiveValues, parseApplicationSnapshot, type ApplicationSnapshot, type SnapshotField, type SnapshotState } from "@/lib/apply/snapshot";
@@ -48,18 +49,11 @@ function cvRecord(company: string, reportNum?: string) {
   return [{ label: "Tailored CV", path: relative, version: path.basename(file), hash: createHash("sha256").update(content).digest("hex") }];
 }
 
-async function writeSnapshot(reportFile: string, snapshot: ApplicationSnapshot): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn("node", [rootScript("application-answers"), "--report", reportFile, "--input", "-", "--state", snapshot.state], {
-      cwd: careerOpsRoot(), stdio: ["pipe", "ignore", "pipe"],
-    });
-    let error = "";
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => { error = (error + chunk).slice(-2000); });
-    child.on("error", reject);
-    child.on("close", (code) => code === 0 ? resolve() : reject(new Error(error.trim() || `snapshot writer exited ${code}`)));
-    child.stdin.end(JSON.stringify(snapshot));
-  });
+/** Store the answers inside the evaluation report (in the database). */
+async function writeSnapshot(n: string, snapshot: ApplicationSnapshot): Promise<void> {
+  const report = readReport(n);
+  if (!report) throw new Error("Application report not found");
+  db().prepare("UPDATE reports SET content = ? WHERE n = ?").run(upsertApplicationAnswersSection(report.content, snapshot), Number(n));
 }
 
 function serializeWrite(task: () => Promise<void>): Promise<void> {
@@ -84,10 +78,8 @@ export async function POST(req: Request) {
 
   const app = resolveTracker(body.trackerNum, body.vacancyUrl);
   if (!app) return Response.json({ error: "No evaluated application matches this vacancy" }, { status: 404 });
-  const reportFile = findReportFile(app.n);
-  if (!reportFile) return Response.json({ error: "Application report not found" }, { status: 404 });
-
   const previous = readReport(app.n);
+  if (!previous) return Response.json({ error: "Application report not found" }, { status: 404 });
   const existing = previous ? parseApplicationSnapshot(previous.content) : null;
   const now = new Date().toISOString();
   const proxyFields = safeFields(body.fields);
@@ -110,7 +102,7 @@ export async function POST(req: Request) {
     // Records answers only. The tracker status changes through /api/status
     // (confirm-gated, stage history, undo) — the client calls it before
     // saving a "submitted" snapshot.
-    await serializeWrite(() => writeSnapshot(reportFile, snapshot));
+    await serializeWrite(() => writeSnapshot(app.n, snapshot));
     return Response.json({ ok: true, trackerNum: app.n, snapshot });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message.slice(0, 300) : "snapshot write failed" }, { status: 500 });

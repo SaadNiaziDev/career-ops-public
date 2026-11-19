@@ -174,7 +174,7 @@ export function SearchView({ initialJobs, initialLastScan, initialSources }: { i
           <h1 className="md-headline-medium">Search</h1>
           <p className="search-sub">
             {sourceCount} company boards and job boards from your sources · last scan {ago(lastScan)} ·{" "}
-            <Link href="/portals" className="search-link">Manage sources</Link>
+            <Link href="/config" className="search-link">Manage sources</Link>
           </p>
         </div>
         <button type="button" className="md3-action-btn md3-action-btn--filled" onClick={runScan} disabled={scan.running}>

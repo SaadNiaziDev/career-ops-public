@@ -37,7 +37,10 @@ export type OutreachRecord = {
   alternates: OutreachPerson[];
   subject: string;
   body: string;
+  /** LinkedIn connection request note (max 300 characters). */
   linkedinNote?: string;
+  /** LinkedIn message to send once the connection is accepted. */
+  linkedinFollowup?: string;
   followups: OutreachFollowup[];
   status: OutreachStatus;
   sentAt?: string;
@@ -76,4 +79,15 @@ export function isFollowupDue(record: OutreachRecord, today = new Date().toISOSt
 
 export function followupSubject(subject: string): string {
   return /^re:/i.test(subject) ? subject : `Re: ${subject}`;
+}
+
+export const LINKEDIN_NOTE_MAX = 300;
+
+/** Fit a LinkedIn connection note under the limit, ending on a full sentence when possible. */
+export function fitLinkedInNote(text: string, max = LINKEDIN_NOTE_MAX): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max);
+  const sentence = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("? "), cut.lastIndexOf("! "));
+  return sentence > max * 0.5 ? cut.slice(0, sentence + 1) : `${cut.slice(0, cut.lastIndexOf(" ")).trimEnd()}…`;
 }

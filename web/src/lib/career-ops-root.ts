@@ -10,7 +10,15 @@ export function careerOpsRoot(): string {
   return path.resolve(process.cwd(), "..");
 }
 
-/** Absolute path to a root script, assembled at runtime so the bundler never traces it. */
-export function rootScript(nameNoExt: string): string {
-  return path.join(careerOpsRoot(), `${nameNoExt}.mjs`);
+/**
+ * Absolute path to a CV engine script in web/engine/ (run as a child process).
+ * Built at runtime so the bundler never tries to trace it as an import.
+ */
+export function engineScript(nameNoExt: string): string {
+  return path.join(process.cwd(), "engine", `${nameNoExt}.mjs`);
+}
+
+/** A starter file shipped with the app (web/engine/templates/). */
+export function templatePath(name: string): string {
+  return path.join(process.cwd(), "engine", "templates", name);
 }

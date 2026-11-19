@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { careerOpsRoot, rootScript } from "@/lib/career-ops";
+import { careerOpsRoot, engineScript } from "@/lib/career-ops";
 
 export type CvPreviewStats = {
   summary: boolean;
@@ -33,7 +33,7 @@ export function renderCvPreviewHtml(opts: {
   const tmp = path.join(os.tmpdir(), `co-cv-preview-${process.pid}-${Date.now()}.md`);
   fs.writeFileSync(tmp, opts.markdown, "utf8");
   try {
-    const args = [rootScript("cv-md-preview"), "--json", "--file", tmp];
+    const args = [engineScript("cv-md-preview"), "--json", "--file", tmp];
     if (opts.template) args.push("--template", opts.template);
     if (opts.pageFormat) args.push("--page-format", opts.pageFormat);
     if (opts.style && Object.keys(opts.style).length > 0) {

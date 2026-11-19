@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { careerOpsRoot, rootScript } from "@/lib/career-ops";
+import { careerOpsRoot, engineScript } from "@/lib/career-ops";
 import { readCvSource, resolveCvSource, DEFAULT_CV_SOURCE } from "@/lib/cv/sources";
 import { renderCvPreviewHtml } from "@/lib/cv/preview";
 import { readCvSettings, sanitizeCvPageFormat, sanitizeCvStyle, sanitizeCvTemplate } from "@/lib/cv/settings";
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     const r = spawnSync(
       process.execPath,
       [
-        rootScript("generate-pdf"), htmlPath, pdfPath, `--format=${rendered.pageFormat}`,
+        engineScript("generate-pdf"), htmlPath, pdfPath, `--format=${rendered.pageFormat}`,
         `--template=${rendered.template}`, `--template-version=${rendered.templateVersion}`,
         `--style-version=${rendered.styleVersion}`, `--renderer-version=${rendered.rendererVersion}`,
         "--no-manifest",

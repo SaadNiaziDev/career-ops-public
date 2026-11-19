@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { templatePath } from "@/lib/career-ops-root";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
 import { readPortalsKeywords } from "@/lib/portals-keywords";
 
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
     doc = (yaml.load(fs.readFileSync(file, "utf8")) as Record<string, unknown>) || {};
   } catch {
     try {
-      doc = (yaml.load(fs.readFileSync(path.join(root, "templates", "portals.example.yml"), "utf8")) as Record<string, unknown>) || {};
+      doc = (yaml.load(fs.readFileSync(templatePath("portals.example.yml"), "utf8")) as Record<string, unknown>) || {};
     } catch {
       doc = {};
     }

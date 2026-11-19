@@ -11,6 +11,7 @@ import { Md3Empty } from "@/components/ui/md3-empty";
 import { useToast } from "@/components/providers/toast-provider";
 import type { BrainState } from "@/lib/brain";
 import { STATUS_OPTIONS, sharpness, type BrainStatus, type Proof, type SectionId } from "@/lib/brain-shared";
+import { ProfileForm } from "@/components/brain/profile-form";
 import { BrainSection, FieldLabel, Meter, brainPost, profilePost } from "./brain-ui";
 import { ProofSection } from "./proof-section";
 import { WriteSection } from "./write-section";
@@ -142,7 +143,7 @@ export function BrainView({ initial, loadError }: { initial: BrainState | null; 
       <PageShell>
         <DossierPageHeader title="Brain" description="Teach outreach who you are." />
         <Md3Empty icon="error" description={loadError || "Couldn't load your profile."}>
-          <Link href="/config" className="mt-3 text-sm text-[var(--md-sys-color-primary)] hover:underline">Open Config</Link>
+          <Link href="/config" className="mt-3 text-sm text-[var(--md-sys-color-primary)] hover:underline">Open Settings</Link>
         </Md3Empty>
       </PageShell>
     );
@@ -179,6 +180,8 @@ export function BrainView({ initial, loadError }: { initial: BrainState | null; 
           No config/profile.yml yet. Your first save here creates it from the example profile.
         </p>
       ) : null}
+
+      <div className="mb-5"><ProfileForm /></div>
 
       <SharpnessCard percent={score.percent} hints={score.hints} />
 
@@ -239,7 +242,7 @@ export function BrainView({ initial, loadError }: { initial: BrainState | null; 
                 <MaterialSymbol name="description" size={18} className="text-[var(--md-sys-color-on-surface-variant)]" />
                 <span className="font-medium">cv.md</span>
                 <span className="text-[var(--md-sys-color-on-surface-variant)]">{state.cv.words.toLocaleString()} words read</span>
-                <Link href="/cv" className="ml-auto inline-flex min-h-10 items-center gap-1 text-[var(--md-sys-color-primary)] hover:underline">
+                <Link href="/brain/cv" className="ml-auto inline-flex min-h-10 items-center gap-1 text-[var(--md-sys-color-primary)] hover:underline">
                   <MaterialSymbol name="edit" size={16} /> Edit CV
                 </Link>
               </div>
@@ -254,7 +257,7 @@ export function BrainView({ initial, loadError }: { initial: BrainState | null; 
                         <p className="truncate font-medium">{r.title}</p>
                         <p className="truncate text-sm text-[var(--md-sys-color-on-surface-variant)]">{[r.company, r.dates].filter(Boolean).join(" · ")}</p>
                       </div>
-                      <Link href="/cv" aria-label={`Edit ${r.title} in your CV`} title="Edit in CV" className="grid size-10 shrink-0 place-items-center rounded-full text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)]">
+                      <Link href="/brain/cv" aria-label={`Edit ${r.title} in your CV`} title="Edit in CV" className="grid size-10 shrink-0 place-items-center rounded-full text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)]">
                         <MaterialSymbol name="edit" size={18} />
                       </Link>
                     </li>
@@ -266,7 +269,7 @@ export function BrainView({ initial, loadError }: { initial: BrainState | null; 
             </>
           ) : (
             <Md3Empty icon="upload_file" description="No CV yet. Add one and every email gets real facts to work with.">
-              <Link href="/cv" className="md3-action-btn md3-action-btn--filled mt-3"><MaterialSymbol name="add" size={18} /><span className="md3-action-btn__label">Add your CV</span></Link>
+              <Link href="/brain/cv" className="md3-action-btn md3-action-btn--filled mt-3"><MaterialSymbol name="add" size={18} /><span className="md3-action-btn__label">Add your CV</span></Link>
             </Md3Empty>
           )}
         </BrainSection>

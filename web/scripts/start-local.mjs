@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { isIP } from "node:net";
+import { rmSync } from "node:fs";
 
 const mode = process.argv[2];
 if (mode !== "dev" && mode !== "start") {
@@ -23,6 +24,9 @@ if (!bindHost || /[\s/\\]/.test(bindHost) || (!isIP(bindHost) && !/^[a-z0-9.-]+$
   console.error("CAREER_OPS_HOST must be a hostname or IP address.");
   process.exit(2);
 }
+
+// A dev server reusing a cache compiled from older source shows stale errors; start clean.
+if (mode === "dev") rmSync(".next/dev", { recursive: true, force: true });
 
 const require = createRequire(import.meta.url);
 const nextCli = require.resolve("next/dist/bin/next");
