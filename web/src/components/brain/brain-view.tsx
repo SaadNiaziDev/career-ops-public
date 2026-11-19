@@ -171,12 +171,7 @@ export function BrainView({ initial, loadError }: { initial: BrainState | null; 
     <PageShell>
       <DossierPageHeader
         title="Brain"
-        description="Teach outreach who you are. Every email it writes reads from here."
-        extra={
-          <Link href="/apply?view=email" className="inline-flex items-center gap-1 text-sm text-[var(--md-sys-color-primary)] hover:underline">
-            Go to email drafts <MaterialSymbol name="arrow_forward" size={16} />
-          </Link>
-        }
+        description="Everything the AI knows about you. Evaluations, CVs, cover letters and emails all read from here."
       />
 
       {!state.profileExists ? (

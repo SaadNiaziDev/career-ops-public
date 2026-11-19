@@ -414,7 +414,7 @@ export function OutreachView({ initialItems, picks, embedded = false }: { initia
     if (!value) return;
     const company = items.find((i) => i.trackerNum === value)?.company;
     const avoidContacts = items.filter((i) => company && i.company === company && i.status !== "dismissed").map((i) => i.contact.name);
-    const id = startJob({ title: `Finding who's hiring: ${label}`, kind: "outreach", input: value, page: "/apply?view=email", context: { tone, avoidContacts } });
+    const id = startJob({ title: `Finding who's hiring: ${label}`, kind: "outreach", input: value, page: "/apply", context: { tone, avoidContacts } });
     if (!id) toast({ message: "Pick a CLI in Config first.", tone: "error" });
   }
 

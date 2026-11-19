@@ -1,17 +1,18 @@
 import { ApplyPageView, type ApplyPageMode } from "@/components/apply/apply-page-view";
-import { listOutreach } from "@/lib/outreach";
 import { buildKit, buildQueue } from "@/lib/apply/kit-server";
+import { readReport } from "@/lib/career-ops";
+import { parseMachineSummary } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-// /apply            → apply queue (Evaluated, 4.0+, not applied) with kit readiness
-// /apply?n=<num>    → the Apply kit for tracker row <num>
-// /apply?view=form  → paste any application form URL
+// /apply            → roles to apply to (evaluated, not applied)
+// /apply?n=<num>    → the workspace for one role
+// /apply?view=form  → fill any application form
 export default async function ApplyPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
   const n = typeof params.n === "string" ? params.n.trim() : "";
-  const mode: ApplyPageMode = params.view === "email" ? "email" : params.view === "form" ? "form" : n ? "kit" : "queue";
+  const mode: ApplyPageMode = params.view === "form" ? "form" : n ? "kit" : "queue";
   const kit = mode === "kit" && /^\d{1,6}$/.test(n) ? buildKit(n) : null;
-  const queue = mode === "queue" ? buildQueue() : [];
-  return <ApplyPageView mode={mode} n={n} kit={kit} queue={queue} emails={mode === "email" ? listOutreach() : []} />;
+  const report = kit ? readReport(n) : null;
+  return <ApplyPageView mode={mode} n={n} kit={kit} queue={mode === "queue" ? buildQueue(0) : []} summary={report ? parseMachineSummary(report.content) : null} />;
 }

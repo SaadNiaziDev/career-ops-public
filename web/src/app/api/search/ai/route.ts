@@ -17,9 +17,9 @@ export const maxDuration = 600;
 export async function POST(req: Request) {
   let body: { query?: unknown; cliId?: unknown };
   try { body = await req.json(); } catch { return Response.json({ error: "bad json" }, { status: 400 }); }
-  const query = typeof body.query === "string" ? body.query.trim().slice(0, 2_000) : "";
+  const query = (typeof body.query === "string" ? body.query.trim().slice(0, 2_000) : "") || "Jobs matching my target roles, location rules and profile.";
   const cliId = typeof body.cliId === "string" ? body.cliId : "";
-  if (!query || !cliId) return Response.json({ error: "Describe what to look for, and pick an AI engine in Settings." }, { status: 400 });
+  if (!cliId) return Response.json({ error: "Pick an AI engine in Settings first." }, { status: 400 });
   if (!hasCv()) return Response.json({ error: "Add your CV first (Brain) so the search matches you." }, { status: 400 });
 
   let portals = "";

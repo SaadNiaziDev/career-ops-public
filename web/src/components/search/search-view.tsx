@@ -58,11 +58,11 @@ function scoreClass(score?: string) {
   return n >= 4 ? "search-score--good" : n >= 3.5 ? "search-score--mid" : "search-score--low";
 }
 
-export function SearchView() {
+export function SearchView({ initialJobs, initialLastScan, initialSources }: { initialJobs: SearchJob[]; initialLastScan: string | null; initialSources: number }) {
   const { jobs: runs, startJob } = useJobs();
-  const [items, setItems] = useState<SearchJob[] | null>(null);
-  const [lastScan, setLastScan] = useState<string | null>(null);
-  const [sourceCount, setSourceCount] = useState(0);
+  const [items, setItems] = useState<SearchJob[] | null>(initialJobs);
+  const [lastScan, setLastScan] = useState<string | null>(initialLastScan);
+  const [sourceCount, setSourceCount] = useState(initialSources);
   const [tab, setTab] = useState<Tab>("new");
   const [filter, setFilter] = useState("");
   const [source, setSource] = useState("all");
@@ -83,7 +83,6 @@ export function SearchView() {
   }, []);
 
   useEffect(() => {
-    void load();
     const refresh = () => void load();
     window.addEventListener("co-job-done", refresh);
     return () => window.removeEventListener("co-job-done", refresh);
@@ -111,7 +110,6 @@ export function SearchView() {
 
   async function runAi() {
     const query = aiQuery.trim();
-    if (!query) return;
     const cliId = await resolveCliIdForRun();
     if (!cliId) { setMessage("Pick an AI engine in Settings first."); return; }
     setMessage("");
@@ -188,11 +186,11 @@ export function SearchView() {
       <section className="search-tools">
         <form className="search-tool" onSubmit={(e) => { e.preventDefault(); void runAi(); }}>
           <MaterialSymbol name="auto_awesome" size={20} className="search-tool__icon" />
-          <input value={aiQuery} onChange={(e) => setAiQuery(e.target.value)} placeholder="Ask AI to find jobs, e.g. senior React roles in Dubai" aria-label="AI search" disabled={ai.running} />
+          <input value={aiQuery} onChange={(e) => setAiQuery(e.target.value)} placeholder="Optional: what to look for (empty = your target roles)" aria-label="AI search" disabled={ai.running} />
           {ai.running ? (
             <button type="button" className="md3-action-btn md3-action-btn--outlined" onClick={() => aiAbort.current?.abort()}>Stop</button>
           ) : (
-            <button type="submit" className="md3-action-btn md3-action-btn--outlined" disabled={!aiQuery.trim()}>Search with AI</button>
+            <button type="submit" className="md3-action-btn md3-action-btn--outlined">Find jobs with AI</button>
           )}
         </form>
         <form className="search-tool" onSubmit={(e) => { e.preventDefault(); evaluateLink(); }}>
@@ -202,6 +200,10 @@ export function SearchView() {
         </form>
       </section>
 
+      <div className="search-slot">
+      {!scan.running && scan.total === 0 && !ai.running && ai.notes.length === 0 && !ai.error && !message && (
+        <p className="search-hint"><MaterialSymbol name="info" size={18} />Nothing runs until you click. Scan job boards is free; Find jobs with AI uses your AI engine.</p>
+      )}
       {(scan.running || scan.total > 0) && (
         <div className="search-status" role="status">
           <div className="search-status__bar"><span style={{ width: `${scan.total ? Math.round((scan.done / scan.total) * 100) : 4}%` }} /></div>
@@ -217,6 +219,7 @@ export function SearchView() {
         </div>
       )}
       {message && <p className="search-error" role="alert">{message}</p>}
+      </div>
 
       <div className="search-bar">
         <div className="search-tabs" role="tablist">

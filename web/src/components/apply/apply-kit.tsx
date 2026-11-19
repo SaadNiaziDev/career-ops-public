@@ -328,9 +328,6 @@ export function ApplyKitPanel({ initialKit }: { initialKit: ApplyKit }) {
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <Badge tone={kit.app.score >= 4 ? "good" : kit.app.score >= 3.5 ? "warn" : "bad"}>{kit.app.score.toFixed(1)}/5</Badge>
               <Badge tone={applied ? "good" : "muted"}>{status}</Badge>
-              <Link href={`/pipeline/${n}`} className="inline-flex min-h-[24px] items-center gap-0.5 text-xs font-medium text-[var(--md-sys-color-primary)] hover:underline">
-                Report <MaterialSymbol name="arrow_outward" size={14} />
-              </Link>
             </div>
           </div>
         </div>
@@ -373,7 +370,7 @@ export function ApplyKitPanel({ initialKit }: { initialKit: ApplyKit }) {
           <p className="md3-alert md3-alert--warning mt-3 text-sm">
             <MaterialSymbol name="terminal" size={18} className="shrink-0" />
             <span>
-              No CLI picked yet. <Link href="/config" className="font-medium underline">Choose one in Config</Link> so the CV, answers and cover letter can be prepared.
+              No CLI picked yet. <Link href="/config" className="font-medium underline">Choose one in Settings</Link> so the CV, answers and cover letter can be prepared.
             </span>
           </p>
         )}
@@ -381,21 +378,15 @@ export function ApplyKitPanel({ initialKit }: { initialKit: ApplyKit }) {
           <p className="md3-alert md3-alert--warning mt-3 text-sm">
             <MaterialSymbol name="link_off" size={18} className="shrink-0" />
             <span>
-              This report has no application URL. Add a <code>**URL:**</code> line to the report, or paste the form under <Link href="/apply?view=form" className="font-medium underline">Any form</Link>.
+              This report has no application URL. Add a <code>**URL:**</code> line to the report, or use <Link href="/apply?view=form" className="font-medium underline">Fill any application form</Link>.
             </span>
           </p>
         )}
       </section>
 
-      <nav aria-label="Application sections" className="flex flex-wrap gap-2">
-        <a href="#prepare" className="md3-action-btn md3-action-btn--outlined">Materials</a>
-        <a href="#email" className="md3-action-btn md3-action-btn--outlined">Email</a>
-        <a href="#submit-record" className="md3-action-btn md3-action-btn--outlined">Record submission</a>
-      </nav>
 
       {/* Steps */}
-      <details id="prepare" open={!applied || !kit.submissionRecorded} className="scroll-mt-6">
-        <summary className="mb-3 cursor-pointer text-sm font-medium">Application materials &amp; submission</summary>
+      <div id="prepare">
       <ol className="co-kit-card co-kit-in" aria-label="Apply kit steps">
         {/* 1. CV */}
         <Step index={1} state={steps.cv} title="Tailored CV" icon="description"
@@ -550,7 +541,7 @@ export function ApplyKitPanel({ initialKit }: { initialKit: ApplyKit }) {
           </div>
         </Step>
       </ol>
-      </details>
+      </div>
 
       <RoleEmailPanel n={n} company={kit.app.company} role={kit.app.role} />
 

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 // /api/apply/snapshot (answers) and /api/status (Applied, confirm-gated).
 export async function GET(req: Request) {
   const n = new URL(req.url).searchParams.get("n")?.trim() ?? "";
-  if (!n) return Response.json({ queue: buildQueue() }, { headers: { "Cache-Control": "no-store" } });
+  if (!n) return Response.json({ queue: buildQueue(0) }, { headers: { "Cache-Control": "no-store" } });
   if (!/^\d{1,6}$/.test(n)) return Response.json({ error: "valid tracker number required" }, { status: 400 });
   const kit = buildKit(n);
   if (!kit) return Response.json({ error: `No tracker row #${n}` }, { status: 404 });
