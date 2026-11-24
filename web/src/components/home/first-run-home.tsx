@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BrowserSetup } from "@/components/settings/browser-setup";
 import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { PageShell } from "@/components/ui/page-shell";
 import { ConfigCliTile, type ConfigCli } from "@/components/home/config-cli-tile";
@@ -219,7 +220,8 @@ export function FirstRunHome({ hasCv = false }: { hasCv?: boolean }) {
         </section>
       ) : (
         <section className="mt-7">
-          <h2 className="text-lg font-medium text-[var(--md-sys-color-on-surface)]">Verify this machine</h2>
+          <BrowserSetup />
+          <h2 className="mt-5 text-lg font-medium text-[var(--md-sys-color-on-surface)]">Verify this machine</h2>
           <p className="mt-1 max-w-[640px] text-sm text-[var(--md-sys-color-on-surface-variant)]">
             A small local smoke test checks CLI sign-in, saved files, writable folders, and PDF rendering before your first job.
           </p>

@@ -93,6 +93,8 @@ declare global {
   // eslint-disable-next-line no-var
   var __coHeadedBrowserOwned: boolean | undefined;
   // eslint-disable-next-line no-var
+  var __coHeadedBrowserUrl: string | undefined;
+  // eslint-disable-next-line no-var
   var __coIdleTimer: ReturnType<typeof setTimeout> | undefined;
 }
 const SESSIONS: Map<string, Session> = (globalThis.__coApplySessions ??= new Map());

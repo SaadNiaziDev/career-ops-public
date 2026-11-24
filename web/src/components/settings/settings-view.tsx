@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BrowserSetup } from "@/components/settings/browser-setup";
 import { MaterialSymbol } from "@/components/shell/material-symbol";
 import { writeCliConfig } from "@/lib/cli-config";
 import type { SearchCompany, SearchSettings } from "@/lib/search/settings";
@@ -30,6 +31,7 @@ export function SettingsView({ engines, engine: initialEngine, search: initialSe
         <EngineCard engines={engines} initial={initialEngine} />
         <DataCard dataDir={dataDir} />
       </div>
+      <BrowserSetup />
       <SearchCard initial={initialSearch} />
       <CompaniesCard initial={initialSearch.companies} />
     </div>

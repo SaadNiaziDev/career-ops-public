@@ -1,3 +1,5 @@
+import { applicationBrowserUrl } from "./browser-settings";
+
 // Headed Chromium for filling application forms: one shared browser, resilient navigation.
 import { chromium, type Browser, type BrowserContext, type Page, type Frame, type Response } from "playwright-core";
 
@@ -48,33 +50,33 @@ export async function gotoResilient(page: Page, url: string): Promise<Response |
 export const IN_CODEX_SANDBOX = process.env.CODEX_SANDBOX === "seatbelt";
 
 export async function headedBrowser(): Promise<Browser> {
+  const cdpUrl = applicationBrowserUrl();
   const b = globalThis.__coHeadedBrowser;
   if (b && b.isConnected()) {
-    // A dev-server hot reload can leave the pre-fix proxy browser on globalThis.
-    // It has no ownership marker, so retire it once before launching the direct
-    // Chrome path below.
-    if (globalThis.__coHeadedBrowserOwned === undefined) {
-      await b.close().catch(() => {});
+    // Refresh the cached browser after a connection change or a legacy hot reload.
+    // Never close a Chrome instance owned by the user.
+    if (globalThis.__coHeadedBrowserOwned === undefined || globalThis.__coHeadedBrowserUrl !== cdpUrl) {
+      if (globalThis.__coHeadedBrowserOwned !== false) await b.close().catch(() => {});
       globalThis.__coHeadedBrowser = undefined;
     } else {
       return b;
     }
   }
-  if (IN_CODEX_SANDBOX && process.platform === "darwin") {
+  if (!cdpUrl && IN_CODEX_SANDBOX && process.platform === "darwin") {
     throw new Error("Visible Chrome cannot start inside the Codex macOS sandbox. Run the web app outside Codex, or use Codex with -s danger-full-access for this session.");
   }
   // When configured, attach to the user's already-running Chrome. This keeps
   // its cookies and authenticated ATS sessions instead of creating an anonymous
   // Playwright context.
-  const cdpUrl = process.env.CAREER_OPS_CHROME_CDP_URL?.trim();
   if (cdpUrl) {
     try {
-      const connected = await chromium.connectOverCDP(cdpUrl);
+      const connected = await chromium.connectOverCDP(cdpUrl, { timeout: 8000 });
       globalThis.__coHeadedBrowser = connected;
       globalThis.__coHeadedBrowserOwned = false;
+      globalThis.__coHeadedBrowserUrl = cdpUrl;
       return connected;
     } catch {
-      throw new Error("Could not connect to authenticated Chrome. Check CAREER_OPS_CHROME_CDP_URL and retry.");
+      throw new Error("Could not connect to authenticated Chrome. Check the browser connection in Settings and retry.");
     }
   }
   // Apply uses installed Chrome directly. The public-URL proxy is appropriate
@@ -89,6 +91,7 @@ export async function headedBrowser(): Promise<Browser> {
     });
     globalThis.__coHeadedBrowser = nb;
     globalThis.__coHeadedBrowserOwned = true;
+    globalThis.__coHeadedBrowserUrl = cdpUrl;
     return nb;
   } catch {
     throw new Error("The apply feature needs installed Google Chrome. Open Chrome once, then retry; headless Chrome for Testing is not used for visible application sessions.");
